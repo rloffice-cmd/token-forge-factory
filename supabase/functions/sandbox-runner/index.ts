@@ -2,11 +2,15 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 // Piston API endpoint (public instance)
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
+
+// Security limits
+const MAX_SOLUTION_SIZE = 50 * 1024; // 50KB
+const MAX_TESTS = 100;
 
 interface ExecuteRequest {
   solution_code: string;
@@ -29,12 +33,13 @@ interface TestResult {
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     const { solution_code, skeptic_tests, timeout = 5000 }: ExecuteRequest = await req.json();
 
+    // Validation guards
     if (!solution_code || !skeptic_tests) {
       return new Response(
         JSON.stringify({ error: 'Missing solution_code or skeptic_tests' }),
@@ -42,10 +47,25 @@ serve(async (req) => {
       );
     }
 
-    // Build test runner script
-    const testRunnerCode = buildTestRunner(solution_code, skeptic_tests);
+    // Security: size limits
+    if (solution_code.length > MAX_SOLUTION_SIZE) {
+      return new Response(
+        JSON.stringify({ error: `Solution code exceeds ${MAX_SOLUTION_SIZE} bytes limit` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (skeptic_tests.length > MAX_TESTS) {
+      return new Response(
+        JSON.stringify({ error: `Tests exceed ${MAX_TESTS} limit` }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Build runner-only script (separate from solution)
+    const runnerCode = buildRunnerOnly(skeptic_tests);
     
-    // Execute via Piston API
+    // Execute via Piston API with TWO separate files
     const startTime = Date.now();
     
     const pistonResponse = await fetch(PISTON_URL, {
@@ -56,14 +76,18 @@ serve(async (req) => {
         version: '3.10.0',
         files: [
           {
-            name: 'main.py',
-            content: testRunnerCode,
+            name: 'solution.py',
+            content: solution_code,  // Raw solution - no escaping!
+          },
+          {
+            name: 'runner.py',
+            content: runnerCode,
           }
         ],
         stdin: '',
         args: [],
         compile_timeout: 10000,
-        run_timeout: timeout,
+        run_timeout: Math.min(timeout, 30000), // Hard cap at 30s
         compile_memory_limit: -1,
         run_memory_limit: -1,
       }),
@@ -74,6 +98,7 @@ serve(async (req) => {
       console.error('Piston API error:', errorText);
       return new Response(
         JSON.stringify({ 
+          success: false,
           error: 'Sandbox execution failed',
           details: errorText,
         }),
@@ -97,11 +122,13 @@ serve(async (req) => {
         if (jsonMatch) {
           results = JSON.parse(jsonMatch[1]);
         } else {
-          parseError = 'Could not find results in output';
+          parseError = 'Could not find results markers in output';
         }
       } catch (e) {
         parseError = `Failed to parse results: ${e}`;
       }
+    } else {
+      parseError = 'No stdout from Piston';
     }
 
     // Check for execution errors
@@ -127,6 +154,7 @@ serve(async (req) => {
     console.error('Error in sandbox-runner:', error);
     return new Response(
       JSON.stringify({ 
+        success: false,
         error: 'Internal server error',
         message: error instanceof Error ? error.message : 'Unknown error',
       }),
@@ -136,28 +164,20 @@ serve(async (req) => {
 });
 
 /**
- * Build Python test runner script that includes the solution and runs all tests
+ * Build runner-only script that imports from solution.py
+ * This completely avoids escaping issues by keeping solution code in separate file
  */
-function buildTestRunner(
-  solutionCode: string, 
+function buildRunnerOnly(
   tests: Array<{ id: string; input: string; expected_output: string[] }>
 ): string {
-  // Escape the solution code for embedding
-  const escapedSolution = solutionCode.replace(/\\/g, '\\\\').replace(/"""/g, '\\"\\"\\"');
-  
-  // Build tests JSON
+  // Safely serialize tests to JSON
   const testsJson = JSON.stringify(tests);
   
   return `
 import json
 import time
-import sys
+from solution import extract_iso_dates
 
-# ==== SOLUTION CODE ====
-${solutionCode}
-# ==== END SOLUTION CODE ====
-
-# Test cases
 tests = ${testsJson}
 
 results = []
@@ -189,9 +209,8 @@ for test in tests:
         'error': error
     })
 
-# Output results in parseable format
 print("###RESULTS_START###")
 print(json.dumps(results))
 print("###RESULTS_END###")
-`;
+`.trim();
 }
