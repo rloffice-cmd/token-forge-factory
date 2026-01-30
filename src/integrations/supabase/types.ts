@@ -14,7 +14,161 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      artifacts: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          job_id: string | null
+          type: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          type: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artifacts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          job_id: string | null
+          metadata: Json
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          metadata?: Json
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          metadata?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_logs_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jobs: {
+        Row: {
+          created_at: string
+          id: string
+          iteration: number | null
+          score: number | null
+          status: string
+          task_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          iteration?: number | null
+          score?: number | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          iteration?: number | null
+          score?: number | null
+          status?: string
+          task_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jobs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          policy_json: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          policy_json: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          policy_json?: Json
+        }
+        Relationships: []
+      }
+      treasury_ledger: {
+        Row: {
+          amount: number
+          asset: string
+          created_at: string
+          id: string
+          job_id: string | null
+        }
+        Insert: {
+          amount: number
+          asset?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+        }
+        Update: {
+          amount?: number
+          asset?: string
+          created_at?: string
+          id?: string
+          job_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treasury_ledger_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
