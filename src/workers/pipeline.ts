@@ -13,7 +13,8 @@ import type {
   JudgeResult,
   TreasuryEntry,
   ProofPack,
-  AuditLog 
+  AuditLog,
+  ArtifactType
 } from '@/types';
 import { generateSolution, validateGeneratedCode } from './generator';
 import { generateSkepticTests, exportSkepticJson } from './skeptic';
@@ -247,7 +248,18 @@ export async function runPipeline(
     await log('treasury_updated', { entryId: treasuryEntry.id });
     
     // ==========================================
-    // Step 9: Settle
+    // Step 9: Integrity Check
+    // ==========================================
+    const integrityResult = await verifyArtifactIntegrity(job.id);
+    if (!integrityResult.valid) {
+      await log('integrity_check_failed', { missing: integrityResult.missing });
+      // Don't fail the job, just log the issue
+    } else {
+      await log('integrity_check_passed', { artifactCount: integrityResult.count });
+    }
+    
+    // ==========================================
+    // Step 10: Settle
     // ==========================================
     await updateStatus('SETTLED', judgeResult.score);
     
@@ -353,6 +365,36 @@ function generateChecksum(content: string): string {
     hash = hash & hash;
   }
   return Math.abs(hash).toString(16).padStart(8, '0');
+}
+
+/**
+ * Verify that all required artifacts exist for a job
+ */
+async function verifyArtifactIntegrity(jobId: string): Promise<{
+  valid: boolean;
+  missing: ArtifactType[];
+  count: number;
+}> {
+  const requiredTypes: ArtifactType[] = ['GEN_CODE', 'SKEPTIC_JSON', 'PYTEST_REPORT', 'JUDGE_JSON'];
+  
+  try {
+    const artifacts = await db.fetchArtifactsByJobId(jobId);
+    const existingTypes = new Set(artifacts.map(a => a.type));
+    const missing = requiredTypes.filter(t => !existingTypes.has(t));
+    
+    return {
+      valid: missing.length === 0,
+      missing,
+      count: artifacts.length,
+    };
+  } catch (err) {
+    console.error('Integrity check failed:', err);
+    return {
+      valid: false,
+      missing: requiredTypes,
+      count: 0,
+    };
+  }
 }
 
 /**

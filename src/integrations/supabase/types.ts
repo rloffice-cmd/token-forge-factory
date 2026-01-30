@@ -19,21 +19,21 @@ export type Database = {
           content: string
           created_at: string
           id: string
-          job_id: string | null
+          job_id: string
           type: string
         }
         Insert: {
           content: string
           created_at?: string
           id?: string
-          job_id?: string | null
+          job_id: string
           type: string
         }
         Update: {
           content?: string
           created_at?: string
           id?: string
-          job_id?: string | null
+          job_id?: string
           type?: string
         }
         Relationships: [
@@ -51,21 +51,21 @@ export type Database = {
           action: string
           created_at: string
           id: string
-          job_id: string | null
+          job_id: string
           metadata: Json
         }
         Insert: {
           action: string
           created_at?: string
           id?: string
-          job_id?: string | null
+          job_id: string
           metadata?: Json
         }
         Update: {
           action?: string
           created_at?: string
           id?: string
-          job_id?: string | null
+          job_id?: string
           metadata?: Json
         }
         Relationships: [
@@ -82,28 +82,28 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          iteration: number | null
+          iteration: number
           score: number | null
           status: string
-          task_id: string | null
+          task_id: string
           updated_at: string
         }
         Insert: {
           created_at?: string
           id?: string
-          iteration?: number | null
+          iteration?: number
           score?: number | null
           status?: string
-          task_id?: string | null
+          task_id: string
           updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
-          iteration?: number | null
+          iteration?: number
           score?: number | null
           status?: string
-          task_id?: string | null
+          task_id?: string
           updated_at?: string
         }
         Relationships: [
@@ -143,21 +143,21 @@ export type Database = {
           asset: string
           created_at: string
           id: string
-          job_id: string | null
+          job_id: string
         }
         Insert: {
           amount: number
           asset?: string
           created_at?: string
           id?: string
-          job_id?: string | null
+          job_id: string
         }
         Update: {
           amount?: number
           asset?: string
           created_at?: string
           id?: string
-          job_id?: string | null
+          job_id?: string
         }
         Relationships: [
           {
