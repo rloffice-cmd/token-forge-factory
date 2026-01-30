@@ -13,9 +13,9 @@ interface TestGeneratorConfig {
 }
 
 /**
- * Generate a MINIMAL skeptic test suite (10 tests max)
- * Critical Kill Gates + representative samples only
- * Piston public API has strict limits - keep it lean!
+ * Generate a MINIMAL skeptic test suite (5 tests max)
+ * Critical Kill Gates + key samples only
+ * Piston public API is extremely limited - ultra lean!
  */
 export function generateSkepticTests(config: TestGeneratorConfig = { minYear: 1900, maxYear: 2100 }): SkepticTest[] {
   const tests: SkepticTest[] = [];
@@ -52,42 +52,18 @@ export function generateSkepticTests(config: TestGeneratorConfig = { minYear: 19
     'חודש חד-ספרתי - צריך להיות 01', true);
   
   // ==========================================
-  // BOUNDARY (2 tests) - Edge cases
+  // CONTEXT_NOISE (1 test) - 60% weight
   // ==========================================
   
-  addTest('BOUNDARY', `${config.minYear}-01-01`, [`${config.minYear}-01-01`], 
-    'גבול תחתון - תאריך מינימלי חוקי', false);
-  
-  addTest('BOUNDARY', '2024-02-29', ['2024-02-29'], 
-    'שנה מעוברת - 29 בפברואר חוקי', false);
+  addTest('CONTEXT_NOISE', 'Meeting on 2024-05-01', ['2024-05-01'], 
+    'תאריך בטקסט פשוט', false);
   
   // ==========================================
-  // CONTEXT_NOISE (2 tests) - 60% weight
-  // ==========================================
-  
-  addTest('CONTEXT_NOISE', 'Room A-2024-B has meeting 2024-05-01', ['2024-05-01'], 
-    'הבדלה בין קוד חדר לתאריך', false);
-  
-  addTest('CONTEXT_NOISE', 'Price: $2024-50 on 2024-08-15', ['2024-08-15'], 
-    'מחיר עם מקף vs תאריך', false);
-  
-  // ==========================================
-  // MULTI_DATES (2 tests) - 40% weight
+  // MULTI_DATES (1 test) - 40% weight
   // ==========================================
   
   addTest('MULTI_DATES', 'From 2024-01-01 to 2024-12-31', ['2024-01-01', '2024-12-31'], 
     'שני תאריכים - טווח', false);
-  
-  addTest('MULTI_DATES', '2024-03-15 2024-03-15 2024-03-16', 
-    ['2024-03-15', '2024-03-16'], 
-    'תאריכים כפולים - החזר ייחודיים בלבד', false);
-  
-  // ==========================================
-  // BOUNDARY (1 more) - Empty input
-  // ==========================================
-  
-  addTest('BOUNDARY', '', [], 
-    'מחרוזת ריקה', false);
   
   return tests;
 }

@@ -30,6 +30,18 @@ interface TestResult {
   error?: string;
 }
 
+interface PistonResult {
+  language: string;
+  version: string;
+  run: {
+    stdout: string;
+    stderr: string;
+    code: number | null;
+    signal: string | null;
+    output: string;
+  };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -65,48 +77,88 @@ serve(async (req) => {
     // Build runner-only script (separate from solution)
     const runnerCode = buildRunnerOnly(skeptic_tests);
     
-    // Execute via Piston API with TWO separate files
+    // Execute via Piston API with retry logic for unstable public API
     const startTime = Date.now();
+    const MAX_RETRIES = 3;
+    let pistonResult: PistonResult | null = null;
+    let lastError: string | null = null;
     
-    const pistonResponse = await fetch(PISTON_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        language: 'python',
-        version: '3.10.0',
-        files: [
-          {
-            name: 'runner.py',
-            content: runnerCode,  // Runner FIRST - this is the entry point!
-          },
-          {
-            name: 'solution.py',
-            content: solution_code,  // Solution imported by runner
-          }
-        ],
-        stdin: '',
-        args: [],
-        compile_timeout: 10000,
-        run_timeout: Math.min(timeout, 30000), // Hard cap at 30s
-        compile_memory_limit: -1,
-        run_memory_limit: -1,
-      }),
-    });
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      console.log(`Piston attempt ${attempt}/${MAX_RETRIES}`);
+      
+      try {
+        const pistonResponse = await fetch(PISTON_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            language: 'python',
+            version: '3.10.0',
+            files: [
+              {
+                name: 'runner.py',
+                content: runnerCode,  // Runner FIRST - this is the entry point!
+              },
+              {
+                name: 'solution.py',
+                content: solution_code,  // Solution imported by runner
+              }
+            ],
+            stdin: '',
+            args: [],
+            compile_timeout: 10000,
+            run_timeout: Math.min(timeout, 30000), // Hard cap at 30s
+            compile_memory_limit: -1,
+            run_memory_limit: -1,
+          }),
+        });
 
-    if (!pistonResponse.ok) {
-      const errorText = await pistonResponse.text();
-      console.error('Piston API error:', errorText);
+        if (!pistonResponse.ok) {
+          lastError = await pistonResponse.text();
+          console.error(`Piston API error (attempt ${attempt}):`, lastError);
+          continue; // Retry
+        }
+
+        const result = await pistonResponse.json();
+        
+        // Check if we got killed by SIGKILL (common with public Piston)
+        if (result.run?.signal === 'SIGKILL') {
+          lastError = 'SIGKILL - Piston API overloaded';
+          console.log(`Piston SIGKILL (attempt ${attempt}), retrying...`);
+          // Wait longer before retry (exponential backoff)
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        
+        // Check if we have stdout
+        if (!result.run?.stdout) {
+          lastError = 'No stdout from Piston';
+          console.log(`No stdout (attempt ${attempt}), retrying...`);
+          await new Promise(r => setTimeout(r, 1000 * attempt));
+          continue;
+        }
+        
+        // Success!
+        pistonResult = result;
+        console.log(`Piston success on attempt ${attempt}`);
+        break;
+        
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : 'Unknown fetch error';
+        console.error(`Piston fetch error (attempt ${attempt}):`, lastError);
+      }
+    }
+    
+    if (!pistonResult) {
+      console.error('All Piston attempts failed:', lastError);
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'Sandbox execution failed',
-          details: errorText,
+          error: 'Sandbox execution failed after retries',
+          details: lastError,
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const pistonResult = await pistonResponse.json();
     const totalRuntime = Date.now() - startTime;
 
     // Log full Piston response for debugging
