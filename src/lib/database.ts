@@ -375,3 +375,158 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
     statusDistribution,
   };
 }
+
+// ==========================================
+// FAILURE INSIGHTS
+// ==========================================
+
+export interface FailureInsightInput {
+  job_id: string;
+  task_id?: string | null;
+  failure_type: 'KILL_GATE' | 'FAILED' | 'PARSE_ERROR' | 'SANDBOX_ERROR';
+  failure_category?: string | null;
+  root_cause: string;
+  confidence?: number;
+  pattern_signature?: string | null;
+  evidence?: Record<string, unknown>;
+}
+
+export interface FailureInsightRow {
+  id: string;
+  job_id: string;
+  task_id: string | null;
+  failure_type: string;
+  failure_category: string | null;
+  root_cause: string;
+  confidence: number;
+  pattern_signature: string | null;
+  evidence: Record<string, unknown>;
+  created_at: string;
+}
+
+export async function createFailureInsight(input: FailureInsightInput): Promise<FailureInsightRow> {
+  const { data, error } = await supabase
+    .from('failure_insights')
+    .insert({
+      job_id: input.job_id,
+      task_id: input.task_id ?? null,
+      failure_type: input.failure_type,
+      failure_category: input.failure_category ?? null,
+      root_cause: input.root_cause,
+      confidence: input.confidence ?? 0.7,
+      pattern_signature: input.pattern_signature ?? null,
+      evidence: (input.evidence ?? {}) as Json,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  
+  return {
+    id: data.id,
+    job_id: data.job_id,
+    task_id: data.task_id,
+    failure_type: data.failure_type,
+    failure_category: data.failure_category,
+    root_cause: data.root_cause,
+    confidence: Number(data.confidence),
+    pattern_signature: data.pattern_signature,
+    evidence: data.evidence as Record<string, unknown>,
+    created_at: data.created_at,
+  };
+}
+
+export async function fetchFailureInsights(limit: number = 50): Promise<FailureInsightRow[]> {
+  const { data, error } = await supabase
+    .from('failure_insights')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  
+  if (error) throw error;
+  
+  return (data || []).map(row => ({
+    id: row.id,
+    job_id: row.job_id,
+    task_id: row.task_id,
+    failure_type: row.failure_type,
+    failure_category: row.failure_category,
+    root_cause: row.root_cause,
+    confidence: Number(row.confidence),
+    pattern_signature: row.pattern_signature,
+    evidence: row.evidence as Record<string, unknown>,
+    created_at: row.created_at,
+  }));
+}
+
+export async function fetchFailureInsightsBySignature(
+  signature: string, 
+  limit: number = 10
+): Promise<FailureInsightRow[]> {
+  const { data, error } = await supabase
+    .from('failure_insights')
+    .select('*')
+    .eq('pattern_signature', signature)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  
+  if (error) throw error;
+  
+  return (data || []).map(row => ({
+    id: row.id,
+    job_id: row.job_id,
+    task_id: row.task_id,
+    failure_type: row.failure_type,
+    failure_category: row.failure_category,
+    root_cause: row.root_cause,
+    confidence: Number(row.confidence),
+    pattern_signature: row.pattern_signature,
+    evidence: row.evidence as Record<string, unknown>,
+    created_at: row.created_at,
+  }));
+}
+
+export async function fetchTopFailurePatterns(limit: number = 10): Promise<Array<{
+  pattern_signature: string;
+  failure_category: string | null;
+  root_cause: string;
+  count: number;
+  latest: string;
+}>> {
+  // Fetch all insights and group client-side (Supabase JS doesn't support GROUP BY)
+  const { data, error } = await supabase
+    .from('failure_insights')
+    .select('pattern_signature, failure_category, root_cause, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  
+  if (error) throw error;
+  
+  const grouped = new Map<string, {
+    pattern_signature: string;
+    failure_category: string | null;
+    root_cause: string;
+    count: number;
+    latest: string;
+  }>();
+  
+  for (const row of data || []) {
+    const sig = row.pattern_signature || 'unknown';
+    const existing = grouped.get(sig);
+    if (existing) {
+      existing.count++;
+    } else {
+      grouped.set(sig, {
+        pattern_signature: sig,
+        failure_category: row.failure_category,
+        root_cause: row.root_cause,
+        count: 1,
+        latest: row.created_at,
+      });
+    }
+  }
+  
+  return Array.from(grouped.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}

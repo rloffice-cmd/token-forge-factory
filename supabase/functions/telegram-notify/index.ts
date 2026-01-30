@@ -10,11 +10,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type NotificationType = 'stuck' | 'daily_report' | 'error' | 'success' | 'kill_gate';
+type NotificationType = 'stuck' | 'daily_report' | 'error' | 'success' | 'kill_gate' | 'cashout';
 
 interface NotifyRequest {
-  type: NotificationType;
-  title: string;
+  type?: NotificationType;
+  title?: string;
   message: string;
   data?: Record<string, unknown>;
 }
@@ -32,17 +32,33 @@ serve(async (req) => {
       throw new Error('Missing Telegram credentials');
     }
 
-    const { type, title, message, data }: NotifyRequest = await req.json();
+    const body: NotifyRequest = await req.json();
+    const { type = 'success', title, message, data } = body;
 
-    // Build message with emoji based on type
-    const emoji = getEmoji(type);
-    let text = `${emoji} *${escapeMarkdown(title)}*\n\n${escapeMarkdown(message)}`;
+    // If message contains HTML tags, send as HTML; otherwise use title + message format
+    const isHtmlMessage = message.includes('<b>') || message.includes('<i>');
     
-    // Add data if provided
-    if (data && Object.keys(data).length > 0) {
-      text += '\n\n```json\n' + JSON.stringify(data, null, 2) + '\n```';
+    let text: string;
+    if (isHtmlMessage) {
+      // Send HTML message directly (from cashout alert, etc.)
+      text = message;
+    } else if (title) {
+      // Build markdown message with title
+      const emoji = getEmoji(type);
+      text = `${emoji} *${escapeMarkdown(title)}*\n\n${escapeMarkdown(message)}`;
+      
+      // Add data if provided
+      if (data && Object.keys(data).length > 0) {
+        text += '\n\n```json\n' + JSON.stringify(data, null, 2) + '\n```';
+      }
+    } else {
+      // Simple text message
+      text = message;
     }
 
+    // Determine parse mode based on content
+    const parseMode = isHtmlMessage ? 'HTML' : 'MarkdownV2';
+    
     // Send to Telegram
     const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
     const telegramResponse = await fetch(telegramUrl, {
@@ -51,7 +67,8 @@ serve(async (req) => {
       body: JSON.stringify({
         chat_id: TELEGRAM_CHAT_ID,
         text,
-        parse_mode: 'MarkdownV2',
+        parse_mode: parseMode,
+        disable_web_page_preview: true,
       }),
     });
 
@@ -59,13 +76,14 @@ serve(async (req) => {
 
     if (!telegramResponse.ok) {
       console.error('Telegram API error:', result);
-      // Retry without markdown if it fails
+      // Retry with plain text if formatted message fails
+      const plainText = title ? `${getEmoji(type)} ${title}\n\n${message}` : message;
       const plainResponse = await fetch(telegramUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: TELEGRAM_CHAT_ID,
-          text: `${emoji} ${title}\n\n${message}`,
+          text: plainText,
         }),
       });
       const plainResult = await plainResponse.json();
@@ -87,13 +105,14 @@ serve(async (req) => {
   }
 });
 
-function getEmoji(type: NotificationType): string {
+function getEmoji(type: NotificationType | undefined): string {
   switch (type) {
     case 'stuck': return '🚨';
     case 'daily_report': return '📊';
     case 'error': return '❌';
     case 'success': return '✅';
     case 'kill_gate': return '⚠️';
+    case 'cashout': return '💰';
     default: return '📢';
   }
 }

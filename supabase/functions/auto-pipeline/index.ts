@@ -16,6 +16,8 @@ const corsHeaders = {
 const DEFAULT_TASK_ID = 'a0000000-0000-0000-0000-000000000001';
 const MAX_RETRIES = 3;
 const STUCK_THRESHOLD_MINUTES = 10;
+const PAYOUT_THRESHOLD_DTF = 1000;
+const PAYOUT_NETWORK = 'ETH';
 
 interface RunResult {
   success: boolean;
@@ -24,6 +26,17 @@ interface RunResult {
   score?: number;
   error?: string;
   retryAttempt?: number;
+}
+
+interface FailureInsight {
+  job_id: string;
+  task_id: string | null;
+  failure_type: string;
+  failure_category: string | null;
+  root_cause: string;
+  confidence: number;
+  pattern_signature: string;
+  evidence: Record<string, unknown>;
 }
 
 serve(async (req) => {
@@ -157,11 +170,34 @@ async function runWithRetry(
         .update({ status: finalStatus, score })
         .eq('id', job.id);
 
-      // If passed, add to treasury
+      // If passed, add to treasury and check cashout threshold
       if (allPassed) {
         await supabase
           .from('treasury_ledger')
           .insert({ job_id: job.id, amount: 55, asset: 'DTF-TOKEN' });
+        
+        // Check cashout threshold
+        await checkCashoutThreshold(supabase);
+      } else {
+        // Save failure insight for failed/dropped jobs
+        const failedTest = results.find((r: { passed: boolean }) => !r.passed);
+        const failureInsight = buildFailureInsight({
+          job_id: job.id,
+          task_id: taskId,
+          failure_type: 'KILL_GATE',
+          failure_category: 'TEST_FAILURE',
+          sandbox_error: failedTest?.error,
+          expected: failedTest?.expected_output,
+          actual: failedTest?.actual_output,
+          test_id: failedTest?.test_id,
+          score: 0,
+        });
+        
+        if (failureInsight) {
+          await supabase
+            .from('failure_insights')
+            .insert(failureInsight);
+        }
       }
 
       // Create audit log
@@ -310,4 +346,85 @@ function generateSkepticTests(): Array<{ id: string; input: string; expected_out
     { id: 'test-004', input: 'Meeting on 2024-05-01', expected_output: ['2024-05-01'] },
     { id: 'test-005', input: 'From 2024-01-01 to 2024-12-31', expected_output: ['2024-01-01', '2024-12-31'] },
   ];
+}
+
+// Check cashout threshold and send alert
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function checkCashoutThreshold(supabase: any): Promise<void> {
+  try {
+    const { data } = await supabase
+      .from('treasury_ledger')
+      .select('amount');
+    
+    const total = (data || []).reduce((sum: number, r: { amount: number }) => sum + Number(r.amount), 0);
+    
+    if (total >= PAYOUT_THRESHOLD_DTF) {
+      const message = [
+        `💰 <b>Cashout Alert</b>`,
+        ``,
+        `סך הכל: <b>${total.toFixed(2)} DTF</b>`,
+        `סף: <b>${PAYOUT_THRESHOLD_DTF.toFixed(2)} DTF</b>`,
+        `רשת: <b>${PAYOUT_NETWORK}</b>`,
+        ``,
+        `🔒 כרגע: <b>מימוש ידני</b> (בטוח).`,
+      ].join('\n');
+      
+      await supabase.functions.invoke('telegram-notify', {
+        body: { message, type: 'cashout' },
+      });
+      
+      console.log('Cashout alert sent, total:', total);
+    }
+  } catch (err) {
+    console.error('Cashout check failed:', err);
+  }
+}
+
+// Build failure insight from test results
+function buildFailureInsight(params: {
+  job_id: string;
+  task_id: string;
+  failure_type: string;
+  failure_category: string;
+  sandbox_error?: string;
+  expected?: string[];
+  actual?: string[];
+  test_id?: string;
+  score: number;
+}): FailureInsight | null {
+  const signature = stableHash([
+    params.failure_type,
+    params.failure_category,
+    (params.sandbox_error || '').slice(0, 80),
+    JSON.stringify(params.expected || []).slice(0, 120),
+    JSON.stringify(params.actual || []).slice(0, 120),
+  ]);
+  
+  return {
+    job_id: params.job_id,
+    task_id: params.task_id,
+    failure_type: params.failure_type,
+    failure_category: params.failure_category,
+    root_cause: params.sandbox_error || 'Test mismatch',
+    confidence: 0.8,
+    pattern_signature: signature,
+    evidence: {
+      failed_test_id: params.test_id,
+      expected_output: params.expected,
+      actual_output: params.actual,
+      sandbox_error: params.sandbox_error,
+      score: params.score,
+    },
+  };
+}
+
+// Generate stable hash for pattern signature
+function stableHash(parts: string[]): string {
+  let hash = 0;
+  const s = parts.join('|').slice(0, 2000);
+  for (let i = 0; i < s.length; i++) {
+    hash = ((hash << 5) - hash) + s.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
 }
