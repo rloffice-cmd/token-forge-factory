@@ -2,12 +2,34 @@ import { useParams, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
 import { JobDetails } from '@/components/JobDetails';
 import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
-import { getJobById } from '@/data/mockData';
+import { ArrowRight, Loader2 } from 'lucide-react';
+import { useJob } from '@/hooks/useDatabase';
 
 export default function JobDetailsPage() {
   const { id } = useParams<{ id: string }>();
-  const job = getJobById(id || '');
+  const { data: job, isLoading, error } = useJob(id || '');
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="p-8 flex items-center justify-center min-h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="p-8">
+          <div className="text-center text-destructive">
+            שגיאה בטעינת נתונים: {error.message}
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   if (!job) {
     return (

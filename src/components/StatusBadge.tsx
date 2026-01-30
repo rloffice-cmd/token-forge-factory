@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { JobStatus } from '@/types';
 
@@ -21,13 +22,17 @@ const statusConfig: Record<JobStatus, { label: string; className: string }> = {
   DROPPED: { label: 'נדחה', className: 'status-dropped' },
 };
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusConfig[status];
-  
-  return (
-    <span className={cn('status-badge', config.className, className)}>
-      <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-glow" />
-      {config.label}
-    </span>
-  );
-}
+export const StatusBadge = forwardRef<HTMLSpanElement, StatusBadgeProps>(
+  ({ status, className }, ref) => {
+    const config = statusConfig[status];
+    
+    return (
+      <span ref={ref} className={cn('status-badge', config.className, className)}>
+        <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse-glow" />
+        {config.label}
+      </span>
+    );
+  }
+);
+
+StatusBadge.displayName = 'StatusBadge';

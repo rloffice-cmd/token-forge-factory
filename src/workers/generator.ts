@@ -54,7 +54,7 @@ def extract_iso_dates(text: str) -> List[str]:
         return []
     
     # ISO-8601 pattern: YYYY-MM-DD with strict 4-2-2 digit format
-    pattern = r'\\b(\\d{4})-(\\d{2})-(\\d{2})\\b'
+    pattern = r'\b(\d{4})-(\d{2})-(\d{2})\b'
     matches = re.findall(pattern, text)
     
     seen = set()

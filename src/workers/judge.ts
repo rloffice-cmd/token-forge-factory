@@ -1,50 +1,55 @@
 /**
  * Judge Worker
  * Evaluates test results with Kill Gates and scoring logic
+ * 
+ * FIXED WEIGHTS per spec:
+ * - CONTEXT_NOISE = 60%
+ * - MULTI_DATES = 40%
+ * - Kill Gates (AMBIGUITY, INVALID_DATES, MALFORMED_ISO) = אפס סובלנות
+ * - Score >= 0.95 → PASS
  */
 
 import type { SkepticTest, SkepticResult, JudgeResult, SkepticCategory } from '@/types';
 
-interface JudgeConfig {
-  passThreshold: number;  // Default: 0.95
-  categoryWeights: {
-    CONTEXT_NOISE: number;  // Default: 0.6
-    MULTI_DATES: number;    // Default: 0.4
-  };
-}
+// Kill gate categories - zero tolerance
+const KILL_GATE_CATEGORIES: SkepticCategory[] = [
+  'AMBIGUITY',
+  'INVALID_DATES', 
+  'MALFORMED_ISO',
+];
 
-const DEFAULT_CONFIG: JudgeConfig = {
-  passThreshold: 0.95,
-  categoryWeights: {
-    CONTEXT_NOISE: 0.6,
-    MULTI_DATES: 0.4,
-  },
+// Weighted score categories (after kill gates pass)
+const WEIGHTED_CATEGORIES = {
+  CONTEXT_NOISE: 0.60,  // 60%
+  MULTI_DATES: 0.40,    // 40%
 };
+
+// Pass threshold
+const PASS_THRESHOLD = 0.95;
 
 /**
  * Judge test results with Kill Gate logic
+ * 
+ * Kill Gates (אפס סובלנות):
+ * - AMBIGUITY: Any date returned when [] expected = KILL
+ * - INVALID_DATES: Any date returned when [] expected = KILL  
+ * - MALFORMED_ISO: Any date returned when [] expected = KILL
+ * 
+ * Scoring (if kill gates pass):
+ * - CONTEXT_NOISE = 60%
+ * - MULTI_DATES = 40%
+ * - Score >= 0.95 → PASS
  */
 export function judgeResults(
   tests: SkepticTest[],
   results: SkepticResult[],
-  jobId: string,
-  config: JudgeConfig = DEFAULT_CONFIG
+  jobId: string
 ): JudgeResult {
   // Map results by test ID for quick lookup
   const resultMap = new Map(results.map(r => [r.test_id, r]));
   
-  // Initialize category scores
-  const categoryScores: Record<SkepticCategory, number> = {
-    AMBIGUITY: 0,
-    INVALID_DATES: 0,
-    MALFORMED_ISO: 0,
-    BOUNDARY: 0,
-    CONTEXT_NOISE: 0,
-    MULTI_DATES: 0,
-    PERFORMANCE_GUARD: 0,
-  };
-  
-  const categoryCounts: Record<SkepticCategory, { passed: number; total: number }> = {
+  // Initialize category tracking
+  const categoryResults: Record<SkepticCategory, { passed: number; total: number }> = {
     AMBIGUITY: { passed: 0, total: 0 },
     INVALID_DATES: { passed: 0, total: 0 },
     MALFORMED_ISO: { passed: 0, total: 0 },
@@ -54,18 +59,17 @@ export function judgeResults(
     PERFORMANCE_GUARD: { passed: 0, total: 0 },
   };
   
+  const failedTests: SkepticResult[] = [];
   let killGateTriggered = false;
   let killGateReason: string | undefined;
-  const failedTests: SkepticResult[] = [];
-  let passedCount = 0;
   
   // Process each test
   for (const test of tests) {
     const result = resultMap.get(test.id);
+    categoryResults[test.category].total++;
     
     if (!result) {
       // Test wasn't run - count as failed
-      categoryCounts[test.category].total++;
       failedTests.push({
         test_id: test.id,
         passed: false,
@@ -76,18 +80,14 @@ export function judgeResults(
       continue;
     }
     
-    categoryCounts[test.category].total++;
-    
     if (result.passed) {
-      categoryCounts[test.category].passed++;
-      passedCount++;
+      categoryResults[test.category].passed++;
     } else {
       failedTests.push(result);
       
-      // Check Kill Gates
-      if (test.is_kill_gate) {
-        // For kill gate tests (AMBIGUITY, INVALID_DATES, MALFORMED_ISO):
-        // If ANY date was returned when [] was expected = KILL
+      // Check Kill Gates - אפס סובלנות
+      if (KILL_GATE_CATEGORIES.includes(test.category)) {
+        // For kill gate categories: if expected [] but got dates = KILL
         const expectedEmpty = test.expected_output.length === 0;
         const gotDates = result.actual_output.length > 0;
         
@@ -95,19 +95,31 @@ export function judgeResults(
           killGateTriggered = true;
           killGateReason = `Kill Gate ${test.category}: False Positive detected. ` +
             `Test "${test.id}" returned dates when none were expected. ` +
-            `Input: "${test.input.slice(0, 50)}..." => Got: ${JSON.stringify(result.actual_output)}`;
+            `Input: "${test.input.slice(0, 50)}${test.input.length > 50 ? '...' : ''}" => ` +
+            `Got: ${JSON.stringify(result.actual_output)}`;
         }
       }
     }
   }
   
+  // Calculate category scores
+  const categoryScores: Record<SkepticCategory, number> = {
+    AMBIGUITY: 0,
+    INVALID_DATES: 0,
+    MALFORMED_ISO: 0,
+    BOUNDARY: 0,
+    CONTEXT_NOISE: 0,
+    MULTI_DATES: 0,
+    PERFORMANCE_GUARD: 0,
+  };
+  
+  for (const cat of Object.keys(categoryResults) as SkepticCategory[]) {
+    const { passed, total } = categoryResults[cat];
+    categoryScores[cat] = total > 0 ? passed / total : 1;
+  }
+  
   // If Kill Gate triggered, score = 0, immediate DROPPED
   if (killGateTriggered) {
-    // Set all category scores to 0
-    for (const cat of Object.keys(categoryScores) as SkepticCategory[]) {
-      categoryScores[cat] = 0;
-    }
-    
     return {
       job_id: jobId,
       passed: false,
@@ -116,49 +128,45 @@ export function judgeResults(
       kill_gate_reason: killGateReason,
       category_scores: categoryScores,
       total_tests: tests.length,
-      passed_tests: passedCount,
+      passed_tests: results.filter(r => r.passed).length,
       failed_tests: failedTests,
     };
   }
   
-  // Calculate category scores
-  for (const cat of Object.keys(categoryCounts) as SkepticCategory[]) {
-    const { passed, total } = categoryCounts[cat];
-    categoryScores[cat] = total > 0 ? passed / total : 1;
+  // Check that ALL kill gate categories are 100%
+  for (const cat of KILL_GATE_CATEGORIES) {
+    if (categoryScores[cat] < 1) {
+      return {
+        job_id: jobId,
+        passed: false,
+        score: 0,
+        kill_gate_triggered: true,
+        kill_gate_reason: `Kill Gate ${cat}: Failed tests in zero-tolerance category`,
+        category_scores: categoryScores,
+        total_tests: tests.length,
+        passed_tests: results.filter(r => r.passed).length,
+        failed_tests: failedTests,
+      };
+    }
   }
   
-  // Calculate weighted score for non-kill-gate categories
-  // Kill gate categories must be 100% or we wouldn't get here
-  const killGateScore = (
-    categoryScores.AMBIGUITY + 
-    categoryScores.INVALID_DATES + 
-    categoryScores.MALFORMED_ISO
-  ) / 3;
-  
-  // Weighted score for CONTEXT_NOISE and MULTI_DATES
+  // Calculate weighted score for CONTEXT_NOISE (60%) and MULTI_DATES (40%)
   const weightedScore = 
-    categoryScores.CONTEXT_NOISE * config.categoryWeights.CONTEXT_NOISE +
-    categoryScores.MULTI_DATES * config.categoryWeights.MULTI_DATES;
+    categoryScores.CONTEXT_NOISE * WEIGHTED_CATEGORIES.CONTEXT_NOISE +
+    categoryScores.MULTI_DATES * WEIGHTED_CATEGORIES.MULTI_DATES;
   
-  // BOUNDARY and PERFORMANCE_GUARD contribute equally to remaining weight
-  const otherScore = (categoryScores.BOUNDARY + categoryScores.PERFORMANCE_GUARD) / 2;
-  
-  // Final score: Kill gates must be 100%, then weighted average of others
-  // If kill gates passed, they contribute full weight
-  const finalScore = killGateScore === 1 
-    ? 0.3 * killGateScore + 0.5 * weightedScore + 0.2 * otherScore
-    : killGateScore * 0.3; // Penalize if not perfect
-  
-  const passed = finalScore >= config.passThreshold;
+  // Round to 2 decimal places
+  const finalScore = Math.round(weightedScore * 100) / 100;
+  const passed = finalScore >= PASS_THRESHOLD;
   
   return {
     job_id: jobId,
     passed,
-    score: Math.round(finalScore * 100) / 100,
+    score: finalScore,
     kill_gate_triggered: false,
     category_scores: categoryScores,
     total_tests: tests.length,
-    passed_tests: passedCount,
+    passed_tests: results.filter(r => r.passed).length,
     failed_tests: failedTests,
   };
 }
@@ -183,10 +191,16 @@ export function generateJudgeSummary(result: JudgeResult): string {
   
   lines.push('');
   lines.push('Category Scores:');
-  for (const [category, score] of Object.entries(result.category_scores)) {
+  lines.push('--- Kill Gates (אפס סובלנות) ---');
+  for (const cat of KILL_GATE_CATEGORIES) {
+    const score = result.category_scores[cat];
     const bar = '█'.repeat(Math.round(score * 10)) + '░'.repeat(10 - Math.round(score * 10));
-    lines.push(`  ${category}: ${bar} ${(score * 100).toFixed(0)}%`);
+    lines.push(`  ${cat}: ${bar} ${(score * 100).toFixed(0)}%`);
   }
+  
+  lines.push('--- Weighted Score ---');
+  lines.push(`  CONTEXT_NOISE (60%): ${(result.category_scores.CONTEXT_NOISE * 100).toFixed(0)}%`);
+  lines.push(`  MULTI_DATES (40%): ${(result.category_scores.MULTI_DATES * 100).toFixed(0)}%`);
   
   if (result.failed_tests.length > 0) {
     lines.push('');

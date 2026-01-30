@@ -1,6 +1,7 @@
 /**
- * Factory Pipeline Orchestrator
+ * Factory Pipeline Orchestrator - REAL VERSION
  * Coordinates all workers: Generator → Skeptic → Sandbox → Judge → Treasury
+ * Uses real Supabase database and Piston API for sandbox execution
  */
 
 import type { 
@@ -17,7 +18,8 @@ import type {
 import { generateSolution, validateGeneratedCode } from './generator';
 import { generateSkepticTests, exportSkepticJson } from './skeptic';
 import { judgeResults, exportJudgeJson } from './judge';
-import { createTreasuryEntry, generateRewardNotification } from './treasury';
+import * as db from '@/lib/database';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface PipelineResult {
   job: Job;
@@ -48,7 +50,7 @@ export async function runPipeline(
   const auditLogs: AuditLog[] = [];
   const startTime = Date.now();
   
-  const log = (action: string, metadata: Record<string, unknown> = {}) => {
+  const log = async (action: string, metadata: Record<string, unknown> = {}) => {
     const entry: AuditLog = {
       id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       job_id: job.id,
@@ -58,21 +60,39 @@ export async function runPipeline(
     };
     auditLogs.push(entry);
     callbacks?.onLog?.(entry);
+    
+    // Save to database
+    try {
+      await db.createAuditLog(job.id, action, entry.metadata);
+    } catch (err) {
+      console.error('Failed to save audit log:', err);
+    }
   };
   
-  const updateStatus = (status: JobStatus) => {
+  const updateStatus = async (status: JobStatus, score?: number) => {
     job.status = status;
     job.updated_at = new Date().toISOString();
+    if (score !== undefined) {
+      job.score = score;
+    }
     callbacks?.onStatusChange?.(job.id, status);
-    log(`status_changed`, { newStatus: status });
+    
+    // Update in database
+    try {
+      await db.updateJobStatus(job.id, status, score);
+    } catch (err) {
+      console.error('Failed to update job status:', err);
+    }
+    
+    await log(`status_changed`, { newStatus: status, score });
   };
   
   try {
     // ==========================================
     // Step 1: Generate Solution
     // ==========================================
-    log('pipeline_started', { task_id: task.id });
-    updateStatus('GENERATED');
+    await log('pipeline_started', { task_id: task.id });
+    await updateStatus('GENERATED');
     
     const generatorOutput = generateSolution(task);
     
@@ -85,30 +105,43 @@ export async function runPipeline(
       throw new Error(`Code validation failed: ${validation.errors.join(', ')}`);
     }
     
-    log('code_generated', { codeLength: generatorOutput.code.length });
+    // Save artifact
+    await db.createArtifact(job.id, 'GEN_CODE', generatorOutput.code);
+    await log('code_generated', { codeLength: generatorOutput.code.length });
     
     // ==========================================
     // Step 2: Build Skeptic Tests
     // ==========================================
-    updateStatus('TESTS_BUILT');
+    await updateStatus('TESTS_BUILT');
     
     const skepticTests = generateSkepticTests({
       minYear: parseInt(task.policy_json.date_range.min.split('-')[0]),
       maxYear: parseInt(task.policy_json.date_range.max.split('-')[0]),
     });
     
-    log('tests_generated', { testCount: skepticTests.length });
+    // Save artifact
+    await db.createArtifact(job.id, 'SKEPTIC_JSON', exportSkepticJson(skepticTests));
+    await log('tests_generated', { testCount: skepticTests.length });
     
     // ==========================================
-    // Step 3: Run Sandbox (MOCK)
+    // Step 3: Run Sandbox (REAL via Piston API)
     // ==========================================
-    updateStatus('SANDBOX_RUNNING');
+    await updateStatus('SANDBOX_RUNNING');
     
-    // In MVP, we simulate sandbox execution
-    // In production, this would call Piston API
-    const sandboxResults = await simulateSandboxRun(skepticTests);
+    // Prepare tests for sandbox
+    const testsForSandbox = skepticTests.map(t => ({
+      id: t.id,
+      input: t.input,
+      expected_output: t.expected_output,
+    }));
     
-    log('sandbox_completed', { 
+    // Call sandbox edge function
+    const sandboxResults = await executeSandbox(generatorOutput.code, testsForSandbox);
+    
+    // Save artifact
+    await db.createArtifact(job.id, 'PYTEST_REPORT', JSON.stringify(sandboxResults, null, 2));
+    
+    await log('sandbox_completed', { 
       passedCount: sandboxResults.filter(r => r.passed).length,
       totalCount: sandboxResults.length,
       totalRuntime: sandboxResults.reduce((sum, r) => sum + r.runtime_ms, 0),
@@ -117,12 +150,14 @@ export async function runPipeline(
     // ==========================================
     // Step 4: Judge Results
     // ==========================================
-    updateStatus('JUDGED');
+    await updateStatus('JUDGED');
     
     const judgeResult = judgeResults(skepticTests, sandboxResults, job.id);
-    job.score = judgeResult.score;
     
-    log('judge_completed', {
+    // Save artifact
+    await db.createArtifact(job.id, 'JUDGE_JSON', exportJudgeJson(judgeResult));
+    
+    await log('judge_completed', {
       score: judgeResult.score,
       passed: judgeResult.passed,
       killGate: judgeResult.kill_gate_triggered,
@@ -130,8 +165,8 @@ export async function runPipeline(
     
     // Check Kill Gate
     if (judgeResult.kill_gate_triggered) {
-      updateStatus('DROPPED');
-      log('job_dropped', { reason: judgeResult.kill_gate_reason });
+      await updateStatus('DROPPED', 0);
+      await log('job_dropped', { reason: judgeResult.kill_gate_reason });
       
       return {
         job,
@@ -146,8 +181,8 @@ export async function runPipeline(
     
     // Check pass threshold
     if (!judgeResult.passed) {
-      updateStatus('FAILED');
-      log('job_failed', { score: judgeResult.score, threshold: 0.95 });
+      await updateStatus('FAILED', judgeResult.score);
+      await log('job_failed', { score: judgeResult.score, threshold: 0.95 });
       
       return {
         job,
@@ -163,7 +198,7 @@ export async function runPipeline(
     // ==========================================
     // Step 5: Build Proof Pack
     // ==========================================
-    updateStatus('READY_TO_SUBMIT');
+    await updateStatus('READY_TO_SUBMIT', judgeResult.score);
     
     const proofPack: ProofPack = {
       solution_py: generatorOutput.code,
@@ -179,41 +214,45 @@ export async function runPipeline(
       },
     };
     
-    log('proof_pack_created', { checksum: proofPack.metadata.checksum });
+    // Save artifact
+    await db.createArtifact(job.id, 'PROOF_PACK', JSON.stringify(proofPack, null, 2));
+    await log('proof_pack_created', { checksum: proofPack.metadata.checksum });
     
     // ==========================================
-    // Step 6: Submit (MOCK)
+    // Step 6: Submit (MOCK for now)
     // ==========================================
-    updateStatus('SUBMITTED');
-    log('submission_mock', { status: 'ACCEPTED' });
+    await updateStatus('SUBMITTED', judgeResult.score);
+    await log('submission_mock', { status: 'ACCEPTED' });
     
     // ==========================================
-    // Step 7: Reward (MOCK)
+    // Step 7: Reward
     // ==========================================
-    updateStatus('REWARDED');
+    await updateStatus('REWARDED', judgeResult.score);
     
-    const treasuryEntry = createTreasuryEntry(job.id, judgeResult.score);
+    // Calculate reward based on score
+    const rewardAmount = calculateReward(judgeResult.score);
+    const treasuryEntry = await db.createTreasuryEntry(job.id, rewardAmount);
     
-    if (treasuryEntry) {
-      log('reward_issued', { amount: treasuryEntry.amount, asset: treasuryEntry.asset });
-      
-      const notification = generateRewardNotification(treasuryEntry);
-      callbacks?.onNotification?.(notification.title, notification.message);
-    }
+    await log('reward_issued', { amount: treasuryEntry.amount, asset: treasuryEntry.asset });
+    
+    callbacks?.onNotification?.(
+      '🎉 תגמול התקבל!',
+      `קיבלת ${treasuryEntry.amount.toFixed(2)} ${treasuryEntry.asset} עבור ${job.id}`
+    );
     
     // ==========================================
     // Step 8: Update Treasury
     // ==========================================
-    updateStatus('TREASURY_UPDATED');
-    log('treasury_updated', { entryId: treasuryEntry?.id });
+    await updateStatus('TREASURY_UPDATED', judgeResult.score);
+    await log('treasury_updated', { entryId: treasuryEntry.id });
     
     // ==========================================
     // Step 9: Settle
     // ==========================================
-    updateStatus('SETTLED');
+    await updateStatus('SETTLED', judgeResult.score);
     
     const totalTime = Date.now() - startTime;
-    log('pipeline_completed', { totalTimeMs: totalTime });
+    await log('pipeline_completed', { totalTimeMs: totalTime });
     
     return {
       job,
@@ -228,8 +267,8 @@ export async function runPipeline(
     
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    log('pipeline_error', { error: errorMessage });
-    updateStatus('FAILED');
+    await log('pipeline_error', { error: errorMessage });
+    await updateStatus('FAILED');
     
     return {
       job,
@@ -240,25 +279,71 @@ export async function runPipeline(
 }
 
 /**
- * Simulate sandbox execution (MOCK)
- * In production, this would call Piston API
+ * Execute code in sandbox via Edge Function
  */
-async function simulateSandboxRun(tests: SkepticTest[]): Promise<SkepticResult[]> {
-  // Simulate async execution
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // For MVP, simulate mostly passing results
-  // Real implementation would execute Python code
-  return tests.map(test => ({
-    test_id: test.id,
-    passed: true, // Simulated pass
-    actual_output: test.expected_output,
-    runtime_ms: Math.random() * 50 + 5,
-  }));
+async function executeSandbox(
+  solutionCode: string,
+  tests: Array<{ id: string; input: string; expected_output: string[] }>
+): Promise<SkepticResult[]> {
+  try {
+    const { data, error } = await supabase.functions.invoke('sandbox-runner', {
+      body: {
+        solution_code: solutionCode,
+        skeptic_tests: tests,
+        timeout: 10000,
+      },
+    });
+    
+    if (error) {
+      console.error('Sandbox function error:', error);
+      // Return failed results for all tests
+      return tests.map(t => ({
+        test_id: t.id,
+        passed: false,
+        actual_output: [],
+        runtime_ms: 0,
+        error: `Sandbox error: ${error.message}`,
+      }));
+    }
+    
+    if (!data.success || !data.results) {
+      console.error('Sandbox execution failed:', data);
+      return tests.map(t => ({
+        test_id: t.id,
+        passed: false,
+        actual_output: [],
+        runtime_ms: 0,
+        error: data.parse_error || data.stderr || 'Execution failed',
+      }));
+    }
+    
+    return data.results;
+  } catch (err) {
+    console.error('Failed to call sandbox:', err);
+    return tests.map(t => ({
+      test_id: t.id,
+      passed: false,
+      actual_output: [],
+      runtime_ms: 0,
+      error: `Network error: ${err instanceof Error ? err.message : 'Unknown'}`,
+    }));
+  }
 }
 
 /**
- * Generate a simple checksum (for demo purposes)
+ * Calculate reward based on score
+ */
+function calculateReward(score: number): number {
+  if (score < 0.95) return 0;
+  
+  const baseReward = 50;
+  const bonusMultiplier = 1 + (score - 0.95) * 2;
+  
+  return Math.round(baseReward * bonusMultiplier * 100) / 100;
+}
+
+/**
+ * Generate a simple checksum
  */
 function generateChecksum(content: string): string {
   let hash = 0;
