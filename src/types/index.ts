@@ -121,12 +121,71 @@ export interface TreasuryEntry {
   created_at: string;
 }
 
+export type AuditSeverity = 'INFO' | 'WARN' | 'KILL';
+
 export interface AuditLog {
   id: string;
   job_id: string;
   action: string;
   metadata: Record<string, unknown>;
   created_at: string;
+}
+
+/**
+ * Enhanced audit metadata for Kill Gate events
+ * Contains Repro Pack + Generator Fingerprint + Regex Context
+ */
+export interface KillGateAuditMetadata {
+  event: 'KILL_GATE_TRIGGERED';
+  severity: AuditSeverity;
+  timestamp: string;
+  job_id: string;
+  
+  // Repro Pack - enables quick reproduction without opening artifacts
+  repro_pack: {
+    failed_test_id: string;
+    failure_category: SkepticCategory;
+    input_excerpt: string; // max 500 chars
+    expected_output: string[];
+    actual_output: string[];
+    diff_summary: string;
+  };
+  
+  // Generator Fingerprint - for quick fix identification
+  generator_fingerprint: {
+    version: string;
+    solution_checksum: string;
+    snippet: {
+      file: string;
+      start_line: number;
+      end_line: number;
+      code: string; // 20-40 lines max
+    };
+  };
+  
+  // Regex Context - for INVALID_DATES/AMBIGUITY cases
+  regex_context?: {
+    pattern: string;
+    match_groups_sample: string[][]; // up to 3 matches
+    validation_rule: string;
+  };
+  
+  // Runtime stats
+  runtime_ms: number;
+  
+  // Error info - stacktrace only for real exceptions
+  error?: {
+    type: string;
+    message: string;
+    stacktrace?: string; // only if type != AssertionError, truncated to 30 lines
+  };
+  
+  // References to full artifacts (keeps audit_logs light)
+  artifact_refs: {
+    gen_code_id?: string;
+    pytest_report_id?: string;
+    judge_json_id?: string;
+  };
 }
 
 // Dashboard stats

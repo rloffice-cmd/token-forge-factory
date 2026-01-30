@@ -19,6 +19,7 @@ import type {
 import { generateSolution, validateGeneratedCode } from './generator';
 import { generateSkepticTests, exportSkepticJson } from './skeptic';
 import { judgeResults, exportJudgeJson } from './judge';
+import { buildKillGateAudit, buildSimpleAudit } from './auditBuilder';
 import * as db from '@/lib/database';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -106,9 +107,12 @@ export async function runPipeline(
       throw new Error(`Code validation failed: ${validation.errors.join(', ')}`);
     }
     
-    // Save artifact
-    await db.createArtifact(job.id, 'GEN_CODE', generatorOutput.code);
-    await log('code_generated', { codeLength: generatorOutput.code.length });
+    // Save artifact and track ID for audit refs
+    const genCodeArtifact = await db.createArtifact(job.id, 'GEN_CODE', generatorOutput.code);
+    const artifactIds: { genCodeId?: string; pytestReportId?: string; judgeJsonId?: string } = {
+      genCodeId: genCodeArtifact.id,
+    };
+    await log('code_generated', { codeLength: generatorOutput.code.length, artifactId: genCodeArtifact.id });
     
     // ==========================================
     // Step 2: Build Skeptic Tests
@@ -139,13 +143,15 @@ export async function runPipeline(
     // Call sandbox edge function
     const sandboxResults = await executeSandbox(generatorOutput.code, testsForSandbox);
     
-    // Save artifact
-    await db.createArtifact(job.id, 'PYTEST_REPORT', JSON.stringify(sandboxResults, null, 2));
+    // Save artifact and track ID
+    const pytestArtifact = await db.createArtifact(job.id, 'PYTEST_REPORT', JSON.stringify(sandboxResults, null, 2));
+    artifactIds.pytestReportId = pytestArtifact.id;
     
+    const sandboxRuntime = sandboxResults.reduce((sum, r) => sum + r.runtime_ms, 0);
     await log('sandbox_completed', { 
       passedCount: sandboxResults.filter(r => r.passed).length,
       totalCount: sandboxResults.length,
-      totalRuntime: sandboxResults.reduce((sum, r) => sum + r.runtime_ms, 0),
+      totalRuntime: sandboxRuntime,
     });
     
     // ==========================================
@@ -155,32 +161,51 @@ export async function runPipeline(
     
     const judgeResult = judgeResults(skepticTests, sandboxResults, job.id);
     
-    // Save artifact
-    await db.createArtifact(job.id, 'JUDGE_JSON', exportJudgeJson(judgeResult));
+    // Save artifact and track ID
+    const judgeArtifact = await db.createArtifact(job.id, 'JUDGE_JSON', exportJudgeJson(judgeResult));
+    artifactIds.judgeJsonId = judgeArtifact.id;
     
-    await log('judge_completed', {
+    await log('judge_completed', buildSimpleAudit('judge_completed', 'INFO', {
       score: judgeResult.score,
       passed: judgeResult.passed,
       killGate: judgeResult.kill_gate_triggered,
-    });
+    }));
     
     // Check Kill Gate - ZERO TOLERANCE (MVP)
     if (judgeResult.kill_gate_triggered) {
       await updateStatus('DROPPED', 0);
       
-      // Audit log with failure details (error message only - minimal approach)
-      await log('kill_gate_triggered', { 
-        reason: judgeResult.kill_gate_reason,
-        failed_test_id: judgeResult.failed_tests[0]?.test_id || 'unknown',
-        failure_category: judgeResult.kill_gate_reason?.split(':')[0]?.replace('Kill Gate ', '') || 'UNKNOWN',
-        error_message: judgeResult.failed_tests[0]?.error || 'False Positive detected',
-      });
+      // Find the failed test details for enhanced audit
+      const failedResult = judgeResult.failed_tests[0];
+      const failedTest = skepticTests.find(t => t.id === failedResult?.test_id);
       
-      await log('job_dropped', { 
+      if (failedTest && failedResult) {
+        // Build enhanced Kill Gate audit with Repro Pack + Snippet + Regex Context
+        const killGateAudit = buildKillGateAudit({
+          jobId: job.id,
+          failedTest,
+          failedResult,
+          solutionCode: generatorOutput.code,
+          runtimeMs: sandboxRuntime,
+          killGateReason: judgeResult.kill_gate_reason || 'Kill Gate triggered',
+          artifactIds,
+        });
+        
+        await log('kill_gate_triggered', killGateAudit as unknown as Record<string, unknown>);
+      } else {
+        // Fallback to simple audit if test not found
+        await log('kill_gate_triggered', buildSimpleAudit('kill_gate_triggered', 'KILL', { 
+          reason: judgeResult.kill_gate_reason,
+          failed_test_id: failedResult?.test_id || 'unknown',
+          error_message: failedResult?.error || 'False Positive detected',
+        }));
+      }
+      
+      await log('job_dropped', buildSimpleAudit('job_dropped', 'KILL', { 
         reason: 'ZERO_TOLERANCE_POLICY',
         iteration: job.iteration,
         max_iterations: 1, // MVP: no retries
-      });
+      }));
       
       return {
         job,
