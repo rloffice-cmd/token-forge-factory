@@ -78,6 +78,57 @@ export type Database = {
           },
         ]
       }
+      cashout_requests: {
+        Row: {
+          amount_dtf: number
+          amount_eth: number | null
+          amount_usd: number
+          confirmed_at: string | null
+          created_at: string
+          error_message: string | null
+          eth_price_usd: number | null
+          id: string
+          network: string
+          signed_at: string | null
+          status: string
+          submitted_at: string | null
+          tx_hash: string | null
+          wallet_address: string
+        }
+        Insert: {
+          amount_dtf: number
+          amount_eth?: number | null
+          amount_usd: number
+          confirmed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          eth_price_usd?: number | null
+          id?: string
+          network?: string
+          signed_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          tx_hash?: string | null
+          wallet_address: string
+        }
+        Update: {
+          amount_dtf?: number
+          amount_eth?: number | null
+          amount_usd?: number
+          confirmed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          eth_price_usd?: number | null
+          id?: string
+          network?: string
+          signed_at?: string | null
+          status?: string
+          submitted_at?: string | null
+          tx_hash?: string | null
+          wallet_address?: string
+        }
+        Relationships: []
+      }
       failure_insights: {
         Row: {
           confidence: number
