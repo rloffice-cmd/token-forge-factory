@@ -78,6 +78,60 @@ export type Database = {
           },
         ]
       }
+      failure_insights: {
+        Row: {
+          confidence: number
+          created_at: string
+          evidence: Json
+          failure_category: string | null
+          failure_type: string
+          id: string
+          job_id: string
+          pattern_signature: string | null
+          root_cause: string
+          task_id: string | null
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          evidence?: Json
+          failure_category?: string | null
+          failure_type: string
+          id?: string
+          job_id: string
+          pattern_signature?: string | null
+          root_cause: string
+          task_id?: string | null
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          evidence?: Json
+          failure_category?: string | null
+          failure_type?: string
+          id?: string
+          job_id?: string
+          pattern_signature?: string | null
+          root_cause?: string
+          task_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "failure_insights_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "failure_insights_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jobs: {
         Row: {
           created_at: string

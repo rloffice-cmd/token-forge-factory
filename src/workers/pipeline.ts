@@ -20,6 +20,8 @@ import { generateSolution, validateGeneratedCode } from './generator';
 import { generateSkepticTests, exportSkepticJson } from './skeptic';
 import { judgeResults, exportJudgeJson } from './judge';
 import { buildKillGateAudit, buildSimpleAudit } from './auditBuilder';
+import { buildFailureInsight } from './failure-intel';
+import { buildCashoutAlert } from '@/lib/telegram';
 import * as db from '@/lib/database';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -207,6 +209,9 @@ export async function runPipeline(
         max_iterations: 1, // MVP: no retries
       }));
       
+      // Save failure insight
+      await saveFailureInsight(job, task, judgeResult, skepticTests, sandboxResults, generatorOutput.code, log);
+      
       return {
         job,
         solution: generatorOutput.code,
@@ -222,6 +227,9 @@ export async function runPipeline(
     if (!judgeResult.passed) {
       await updateStatus('FAILED', judgeResult.score);
       await log('job_failed', { score: judgeResult.score, threshold: 0.95 });
+      
+      // Save failure insight
+      await saveFailureInsight(job, task, judgeResult, skepticTests, sandboxResults, generatorOutput.code, log);
       
       return {
         job,
@@ -286,7 +294,12 @@ export async function runPipeline(
     await log('treasury_updated', { entryId: treasuryEntry.id });
     
     // ==========================================
-    // Step 9: Integrity Check
+    // Step 9: Check Cashout Threshold
+    // ==========================================
+    await checkCashoutThreshold(log);
+    
+    // ==========================================
+    // Step 10: Integrity Check
     // ==========================================
     const integrityResult = await verifyArtifactIntegrity(job.id);
     if (!integrityResult.valid) {
@@ -297,7 +310,7 @@ export async function runPipeline(
     }
     
     // ==========================================
-    // Step 10: Settle
+    // Step 11: Settle
     // ==========================================
     await updateStatus('SETTLED', judgeResult.score);
     
@@ -432,6 +445,84 @@ async function verifyArtifactIntegrity(jobId: string): Promise<{
       missing: requiredTypes,
       count: 0,
     };
+  }
+}
+
+/**
+ * Save failure insight to database
+ */
+async function saveFailureInsight(
+  job: Job,
+  task: Task,
+  judgeResult: JudgeResult,
+  skepticTests: SkepticTest[],
+  sandboxResults: SkepticResult[],
+  generatorCode: string,
+  log: (action: string, metadata?: Record<string, unknown>) => Promise<void>
+): Promise<void> {
+  try {
+    const failureInsight = buildFailureInsight({
+      job_id: job.id,
+      task_id: task.id,
+      judge: judgeResult,
+      tests: skepticTests,
+      results: sandboxResults,
+      generatorCode,
+    });
+    
+    if (failureInsight) {
+      await db.createFailureInsight({
+        job_id: failureInsight.job_id,
+        task_id: failureInsight.task_id,
+        failure_type: failureInsight.failure_type,
+        failure_category: failureInsight.failure_category,
+        root_cause: failureInsight.root_cause,
+        confidence: failureInsight.confidence,
+        pattern_signature: failureInsight.pattern_signature,
+        evidence: failureInsight.evidence as Record<string, unknown>,
+      });
+      
+      await log('failure_insight_saved', {
+        signature: failureInsight.pattern_signature,
+        category: failureInsight.failure_category,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to save failure insight:', err);
+  }
+}
+
+/**
+ * Check cashout threshold and send alert if needed
+ */
+async function checkCashoutThreshold(
+  log: (action: string, metadata?: Record<string, unknown>) => Promise<void>
+): Promise<void> {
+  try {
+    const threshold = 1000; // PAYOUT_THRESHOLD_DTF default
+    const network = 'ETH'; // PAYOUT_NETWORK default
+    const wallet = ''; // Will be set by user
+    
+    const total = await db.fetchTotalTokens();
+    
+    if (total >= threshold) {
+      // Send cashout alert via edge function
+      const alertMessage = buildCashoutAlert({
+        totalDTF: total,
+        thresholdDTF: threshold,
+        network,
+        wallet,
+      });
+      
+      // Call telegram-notify edge function
+      await supabase.functions.invoke('telegram-notify', {
+        body: { message: alertMessage },
+      });
+      
+      await log('cashout_alert_sent', { total, threshold, network });
+    }
+  } catch (err) {
+    console.error('Cashout alert check failed:', err);
   }
 }
 
