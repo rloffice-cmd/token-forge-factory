@@ -76,12 +76,12 @@ serve(async (req) => {
         version: '3.10.0',
         files: [
           {
-            name: 'solution.py',
-            content: solution_code,  // Raw solution - no escaping!
+            name: 'runner.py',
+            content: runnerCode,  // Runner FIRST - this is the entry point!
           },
           {
-            name: 'runner.py',
-            content: runnerCode,
+            name: 'solution.py',
+            content: solution_code,  // Solution imported by runner
           }
         ],
         stdin: '',
@@ -109,6 +109,9 @@ serve(async (req) => {
     const pistonResult = await pistonResponse.json();
     const totalRuntime = Date.now() - startTime;
 
+    // Log full Piston response for debugging
+    console.log('Piston result:', JSON.stringify(pistonResult, null, 2));
+
     // Parse test results from stdout
     let results: TestResult[] = [];
     let parseError: string | undefined;
@@ -123,6 +126,7 @@ serve(async (req) => {
           results = JSON.parse(jsonMatch[1]);
         } else {
           parseError = 'Could not find results markers in output';
+          console.log('No markers found in stdout:', stdout.slice(0, 500));
         }
       } catch (e) {
         parseError = `Failed to parse results: ${e}`;

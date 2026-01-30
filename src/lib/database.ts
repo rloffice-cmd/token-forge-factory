@@ -64,10 +64,10 @@ export async function fetchJobs(): Promise<Job[]> {
   
   return (data || []).map(row => ({
     id: row.id,
-    task_id: row.task_id || '',
+    task_id: row.task_id,
     status: row.status as JobStatus,
     score: row.score ? Number(row.score) : null,
-    iteration: row.iteration || 1,
+    iteration: row.iteration,
     created_at: row.created_at,
     updated_at: row.updated_at,
     task: row.tasks ? {
@@ -91,10 +91,10 @@ export async function fetchJobById(id: string): Promise<Job | null> {
   
   return {
     id: data.id,
-    task_id: data.task_id || '',
+    task_id: data.task_id,
     status: data.status as JobStatus,
     score: data.score ? Number(data.score) : null,
-    iteration: data.iteration || 1,
+    iteration: data.iteration,
     created_at: data.created_at,
     updated_at: data.updated_at,
     task: data.tasks ? {
@@ -121,10 +121,10 @@ export async function createJob(taskId: string): Promise<Job> {
   
   return {
     id: data.id,
-    task_id: data.task_id || '',
+    task_id: data.task_id,
     status: data.status as JobStatus,
     score: data.score ? Number(data.score) : null,
-    iteration: data.iteration || 1,
+    iteration: data.iteration,
     created_at: data.created_at,
     updated_at: data.updated_at,
   };
@@ -172,7 +172,7 @@ export async function fetchArtifactsByJobId(jobId: string): Promise<Artifact[]> 
   
   return (data || []).map(row => ({
     id: row.id,
-    job_id: row.job_id || '',
+    job_id: row.job_id,
     type: row.type as Artifact['type'],
     content: row.content,
     created_at: row.created_at,
@@ -221,7 +221,7 @@ export async function fetchTreasuryEntries(): Promise<TreasuryEntry[]> {
     id: row.id,
     asset: row.asset,
     amount: Number(row.amount),
-    job_id: row.job_id || '',
+    job_id: row.job_id,
     created_at: row.created_at,
   }));
 }
@@ -277,7 +277,7 @@ export async function fetchAuditLogsByJobId(jobId: string): Promise<AuditLog[]> 
   
   return (data || []).map(row => ({
     id: row.id,
-    job_id: row.job_id || '',
+    job_id: row.job_id,
     action: row.action,
     metadata: row.metadata as Record<string, unknown>,
     created_at: row.created_at,
@@ -358,10 +358,10 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   
   const recentJobs: Job[] = jobs.slice(0, 5).map(row => ({
     id: row.id,
-    task_id: row.task_id || '',
+    task_id: row.task_id,
     status: row.status as JobStatus,
     score: row.score ? Number(row.score) : null,
-    iteration: row.iteration || 1,
+    iteration: row.iteration,
     created_at: row.created_at,
     updated_at: row.updated_at,
   }));
