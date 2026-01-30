@@ -9,10 +9,14 @@ interface TreasuryViewProps {
   entries: TreasuryEntry[];
 }
 
+// Mock exchange rate: 1 DTF = $0.42 USD
+const DTF_TO_USD_RATE = 0.42;
+
 export function TreasuryView({ entries }: TreasuryViewProps) {
   const [copied, setCopied] = useState(false);
   
   const totalAmount = entries.reduce((sum, e) => sum + e.amount, 0);
+  const totalUsd = totalAmount * DTF_TO_USD_RATE;
   const walletAddress = '0x1234...5678'; // Mock watch-only address
 
   const handleCopy = () => {
@@ -34,6 +38,9 @@ export function TreasuryView({ entries }: TreasuryViewProps) {
               <p className="text-sm text-muted-foreground">יתרה כוללת</p>
               <p className="text-4xl font-bold text-primary">
                 {totalAmount.toFixed(2)} <span className="text-lg">DTF</span>
+              </p>
+              <p className="text-lg text-muted-foreground">
+                ≈ ${totalUsd.toFixed(2)} USD
               </p>
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -89,8 +96,10 @@ export function TreasuryView({ entries }: TreasuryViewProps) {
                   </div>
                 </div>
                 <div className="text-left">
-                  <p className="font-bold text-primary">+{entry.amount.toFixed(2)}</p>
-                  <p className="text-xs text-muted-foreground">{entry.asset}</p>
+                  <p className="font-bold text-primary">+{entry.amount.toFixed(2)} DTF</p>
+                  <p className="text-xs text-muted-foreground">
+                    ≈ ${(entry.amount * DTF_TO_USD_RATE).toFixed(2)} USD
+                  </p>
                 </div>
               </div>
             ))}
