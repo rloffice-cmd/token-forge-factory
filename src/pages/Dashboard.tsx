@@ -2,11 +2,45 @@ import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { JobsTable } from '@/components/JobsTable';
 import { StatusChart } from '@/components/StatusChart';
-import { FileCode2, Percent, Coins, AlertTriangle } from 'lucide-react';
-import { mockDashboardStats } from '@/data/mockData';
+import { FileCode2, Percent, Coins, AlertTriangle, Loader2 } from 'lucide-react';
+import { useDashboardStats } from '@/hooks/useDatabase';
 
 export default function Dashboard() {
-  const stats = mockDashboardStats;
+  const { data: stats, isLoading, error } = useDashboardStats();
+
+  if (isLoading) {
+    return (
+      <AppLayout>
+        <div className="p-8 flex items-center justify-center min-h-[50vh]">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppLayout>
+        <div className="p-8">
+          <div className="text-center text-destructive">
+            שגיאה בטעינת נתונים: {error.message}
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!stats) {
+    return (
+      <AppLayout>
+        <div className="p-8">
+          <div className="text-center text-muted-foreground">
+            אין נתונים להצגה
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -34,12 +68,11 @@ export default function Dashboard() {
             subtitle="מכל הג׳ובים"
             icon={Percent}
             variant="success"
-            trend={{ value: 5, isPositive: true }}
           />
           <StatCard
             title="טוקנים שנצברו"
             value={stats.tokensEarned.toFixed(1)}
-            subtitle="DTF (MOCK)"
+            subtitle="DTF"
             icon={Coins}
             variant="default"
           />
