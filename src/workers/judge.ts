@@ -1,6 +1,12 @@
 /**
- * Judge Worker
+ * Judge Worker v1.0
  * Evaluates test results with Kill Gates and scoring logic
+ * 
+ * POLICY: ZERO TOLERANCE (MVP)
+ * ============================
+ * Kill Gate failure = IMMEDIATE DROP (no retry)
+ * Rationale: Generator is template-based, fix_notes won't help
+ * Future: LLM integration will enable retry loops
  * 
  * FIXED WEIGHTS per spec:
  * - CONTEXT_NOISE = 60%
@@ -11,7 +17,7 @@
 
 import type { SkepticTest, SkepticResult, JudgeResult, SkepticCategory } from '@/types';
 
-// Kill gate categories - zero tolerance
+// Kill gate categories - ZERO TOLERANCE
 const KILL_GATE_CATEGORIES: SkepticCategory[] = [
   'AMBIGUITY',
   'INVALID_DATES', 
@@ -26,6 +32,9 @@ const WEIGHTED_CATEGORIES = {
 
 // Pass threshold
 const PASS_THRESHOLD = 0.95;
+
+// MVP Policy: No retries on Kill Gate failure
+const MAX_ITERATIONS = 1;
 
 /**
  * Judge test results with Kill Gate logic
