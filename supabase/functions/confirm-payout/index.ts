@@ -1,9 +1,11 @@
 /**
- * Confirm Payout Edge Function
- * Updates payout status and creates ledger OUT entry
+ * Confirm Payout Edge Function V2
+ * CRITICAL: Now verifies TX on-chain before confirming
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createPublicClient, http, formatEther } from 'https://esm.sh/viem@2';
+import { mainnet, sepolia } from 'https://esm.sh/viem@2/chains';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,8 +19,20 @@ interface ConfirmPayoutInput {
   error_message?: string;
 }
 
+// Get public client for chain verification
+function getPublicClient(network: string) {
+  const chain = network === 'sepolia' ? sepolia : mainnet;
+  const rpcUrl = network === 'sepolia' 
+    ? 'https://rpc.sepolia.org'
+    : 'https://eth.llamarpc.com';
+  
+  return createPublicClient({
+    chain,
+    transport: http(rpcUrl),
+  });
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -31,17 +45,9 @@ Deno.serve(async (req) => {
 
     const input: ConfirmPayoutInput = await req.json();
     
-    // Validate input
     if (!input.request_id) {
       return new Response(
         JSON.stringify({ error: 'Missing request_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    if (!input.status) {
-      return new Response(
-        JSON.stringify({ error: 'Missing status' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -61,7 +67,6 @@ Deno.serve(async (req) => {
       );
     }
     
-    // Build update object
     const updates: Record<string, unknown> = { status: input.status };
     
     if (input.status === 'signed') {
@@ -72,22 +77,99 @@ Deno.serve(async (req) => {
         updates.tx_hash = input.tx_hash;
       }
     } else if (input.status === 'confirmed') {
-      updates.confirmed_at = new Date().toISOString();
+      // CRITICAL: Verify TX on chain before confirming
+      const txHash = input.tx_hash || existing.tx_hash;
       
-      // Create ledger OUT entry for confirmed transactions
-      const { error: ledgerError } = await supabase
-        .from('treasury_ledger')
-        .insert({
-          amount: existing.amount_dtf,
-          asset: 'DTF-TOKEN',
-          direction: 'OUT',
-          tx_hash: input.tx_hash || existing.tx_hash,
-          job_id: existing.id, // Use request ID as reference
+      if (!txHash) {
+        return new Response(
+          JSON.stringify({ error: 'Cannot confirm without tx_hash' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      try {
+        const client = getPublicClient(existing.network);
+        
+        // Get transaction receipt
+        const receipt = await client.getTransactionReceipt({
+          hash: txHash as `0x${string}`,
         });
-      
-      if (ledgerError) {
-        console.error('Failed to create ledger entry:', ledgerError);
-        // Don't fail the whole operation, just log
+        
+        if (!receipt) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'Transaction not found on chain',
+              status: 'pending',
+            }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Check if successful
+        if (receipt.status !== 'success') {
+          updates.status = 'failed';
+          updates.error_message = 'Transaction reverted on chain';
+        } else {
+          // Get transaction details
+          const tx = await client.getTransaction({
+            hash: txHash as `0x${string}`,
+          });
+          
+          // Verify destination matches
+          if (tx.to?.toLowerCase() !== existing.wallet_address.toLowerCase()) {
+            return new Response(
+              JSON.stringify({ 
+                error: 'Transaction destination mismatch',
+                expected: existing.wallet_address,
+                actual: tx.to,
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          
+          // Verify amount (with 1% tolerance for gas)
+          const expectedWei = BigInt(Math.floor(existing.amount_eth * 1e18));
+          const tolerance = expectedWei / BigInt(100); // 1% tolerance
+          
+          if (tx.value < expectedWei - tolerance) {
+            return new Response(
+              JSON.stringify({ 
+                error: 'Transaction value mismatch',
+                expected: formatEther(expectedWei),
+                actual: formatEther(tx.value),
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          
+          updates.confirmed_at = new Date().toISOString();
+          
+          // Create verified ledger OUT entry
+          const { error: ledgerError } = await supabase
+            .from('treasury_ledger')
+            .insert({
+              amount: existing.amount_dtf,
+              asset: 'DTF-TOKEN',
+              direction: 'OUT',
+              tx_hash: txHash,
+              job_id: existing.id,
+            });
+          
+          if (ledgerError) {
+            console.error('Failed to create ledger entry:', ledgerError);
+          }
+          
+          console.log(`✅ Verified payout: ${formatEther(tx.value)} ETH to ${tx.to}`);
+        }
+      } catch (verifyError) {
+        console.error('Chain verification failed:', verifyError);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to verify transaction on chain',
+            details: verifyError instanceof Error ? verifyError.message : 'Unknown error',
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     } else if (input.status === 'failed') {
       if (input.error_message) {
@@ -106,16 +188,22 @@ Deno.serve(async (req) => {
     if (updateError) throw updateError;
     
     // Send Telegram notification for confirmed payouts
-    if (input.status === 'confirmed') {
+    if (updates.status === 'confirmed') {
       try {
         const telegramToken = Deno.env.get('TELEGRAM_BOT_TOKEN');
         const chatId = Deno.env.get('TELEGRAM_CHAT_ID');
         
         if (telegramToken && chatId) {
-          const message = `✅ *משיכה אושרה!*\n\n` +
-            `💰 סכום: ${existing.amount_dtf} DTF\n` +
-            `💵 שווי: $${existing.amount_usd}\n` +
-            `🔗 TX: [צפה ב-Etherscan](https://etherscan.io/tx/${input.tx_hash || existing.tx_hash})`;
+          const txHash = input.tx_hash || existing.tx_hash;
+          const explorerUrl = existing.network === 'sepolia'
+            ? `https://sepolia.etherscan.io/tx/${txHash}`
+            : `https://etherscan.io/tx/${txHash}`;
+          
+          const message = `✅ *משיכה אושרה (Verified On-Chain)*\n\n` +
+            `💰 סכום: ${existing.amount_eth?.toFixed(6)} ETH\n` +
+            `💵 שווי: $${existing.amount_usd?.toFixed(2)}\n` +
+            `📍 יעד: \`${existing.wallet_address.slice(0, 10)}...\`\n` +
+            `🔗 [צפה ב-Etherscan](${explorerUrl})`;
           
           await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
             method: 'POST',
@@ -137,6 +225,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         request: updated,
+        verified: input.status === 'confirmed',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
