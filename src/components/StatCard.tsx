@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 
@@ -14,7 +15,7 @@ interface StatCardProps {
   className?: string;
 }
 
-export function StatCard({
+export const StatCard = forwardRef<HTMLDivElement, StatCardProps>(function StatCard({
   title,
   value,
   subtitle,
@@ -22,7 +23,7 @@ export function StatCard({
   trend,
   variant = 'default',
   className,
-}: StatCardProps) {
+}, ref) {
   const variantStyles = {
     default: 'from-primary/10 to-transparent',
     success: 'from-success/10 to-transparent',
@@ -39,6 +40,7 @@ export function StatCard({
 
   return (
     <div
+      ref={ref}
       className={cn(
         'stat-card relative overflow-hidden',
         'bg-gradient-to-bl',
@@ -74,4 +76,4 @@ export function StatCard({
       </div>
     </div>
   );
-}
+});
