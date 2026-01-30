@@ -164,10 +164,23 @@ export async function runPipeline(
       killGate: judgeResult.kill_gate_triggered,
     });
     
-    // Check Kill Gate
+    // Check Kill Gate - ZERO TOLERANCE (MVP)
     if (judgeResult.kill_gate_triggered) {
       await updateStatus('DROPPED', 0);
-      await log('job_dropped', { reason: judgeResult.kill_gate_reason });
+      
+      // Audit log with failure details (error message only - minimal approach)
+      await log('kill_gate_triggered', { 
+        reason: judgeResult.kill_gate_reason,
+        failed_test_id: judgeResult.failed_tests[0]?.test_id || 'unknown',
+        failure_category: judgeResult.kill_gate_reason?.split(':')[0]?.replace('Kill Gate ', '') || 'UNKNOWN',
+        error_message: judgeResult.failed_tests[0]?.error || 'False Positive detected',
+      });
+      
+      await log('job_dropped', { 
+        reason: 'ZERO_TOLERANCE_POLICY',
+        iteration: job.iteration,
+        max_iterations: 1, // MVP: no retries
+      });
       
       return {
         job,
