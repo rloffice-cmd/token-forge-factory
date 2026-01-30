@@ -247,22 +247,28 @@ export type Database = {
           amount: number
           asset: string
           created_at: string
+          direction: string
           id: string
           job_id: string
+          tx_hash: string | null
         }
         Insert: {
           amount: number
           asset?: string
           created_at?: string
+          direction?: string
           id?: string
           job_id: string
+          tx_hash?: string | null
         }
         Update: {
           amount?: number
           asset?: string
           created_at?: string
+          direction?: string
           id?: string
           job_id?: string
+          tx_hash?: string | null
         }
         Relationships: [
           {
@@ -273,6 +279,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      treasury_wallet: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          label: string | null
+          network: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          network?: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          label?: string | null
+          network?: string
+        }
+        Relationships: []
       }
     }
     Views: {
