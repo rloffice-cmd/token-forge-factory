@@ -1,4 +1,3 @@
-import { forwardRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -11,9 +10,9 @@ interface JobsTableProps {
   jobs: Job[];
 }
 
-export const JobsTable = forwardRef<HTMLDivElement, JobsTableProps>(function JobsTable({ jobs }, ref) {
+export function JobsTable({ jobs }: JobsTableProps) {
   return (
-    <Card ref={ref} className="glass-card">
+    <Card className="glass-card">
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg">ג׳ובים אחרונים</CardTitle>
         <Link 
@@ -63,4 +62,4 @@ export const JobsTable = forwardRef<HTMLDivElement, JobsTableProps>(function Job
       </CardContent>
     </Card>
   );
-});
+}
