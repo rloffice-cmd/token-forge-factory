@@ -3,10 +3,13 @@
  * דשבורד מערכת - סטטוס אינטגרציות
  */
 
+import { useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { 
   CheckCircle, 
   XCircle, 
@@ -17,7 +20,10 @@ import {
   Cpu,
   Send,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  Key,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,6 +43,8 @@ interface SystemStatus {
 
 export default function SystemDashboard() {
   const queryClient = useQueryClient();
+  const [adminToken, setAdminToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
 
   // Fetch last webhook notification
   const { data: lastWebhook, isLoading: webhookLoading, refetch: refetchWebhook } = useQuery({
@@ -56,32 +64,52 @@ export default function SystemDashboard() {
     },
   });
 
-  // Get ZeroDev config
-  const zerodevConfig = getZeroDevConfig();
-
-  // Send test telegram mutation
-  const sendTestMutation = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('send-test-telegram', {
-        headers: {
-          'x-admin-token': 'demo-token', // In production, use real admin token
-        },
-      });
+  // Fetch last test notification
+  const { data: lastTest } = useQuery({
+    queryKey: ['last-test-notification'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('is_test', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       if (error) throw error;
       return data;
     },
-    onSuccess: (data) => {
-      if (data.success) {
-        toast.success('הודעת בדיקה נשלחה לטלגרם');
-      } else {
-        toast.error('שליחה נכשלה');
+  });
+
+  // Get ZeroDev config
+  const zerodevConfig = getZeroDevConfig();
+
+  // Send test telegram mutation - uses REAL admin token
+  const sendTestMutation = useMutation({
+    mutationFn: async () => {
+      if (!adminToken || adminToken.trim() === '') {
+        throw new Error('נא להזין Admin API Token');
       }
-      queryClient.invalidateQueries({ queryKey: ['last-webhook'] });
+
+      const { data, error } = await supabase.functions.invoke('send-test-telegram', {
+        headers: {
+          'x-admin-token': adminToken.trim(),
+        },
+      });
+
+      if (error) throw error;
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to send');
+      }
+      return data;
     },
-    onError: (error) => {
+    onSuccess: (data) => {
+      toast.success('הודעת בדיקה [TEST] נשלחה לטלגרם');
+      queryClient.invalidateQueries({ queryKey: ['last-test-notification'] });
+    },
+    onError: (error: Error) => {
       console.error('Test telegram error:', error);
-      toast.error('שגיאה בשליחת הודעת בדיקה');
+      toast.error(error.message || 'שגיאה בשליחת הודעת בדיקה');
     },
   });
 
@@ -244,7 +272,7 @@ export default function SystemDashboard() {
           ))}
         </div>
 
-        {/* Test Telegram Section */}
+        {/* Test Telegram Section - Requires REAL Admin Token */}
         <Card className="glass-card border-info/30">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -252,13 +280,44 @@ export default function SystemDashboard() {
               בדיקת התראות טלגרם
             </CardTitle>
             <CardDescription>
-              שלח הודעת בדיקה - תסומן כ-[TEST] ולא תיכנס לדוחות
+              שלח הודעת בדיקה מסומנת כ-[TEST] - לא נכנסת לדוחות הכנסות
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Admin Token Input */}
+            <div className="space-y-2">
+              <Label htmlFor="admin-token" className="flex items-center gap-2">
+                <Key className="w-4 h-4" />
+                Admin API Token
+              </Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="admin-token"
+                    type={showToken ? 'text' : 'password'}
+                    placeholder="הזן את ה-ADMIN_API_TOKEN שלך"
+                    value={adminToken}
+                    onChange={(e) => setAdminToken(e.target.value)}
+                    className="pr-10"
+                    dir="ltr"
+                  />
+                  <button
+                    type="button"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setShowToken(!showToken)}
+                  >
+                    {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                הטוקן מוגדר בסודות המערכת כ-ADMIN_API_TOKEN
+              </p>
+            </div>
+
             <Button
               onClick={() => sendTestMutation.mutate()}
-              disabled={sendTestMutation.isPending}
+              disabled={sendTestMutation.isPending || !adminToken}
             >
               {sendTestMutation.isPending ? (
                 <>
@@ -268,12 +327,29 @@ export default function SystemDashboard() {
               ) : (
                 <>
                   <Send className="w-4 h-4 ml-2" />
-                  שלח הודעת בדיקה
+                  שלח הודעת בדיקה [TEST]
                 </>
               )}
             </Button>
-            <p className="text-xs text-muted-foreground mt-2">
-              ⚠️ הודעה זו מסומנת כ-TEST ולא נספרת כהכנסה אמיתית
+
+            {/* Last test result */}
+            {lastTest && (
+              <div className="mt-4 p-3 bg-muted/30 rounded-lg text-sm">
+                <p className="font-medium">בדיקה אחרונה:</p>
+                <p className="text-muted-foreground">
+                  {format(new Date(lastTest.created_at), 'dd/MM/yyyy HH:mm:ss', { locale: he })}
+                  {' - '}
+                  {lastTest.was_sent ? (
+                    <span className="text-success">נשלח בהצלחה ✓</span>
+                  ) : (
+                    <span className="text-destructive">נכשל ✗</span>
+                  )}
+                </p>
+              </div>
+            )}
+
+            <p className="text-xs text-muted-foreground">
+              ⚠️ הודעה זו מסומנת כ-[TEST] ולא נספרת כהכנסה אמיתית
             </p>
           </CardContent>
         </Card>

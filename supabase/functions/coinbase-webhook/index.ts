@@ -1,11 +1,11 @@
 /**
- * Coinbase Commerce Webhook Handler - PRODUCTION ONLY
+ * Coinbase Commerce Webhook Handler - PRODUCTION ONLY V2
  * 
- * CRITICAL RULES:
- * 1. Telegram ONLY on charge:confirmed or charge:resolved
- * 2. All other events: DB only, NO Telegram
- * 3. Signature verification REQUIRED
- * 4. No demo/test mode notifications
+ * CRITICAL RULES (KILL GATES):
+ * 1. NO payment in DB → NO Telegram, NO Ledger, just log
+ * 2. Telegram ONLY on charge:confirmed/resolved with amount > 0
+ * 3. Duplicate Ledger prevention via payment_id/tx_hash check
+ * 4. All events logged to notifications table
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -17,8 +17,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cc-webhook-signature',
 };
 
-// Events that trigger Telegram notifications
-const TELEGRAM_EVENTS = ['charge:confirmed', 'charge:resolved'];
+// Events that CAN trigger Telegram (but only if all conditions met)
+const TELEGRAM_ELIGIBLE_EVENTS = ['charge:confirmed', 'charge:resolved'];
 
 /**
  * Verify Coinbase Commerce webhook signature
@@ -50,7 +50,8 @@ async function sendTelegramAlert(
   chatId: string, 
   eventType: string,
   chargeData: any,
-  paymentDetails: { amount: number; currency: string; txHash: string | null }
+  paymentDetails: { amount: number; currency: string; txHash: string | null; network: string },
+  amountUsd: number
 ): Promise<boolean> {
   try {
     const chargeId = chargeData?.id || 'unknown';
@@ -61,11 +62,12 @@ async function sendTelegramAlert(
 נכנסה עסקה אמיתית 🚀
 
 <b>סוג אירוע:</b> ${eventType}
-<b>סכום:</b> ${paymentDetails.amount} ${paymentDetails.currency}
-<b>רשת:</b> ${chargeData?.payments?.[0]?.network || 'ethereum'}
+<b>סכום USD:</b> $${amountUsd.toFixed(2)}
+<b>סכום קריפטו:</b> ${paymentDetails.amount} ${paymentDetails.currency}
+<b>רשת:</b> ${paymentDetails.network}
 <b>Charge ID:</b> <code>${chargeId}</code>
 ${chargeCode ? `<b>Charge Code:</b> <code>${chargeCode}</code>` : ''}
-${paymentDetails.txHash ? `<b>TX:</b> <a href="https://etherscan.io/tx/${paymentDetails.txHash}">View</a>` : ''}`;
+${paymentDetails.txHash ? `<b>TX:</b> <a href="https://etherscan.io/tx/${paymentDetails.txHash}">View on Etherscan</a>` : ''}`;
 
     const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
@@ -78,7 +80,9 @@ ${paymentDetails.txHash ? `<b>TX:</b> <a href="https://etherscan.io/tx/${payment
       }),
     });
     
-    return response.ok;
+    const result = await response.json();
+    console.log(`📱 Telegram API response:`, result.ok ? 'Success' : result.description);
+    return response.ok && result.ok;
   } catch (e) {
     console.error('Telegram send failed:', e);
     return false;
@@ -87,6 +91,7 @@ ${paymentDetails.txHash ? `<b>TX:</b> <a href="https://etherscan.io/tx/${payment
 
 /**
  * Extract payment details from Coinbase charge
+ * IMPROVED: Better fallback logic to avoid 0 amounts
  */
 function extractPaymentDetails(chargeData: any): {
   currency: string;
@@ -95,42 +100,104 @@ function extractPaymentDetails(chargeData: any): {
   txHash: string | null;
 } {
   const payments = chargeData?.payments || [];
+  
+  // Priority 1: Find confirmed/completed payment
   const confirmedPayment = payments.find((p: any) => 
     p.status === 'CONFIRMED' || p.status === 'COMPLETED'
   );
   
   if (confirmedPayment) {
+    const cryptoValue = confirmedPayment.value?.crypto;
     return {
-      currency: confirmedPayment.value?.crypto?.currency || 'ETH',
-      amount: parseFloat(confirmedPayment.value?.crypto?.amount || '0'),
-      network: confirmedPayment.network || 'ethereum',
+      currency: cryptoValue?.currency || 'ETH',
+      amount: parseFloat(cryptoValue?.amount || '0'),
+      network: detectNetwork(confirmedPayment.network, chargeData),
       txHash: confirmedPayment.transaction_id || null,
     };
   }
   
-  // Fallback to first payment
-  if (payments.length > 0) {
-    const firstPayment = payments[0];
+  // Priority 2: Any payment with value
+  const anyPaymentWithValue = payments.find((p: any) => 
+    p.value?.crypto?.amount && parseFloat(p.value.crypto.amount) > 0
+  );
+  
+  if (anyPaymentWithValue) {
+    const cryptoValue = anyPaymentWithValue.value?.crypto;
     return {
-      currency: firstPayment.value?.crypto?.currency || 'ETH',
-      amount: parseFloat(firstPayment.value?.crypto?.amount || '0'),
-      network: firstPayment.network || 'ethereum',
-      txHash: firstPayment.transaction_id || null,
+      currency: cryptoValue?.currency || 'ETH',
+      amount: parseFloat(cryptoValue?.amount || '0'),
+      network: detectNetwork(anyPaymentWithValue.network, chargeData),
+      txHash: anyPaymentWithValue.transaction_id || null,
     };
   }
   
-  // Fallback to pricing info
+  // Priority 3: Pricing info (when payment array is empty but charge has pricing)
   const pricing = chargeData?.pricing;
-  if (pricing?.ethereum) {
-    return {
-      currency: 'ETH',
-      amount: parseFloat(pricing.ethereum.amount || '0'),
-      network: 'ethereum',
-      txHash: null,
-    };
+  if (pricing) {
+    // Try ethereum first
+    if (pricing.ethereum?.amount && parseFloat(pricing.ethereum.amount) > 0) {
+      return {
+        currency: 'ETH',
+        amount: parseFloat(pricing.ethereum.amount),
+        network: 'ethereum',
+        txHash: null,
+      };
+    }
+    
+    // Try Base if available
+    if (pricing.base?.amount && parseFloat(pricing.base.amount) > 0) {
+      return {
+        currency: 'ETH',
+        amount: parseFloat(pricing.base.amount),
+        network: 'base',
+        txHash: null,
+      };
+    }
+    
+    // Try USDC
+    if (pricing.usdc?.amount && parseFloat(pricing.usdc.amount) > 0) {
+      return {
+        currency: 'USDC',
+        amount: parseFloat(pricing.usdc.amount),
+        network: 'ethereum',
+        txHash: null,
+      };
+    }
+    
+    // Fallback to local price (USD)
+    if (pricing.local?.amount && parseFloat(pricing.local.amount) > 0) {
+      // Estimate ETH from USD (rough, but better than 0)
+      const usdAmount = parseFloat(pricing.local.amount);
+      return {
+        currency: 'USD',
+        amount: usdAmount,
+        network: 'unknown',
+        txHash: null,
+      };
+    }
   }
   
+  // Last resort: return 0
   return { currency: 'ETH', amount: 0, network: 'ethereum', txHash: null };
+}
+
+/**
+ * Detect network from payment data
+ */
+function detectNetwork(networkFromPayment: string | undefined, chargeData: any): string {
+  if (networkFromPayment) {
+    const normalized = networkFromPayment.toLowerCase();
+    if (normalized.includes('base')) return 'base';
+    if (normalized.includes('polygon')) return 'polygon';
+    if (normalized.includes('ethereum') || normalized === 'mainnet') return 'ethereum';
+    return normalized;
+  }
+  
+  // Check if Base is mentioned anywhere in charge data
+  const chargeStr = JSON.stringify(chargeData).toLowerCase();
+  if (chargeStr.includes('base')) return 'base';
+  
+  return 'ethereum';
 }
 
 serve(async (req) => {
@@ -162,14 +229,13 @@ serve(async (req) => {
     if (!signature) {
       console.error('SECURITY: Missing webhook signature - REJECTED');
       
-      // Log security event but NO Telegram
       await supabase.from('notifications').insert({
         event_type: 'security_alert',
         message: 'Webhook rejected: missing signature',
         was_sent: false,
         is_test: false,
         source: 'webhook',
-        metadata: { ip: req.headers.get('x-forwarded-for') },
+        metadata: { ip: req.headers.get('x-forwarded-for'), reason: 'missing_signature' },
       });
       
       return new Response(
@@ -188,6 +254,7 @@ serve(async (req) => {
         was_sent: false,
         is_test: false,
         source: 'webhook',
+        metadata: { reason: 'invalid_signature' },
       });
       
       return new Response(
@@ -199,91 +266,159 @@ serve(async (req) => {
     const event = JSON.parse(rawBody);
     const eventType = event.event?.type;
     const chargeData = event.event?.data;
+    const chargeId = chargeData?.id;
 
-    console.log(`✅ Webhook verified: ${eventType}`, { charge_id: chargeData?.id });
+    console.log(`✅ Webhook verified: ${eventType}`, { charge_id: chargeId });
 
-    // Find related payment
-    const { data: payment } = await supabase
+    // ========== KILL GATE #1: Find payment in DB ==========
+    const { data: payment, error: paymentError } = await supabase
       .from('payments')
       .select('*, users_customers(email)')
-      .eq('charge_id', chargeData?.id)
+      .eq('charge_id', chargeId)
       .single();
 
-    const customerEmail = (payment?.users_customers as any)?.email || 'Unknown';
+    // CRITICAL: If no payment found, DO NOT proceed with Telegram or Ledger
+    if (paymentError || !payment) {
+      console.warn(`⚠️ KILL GATE: No payment found for charge_id=${chargeId}`);
+      
+      await supabase.from('notifications').insert({
+        event_type: eventType,
+        charge_id: chargeId,
+        message: `Ignored: unknown_charge_id - no payment record found`,
+        was_sent: false,
+        is_test: false,
+        source: 'webhook',
+        metadata: { 
+          reason: 'unknown_charge_id',
+          raw_event: event,
+        },
+      });
+      
+      return new Response(
+        JSON.stringify({ 
+          received: true, 
+          ignored: true,
+          reason: 'unknown_charge_id',
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const customerEmail = (payment.users_customers as any)?.email || 'Unknown';
     const paymentDetails = extractPaymentDetails(chargeData);
     
-    // Determine if Telegram should be sent
-    const shouldSendTelegram = TELEGRAM_EVENTS.includes(eventType) && 
-                               TELEGRAM_BOT_TOKEN && 
-                               TELEGRAM_CHAT_ID &&
-                               paymentDetails.amount > 0;
+    // Track if Telegram was actually sent
+    let telegramSent = false;
+    let ledgerInserted = false;
+    let ledgerSkippedDuplicate = false;
 
     // Process by event type
     switch (eventType) {
       case 'charge:created':
-        if (payment) {
-          await supabase
-            .from('payments')
-            .update({ status: 'pending' })
-            .eq('id', payment.id);
-        }
+        await supabase
+          .from('payments')
+          .update({ status: 'pending' })
+          .eq('id', payment.id);
         
         await supabase.from('notifications').insert({
           event_type: eventType,
-          charge_id: chargeData?.id,
+          charge_id: chargeId,
           amount: paymentDetails.amount,
           currency: paymentDetails.currency,
-          message: `Charge created: ${chargeData?.id}`,
-          was_sent: false, // NO Telegram for created
+          message: `Charge created: ${chargeId}`,
+          was_sent: false,
           is_test: false,
           source: 'webhook',
-          metadata: { raw_event: event },
         });
         break;
 
       case 'charge:pending':
-        if (payment) {
-          await supabase
-            .from('payments')
-            .update({ status: 'pending' })
-            .eq('id', payment.id);
-        }
+        await supabase
+          .from('payments')
+          .update({ status: 'pending' })
+          .eq('id', payment.id);
         
         await supabase.from('notifications').insert({
           event_type: eventType,
-          charge_id: chargeData?.id,
+          charge_id: chargeId,
           amount: paymentDetails.amount,
           currency: paymentDetails.currency,
-          message: `Payment pending: ${chargeData?.id}`,
+          message: `Payment pending: ${chargeId}`,
           was_sent: false,
           is_test: false,
           source: 'webhook',
-          metadata: { raw_event: event },
         });
         break;
 
       case 'charge:confirmed':
       case 'charge:resolved': {
         // Update payment status
-        if (payment) {
-          await supabase
-            .from('payments')
-            .update({
-              status: 'confirmed',
-              confirmed_at: new Date().toISOString(),
-              amount_eth: paymentDetails.amount,
-              metadata: {
-                ...payment.metadata,
-                confirmed_data: chargeData,
-                tx_hash: paymentDetails.txHash,
-                currency: paymentDetails.currency,
-                network: paymentDetails.network,
-              },
-            })
-            .eq('id', payment.id);
+        await supabase
+          .from('payments')
+          .update({
+            status: 'confirmed',
+            confirmed_at: new Date().toISOString(),
+            amount_eth: paymentDetails.amount,
+            metadata: {
+              ...payment.metadata,
+              confirmed_data: chargeData,
+              tx_hash: paymentDetails.txHash,
+              currency: paymentDetails.currency,
+              network: paymentDetails.network,
+            },
+          })
+          .eq('id', payment.id);
 
-          // Add to treasury ledger (INSERT-ONLY)
-          await supabase
+        // ========== KILL GATE #2: Duplicate Ledger Prevention ==========
+        const duplicateCheckConditions = [];
+        
+        // Check by payment_id
+        duplicateCheckConditions.push(
+          supabase
+            .from('treasury_ledger')
+            .select('id')
+            .eq('payment_id', payment.id)
+            .limit(1)
+        );
+        
+        // Check by tx_hash if exists
+        if (paymentDetails.txHash) {
+          duplicateCheckConditions.push(
+            supabase
+              .from('treasury_ledger')
+              .select('id')
+              .eq('tx_hash', paymentDetails.txHash)
+              .limit(1)
+          );
+        }
+
+        const duplicateResults = await Promise.all(duplicateCheckConditions);
+        const hasDuplicate = duplicateResults.some(result => 
+          result.data && result.data.length > 0
+        );
+
+        if (hasDuplicate) {
+          console.warn(`⚠️ DUPLICATE BLOCKED: Ledger entry already exists for payment_id=${payment.id}`);
+          ledgerSkippedDuplicate = true;
+          
+          await supabase.from('notifications').insert({
+            event_type: eventType,
+            charge_id: chargeId,
+            amount: paymentDetails.amount,
+            currency: paymentDetails.currency,
+            message: `Duplicate ledger entry blocked for payment ${payment.id}`,
+            was_sent: false,
+            is_test: false,
+            source: 'webhook',
+            metadata: { 
+              reason: 'duplicate_ledger_blocked',
+              payment_id: payment.id,
+              tx_hash: paymentDetails.txHash,
+            },
+          });
+        } else {
+          // Insert to treasury ledger (INSERT-ONLY)
+          const { error: ledgerError } = await supabase
             .from('treasury_ledger')
             .insert({
               job_id: payment.id,
@@ -299,76 +434,102 @@ serve(async (req) => {
               network: paymentDetails.network,
             });
 
-          // Update credit wallet
-          const { data: wallet } = await supabase
-            .from('credit_wallets')
-            .select('*')
-            .eq('customer_id', payment.customer_id)
-            .single();
-
-          if (wallet) {
-            await supabase
-              .from('credit_wallets')
-              .update({
-                credits_balance: wallet.credits_balance + payment.credits_purchased,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('id', wallet.id);
+          if (ledgerError) {
+            console.error('Ledger insert error:', ledgerError);
           } else {
-            await supabase
-              .from('credit_wallets')
-              .insert({
-                customer_id: payment.customer_id,
-                credits_balance: payment.credits_purchased,
-              });
+            ledgerInserted = true;
+            console.log(`✅ Ledger entry created for payment ${payment.id}`);
           }
         }
 
-        // Send Telegram ONLY for confirmed/resolved with amount > 0
-        let telegramSent = false;
+        // Update credit wallet
+        const { data: wallet } = await supabase
+          .from('credit_wallets')
+          .select('*')
+          .eq('customer_id', payment.customer_id)
+          .single();
+
+        if (wallet) {
+          await supabase
+            .from('credit_wallets')
+            .update({
+              credits_balance: wallet.credits_balance + payment.credits_purchased,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', wallet.id);
+        } else {
+          await supabase
+            .from('credit_wallets')
+            .insert({
+              customer_id: payment.customer_id,
+              credits_balance: payment.credits_purchased,
+            });
+        }
+
+        // ========== TELEGRAM: Only if ALL conditions met ==========
+        const shouldSendTelegram = 
+          TELEGRAM_ELIGIBLE_EVENTS.includes(eventType) &&
+          payment !== null && // Payment exists in DB
+          paymentDetails.amount > 0 && // Has real amount
+          !!TELEGRAM_BOT_TOKEN && 
+          !!TELEGRAM_CHAT_ID;
+
         if (shouldSendTelegram) {
           telegramSent = await sendTelegramAlert(
             TELEGRAM_BOT_TOKEN!,
             TELEGRAM_CHAT_ID!,
             eventType,
             chargeData,
-            paymentDetails
+            paymentDetails,
+            Number(payment.amount_usd)
           );
-          console.log(`📱 Telegram sent: ${telegramSent}`);
+          console.log(`📱 Telegram result: ${telegramSent ? 'SENT' : 'FAILED'}`);
+        } else {
+          console.log(`📱 Telegram skipped - conditions not met:`, {
+            eventTypeOk: TELEGRAM_ELIGIBLE_EVENTS.includes(eventType),
+            paymentExists: payment !== null,
+            amountOk: paymentDetails.amount > 0,
+            tokensConfigured: !!TELEGRAM_BOT_TOKEN && !!TELEGRAM_CHAT_ID,
+          });
         }
 
         // Log notification
         await supabase.from('notifications').insert({
           event_type: eventType,
-          charge_id: chargeData?.id,
+          charge_id: chargeId,
           amount: paymentDetails.amount,
           currency: paymentDetails.currency,
-          message: `💰 Payment confirmed: $${payment?.amount_usd || 0} USD (${paymentDetails.amount} ${paymentDetails.currency})`,
+          message: `💰 Payment confirmed: $${payment.amount_usd} USD (${paymentDetails.amount} ${paymentDetails.currency})`,
           was_sent: telegramSent,
           is_test: false,
           source: 'webhook',
           metadata: { 
             tx_hash: paymentDetails.txHash,
             customer_email: customerEmail,
-            credits_purchased: payment?.credits_purchased,
+            credits_purchased: payment.credits_purchased,
+            ledger_inserted: ledgerInserted,
+            ledger_skipped_duplicate: ledgerSkippedDuplicate,
+            network: paymentDetails.network,
           },
         });
 
         // Audit log
         await supabase.from('audit_logs').insert({
-          job_id: payment?.id || '00000000-0000-0000-0000-000000000000',
+          job_id: payment.id,
           action: 'PAYMENT_CONFIRMED',
           metadata: {
-            customer_id: payment?.customer_id,
+            customer_id: payment.customer_id,
             customer_email: customerEmail,
-            credits_added: payment?.credits_purchased,
-            amount_usd: payment?.amount_usd,
+            credits_added: payment.credits_purchased,
+            amount_usd: payment.amount_usd,
             amount_crypto: paymentDetails.amount,
             currency: paymentDetails.currency,
             network: paymentDetails.network,
             tx_hash: paymentDetails.txHash,
-            charge_id: chargeData?.id,
+            charge_id: chargeId,
             telegram_sent: telegramSent,
+            ledger_inserted: ledgerInserted,
+            ledger_skipped_duplicate: ledgerSkippedDuplicate,
             source: 'coinbase_webhook',
           },
         });
@@ -376,32 +537,29 @@ serve(async (req) => {
       }
 
       case 'charge:failed':
-        if (payment) {
-          await supabase
-            .from('payments')
-            .update({ status: 'failed' })
-            .eq('id', payment.id);
-        }
+        await supabase
+          .from('payments')
+          .update({ status: 'failed' })
+          .eq('id', payment.id);
 
         await supabase.from('notifications').insert({
           event_type: eventType,
-          charge_id: chargeData?.id,
+          charge_id: chargeId,
           amount: paymentDetails.amount,
           currency: paymentDetails.currency,
-          message: `Payment failed: ${chargeData?.id}`,
-          was_sent: false, // NO Telegram for failures
+          message: `Payment failed: ${chargeId}`,
+          was_sent: false,
           is_test: false,
           source: 'webhook',
           metadata: { reason: chargeData?.timeline?.slice(-1)?.[0]?.status },
         });
 
-        // Audit log for failed payments
         await supabase.from('audit_logs').insert({
-          job_id: payment?.id || '00000000-0000-0000-0000-000000000000',
+          job_id: payment.id,
           action: 'PAYMENT_FAILED',
           metadata: {
-            customer_id: payment?.customer_id,
-            charge_id: chargeData?.id,
+            customer_id: payment.customer_id,
+            charge_id: chargeId,
             reason: chargeData?.timeline?.slice(-1)?.[0]?.status,
             source: 'coinbase_webhook',
           },
@@ -413,20 +571,22 @@ serve(async (req) => {
         
         await supabase.from('notifications').insert({
           event_type: eventType,
-          charge_id: chargeData?.id,
+          charge_id: chargeId,
           message: `Unhandled event: ${eventType}`,
           was_sent: false,
           is_test: false,
           source: 'webhook',
-          metadata: { raw_event: event },
         });
     }
 
+    // ========== RESPONSE: Use actual boolean, not computed ==========
     return new Response(
       JSON.stringify({ 
         received: true, 
         event_type: eventType,
-        telegram_sent: TELEGRAM_EVENTS.includes(eventType) && paymentDetails.amount > 0,
+        telegram_sent: telegramSent,
+        ledger_inserted: ledgerInserted,
+        ledger_skipped_duplicate: ledgerSkippedDuplicate,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
