@@ -315,6 +315,13 @@ export type Database = {
             foreignKeyName: "jobs_payment_id_fkey"
             columns: ["payment_id"]
             isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
             referencedRelation: "payments"
             referencedColumns: ["id"]
           },
@@ -410,29 +417,47 @@ export type Database = {
       treasury_ledger: {
         Row: {
           amount: number
+          amount_usd: number | null
           asset: string
+          charge_code: string | null
           created_at: string
+          currency: string | null
           direction: string
           id: string
           job_id: string
+          network: string | null
+          payer_email: string | null
+          payment_id: string | null
           tx_hash: string | null
         }
         Insert: {
           amount: number
+          amount_usd?: number | null
           asset?: string
+          charge_code?: string | null
           created_at?: string
+          currency?: string | null
           direction?: string
           id?: string
           job_id: string
+          network?: string | null
+          payer_email?: string | null
+          payment_id?: string | null
           tx_hash?: string | null
         }
         Update: {
           amount?: number
+          amount_usd?: number | null
           asset?: string
+          charge_code?: string | null
           created_at?: string
+          currency?: string | null
           direction?: string
           id?: string
           job_id?: string
+          network?: string | null
+          payer_email?: string | null
+          payment_id?: string | null
           tx_hash?: string | null
         }
         Relationships: [
@@ -441,6 +466,20 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treasury_ledger_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treasury_ledger_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
             referencedColumns: ["id"]
           },
         ]
@@ -528,7 +567,21 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      confirmed_payments: {
+        Row: {
+          amount_eth: number | null
+          amount_usd: number | null
+          charge_code: string | null
+          charge_id: string | null
+          confirmed_at: string | null
+          created_at: string | null
+          credits_purchased: number | null
+          customer_email: string | null
+          id: string | null
+          provider: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
