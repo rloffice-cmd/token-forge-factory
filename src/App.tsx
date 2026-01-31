@@ -9,6 +9,9 @@ import Jobs from "./pages/Jobs";
 import JobDetailsPage from "./pages/JobDetailsPage";
 import Treasury from "./pages/Treasury";
 import Settings from "./pages/Settings";
+import Purchase from "./pages/Purchase";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import SystemDashboard from "./pages/SystemDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -26,6 +29,9 @@ const App = () => (
             <Route path="/jobs/:id" element={<JobDetailsPage />} />
             <Route path="/treasury" element={<Treasury />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/purchase" element={<Purchase />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/system" element={<SystemDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

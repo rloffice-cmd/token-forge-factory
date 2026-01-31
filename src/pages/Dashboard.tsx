@@ -2,11 +2,43 @@ import { AppLayout } from '@/components/AppLayout';
 import { StatCard } from '@/components/StatCard';
 import { JobsTable } from '@/components/JobsTable';
 import { StatusChart } from '@/components/StatusChart';
+import { ActivationChecklist } from '@/components/ActivationChecklist';
 import { FileCode2, Percent, Coins, AlertTriangle, Loader2 } from 'lucide-react';
 import { useDashboardStats } from '@/hooks/useDatabase';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Dashboard() {
   const { data: stats, isLoading, error } = useDashboardStats();
+
+  // Check for first confirmed payment
+  const { data: hasFirstPayment } = useQuery({
+    queryKey: ['first-payment-check'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('status', 'confirmed')
+        .limit(1)
+        .maybeSingle();
+      
+      return !!data;
+    },
+  });
+
+  // Check payout wallet configuration
+  const { data: hasPayoutWallet } = useQuery({
+    queryKey: ['payout-wallet-check'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('treasury_settings')
+        .select('payout_wallet_address')
+        .limit(1)
+        .maybeSingle();
+      
+      return !!(data?.payout_wallet_address);
+    },
+  });
 
   if (isLoading) {
     return (
@@ -49,9 +81,20 @@ export default function Dashboard() {
         <div>
           <h1 className="text-3xl font-bold">דשבורד</h1>
           <p className="text-muted-foreground mt-1">
-            סקירה כללית של מערכת Data-to-Token Factory
+            סקירה כללית של מערכת Token Forge Factory
           </p>
         </div>
+
+        {/* Activation Checklist */}
+        <ActivationChecklist 
+          hasCoinbaseKey={true}
+          hasCoinbaseWebhook={true}
+          hasPayoutWallet={hasPayoutWallet || false}
+          hasTelegram={true}
+          hasZeroDev={false}
+          hasTestPassed={false}
+          hasFirstPayment={hasFirstPayment || false}
+        />
 
         {/* Stats grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

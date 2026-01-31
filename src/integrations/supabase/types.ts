@@ -334,6 +334,48 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          amount: number | null
+          charge_id: string | null
+          created_at: string
+          currency: string | null
+          event_type: string
+          id: string
+          is_test: boolean
+          message: string
+          metadata: Json | null
+          source: string
+          was_sent: boolean
+        }
+        Insert: {
+          amount?: number | null
+          charge_id?: string | null
+          created_at?: string
+          currency?: string | null
+          event_type: string
+          id?: string
+          is_test?: boolean
+          message: string
+          metadata?: Json | null
+          source?: string
+          was_sent?: boolean
+        }
+        Update: {
+          amount?: number | null
+          charge_id?: string | null
+          created_at?: string
+          currency?: string | null
+          event_type?: string
+          id?: string
+          is_test?: boolean
+          message?: string
+          metadata?: Json | null
+          source?: string
+          was_sent?: boolean
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount_eth: number | null
@@ -561,6 +603,39 @@ export type Database = {
           email?: string
           id?: string
           name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      zerodev_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          network: string
+          permissions_json: Json
+          session_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          network?: string
+          permissions_json?: Json
+          session_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          network?: string
+          permissions_json?: Json
+          session_id?: string | null
+          status?: string
           updated_at?: string
         }
         Relationships: []
