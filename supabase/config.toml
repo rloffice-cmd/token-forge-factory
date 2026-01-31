@@ -8,3 +8,21 @@ verify_jwt = false
 
 [functions.ai-job-processor]
 verify_jwt = false
+
+[functions.provision-api-key]
+verify_jwt = false
+
+[functions.signal-wallet]
+verify_jwt = false
+
+[functions.signal-contract]
+verify_jwt = false
+
+[functions.daily-signal-report]
+verify_jwt = false
+
+[functions.system-health]
+verify_jwt = false
+
+[functions.coinbase-webhook]
+verify_jwt = false
