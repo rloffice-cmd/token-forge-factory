@@ -28,21 +28,21 @@ import { toast } from 'sonner';
 const FEATURES = [
   {
     icon: Bot,
-    title: 'AI-Powered Automation',
-    titleHe: 'אוטומציה מבוססת AI',
-    description: 'הוכחות מתמטיות נבנות אוטומטית 24/7',
+    title: 'AI-Powered Services',
+    titleHe: 'שירותי AI מתקדמים',
+    description: 'סיכום, תרגום, ניתוח, חילוץ מידע ועוד',
   },
   {
     icon: Shield,
-    title: 'Zero False Positives',
-    titleHe: 'אפס תוצאות שגויות',
-    description: 'Kill Gate מבטיח דיוק של 100%',
+    title: 'Quality Guaranteed',
+    titleHe: 'איכות מובטחת',
+    description: 'אימות אוטומטי עם Proof Pack לכל תוצאה',
   },
   {
     icon: Clock,
     title: 'Instant Delivery',
     titleHe: 'משלוח מיידי',
-    description: 'תוצאות תוך דקות, לא שעות',
+    description: 'תוצאות תוך שניות, לא שעות',
   },
   {
     icon: Lock,
@@ -50,6 +50,15 @@ const FEATURES = [
     titleHe: 'תשלום בקריפטו',
     description: 'ETH, USDC, BTC - אנונימי ומאובטח',
   },
+];
+
+const AI_SERVICES = [
+  { name: 'סיכום טקסטים', icon: '📝', desc: 'סיכום מסמכים ארוכים לנקודות מפתח' },
+  { name: 'תרגום', icon: '🌍', desc: 'תרגום מקצועי לעשרות שפות' },
+  { name: 'ניתוח נתונים', icon: '📊', desc: 'ניתוח וחילוץ תובנות מטקסט' },
+  { name: 'יצירת תוכן', icon: '✨', desc: 'יצירת תוכן מקורי ואיכותי' },
+  { name: 'כתיבת קוד', icon: '💻', desc: 'כתיבת ותיקון קוד בכל שפה' },
+  { name: 'חילוץ מידע', icon: '🔍', desc: 'חילוץ נתונים מובנים מטקסט' },
 ];
 
 const PRICING = [
@@ -203,8 +212,32 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Pricing Section */}
+      {/* AI Services Section */}
       <section className="py-20">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-4">
+            שירותי AI זמינים
+          </h2>
+          <p className="text-center text-muted-foreground mb-12">
+            מגוון שירותים מונעי בינה מלאכותית
+          </p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 max-w-5xl mx-auto">
+            {AI_SERVICES.map((service, i) => (
+              <Card key={i} className="glass-card text-center hover:scale-105 transition-transform">
+                <CardContent className="pt-6">
+                  <div className="text-4xl mb-3">{service.icon}</div>
+                  <h3 className="font-semibold text-sm mb-1">{service.name}</h3>
+                  <p className="text-xs text-muted-foreground">{service.desc}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Pricing Section */}
+      <section className="py-20 bg-muted/30">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-4">
             תמחור פשוט ושקוף

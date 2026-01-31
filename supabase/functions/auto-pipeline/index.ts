@@ -70,8 +70,23 @@ serve(async (req) => {
       );
     }
 
-    // Create and run a new job with retry logic
-    const result = await runWithRetry(supabase, DEFAULT_TASK_ID);
+    // Use AI Job Processor instead of manual pipeline
+    const { data: aiResult, error: aiError } = await supabase.functions.invoke('ai-job-processor', {
+      body: {},
+    });
+
+    if (aiError) {
+      console.error('AI Job Processor error:', aiError);
+      throw new Error(`AI Processor failed: ${aiError.message}`);
+    }
+
+    const result: RunResult = {
+      success: aiResult?.processed > 0 && aiResult?.results?.some((r: { success: boolean }) => r.success),
+      jobId: aiResult?.results?.[0]?.job_id,
+      status: aiResult?.results?.[0]?.success ? 'SETTLED' : 'FAILED',
+      score: aiResult?.results?.[0]?.confidence || 0,
+      retryAttempt: 1,
+    };
 
     // NOTIFICATION POLICY: Only send alerts for REAL issues
     // ❌ NO notifications for: regular job success, regular job failure
