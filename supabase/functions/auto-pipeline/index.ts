@@ -170,13 +170,25 @@ async function runWithRetry(
         .update({ status: finalStatus, score })
         .eq('id', job.id);
 
-      // If passed, add to treasury and check cashout threshold
+      // If passed, log to audit but DO NOT add to treasury_ledger
+      // Treasury ledger is ONLY for REAL payments from Coinbase Commerce webhook
       if (allPassed) {
-        await supabase
-          .from('treasury_ledger')
-          .insert({ job_id: job.id, amount: 55, asset: 'DTF-TOKEN' });
+        // OLD CODE REMOVED: This was adding fake DTF tokens to ledger
+        // await supabase
+        //   .from('treasury_ledger')
+        //   .insert({ job_id: job.id, amount: 55, asset: 'DTF-TOKEN' });
         
-        // Check cashout threshold
+        // Only audit log the job completion
+        await supabase.from('audit_logs').insert({
+          job_id: job.id,
+          action: 'JOB_PASSED_NO_LEDGER',
+          metadata: { 
+            note: 'Job passed but no ledger entry - ledger only for real payments',
+            score: 1,
+          },
+        });
+        
+        // Check cashout threshold (based on real payments only)
         await checkCashoutThreshold(supabase);
       } else {
         // Save failure insight for failed/dropped jobs
