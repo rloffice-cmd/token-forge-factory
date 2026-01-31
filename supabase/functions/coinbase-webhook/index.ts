@@ -418,10 +418,13 @@ serve(async (req) => {
           });
         } else {
           // Insert to treasury ledger (INSERT-ONLY)
+          // Use Sentinel ID for job_id since payments are not jobs
+          const SENTINEL_JOB_ID = 'a0000000-0000-0000-0000-000000000001';
+          
           const { error: ledgerError } = await supabase
             .from('treasury_ledger')
             .insert({
-              job_id: payment.id,
+              job_id: SENTINEL_JOB_ID,
               amount: paymentDetails.amount,
               asset: paymentDetails.currency,
               currency: paymentDetails.currency,
