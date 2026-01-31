@@ -1,26 +1,40 @@
 import { AppLayout } from '@/components/AppLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { TreasuryAddressSettings } from '@/components/settings/TreasuryAddressSettings';
+import { Settings2, Cpu, Gavel, Shield } from 'lucide-react';
 
 export default function Settings() {
   return (
     <AppLayout>
       <div className="p-8 max-w-3xl mx-auto space-y-8">
         <div>
-          <h1 className="text-3xl font-bold">הגדרות</h1>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <Settings2 className="w-8 h-8 text-primary" />
+            הגדרות
+          </h1>
           <p className="text-muted-foreground mt-1">
-            הגדרות מערכת ותצורה
+            הגדרות מערכת, Treasury וקופה
           </p>
         </div>
+
+        {/* Treasury Address Settings - CRITICAL */}
+        <TreasuryAddressSettings />
 
         {/* Sandbox settings */}
         <Card className="glass-card">
           <CardHeader>
-            <CardTitle>הגדרות Sandbox</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Cpu className="w-5 h-5" />
+              הגדרות Sandbox (סביבת הרצה)
+            </CardTitle>
+            <CardDescription>
+              הגדרות שרת Piston להרצת קוד
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
@@ -54,15 +68,21 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        {/* Reward Network */}
+        {/* Network settings */}
         <Card className="glass-card">
           <CardHeader>
-            <CardTitle>רשת תגמול</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              רשת ותשלומים
+            </CardTitle>
+            <CardDescription>
+              הגדרות רשת Ethereum ו-Coinbase Commerce
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>מצב MOCK</Label>
+                <Label>מצב MOCK (בדיקה)</Label>
                 <p className="text-sm text-muted-foreground">
                   הרצה ללא חיבור אמיתי לבלוקצ׳יין
                 </p>
@@ -72,14 +92,25 @@ export default function Settings() {
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>כתובת ארנק יעד</Label>
+                <Label>רשת</Label>
                 <p className="text-sm text-muted-foreground">
-                  לשימוש עתידי - כתובת CEX
+                  Ethereum Mainnet (ראשית)
+                </p>
+              </div>
+              <span className="text-sm font-mono bg-muted/30 px-3 py-1 rounded">mainnet</span>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>סף התראה (DTF)</Label>
+                <p className="text-sm text-muted-foreground">
+                  התראת טלגרם כשיתרה נמוכה מ-
                 </p>
               </div>
               <Input 
-                className="max-w-xs bg-muted/30 font-mono text-sm" 
-                placeholder="0x..."
+                type="number"
+                className="max-w-[100px] bg-muted/30" 
+                defaultValue={1000}
                 dir="ltr"
               />
             </div>
@@ -89,7 +120,13 @@ export default function Settings() {
         {/* Judge settings */}
         <Card className="glass-card">
           <CardHeader>
-            <CardTitle>הגדרות שיפוט</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Gavel className="w-5 h-5" />
+              הגדרות שיפוט (Judge)
+            </CardTitle>
+            <CardDescription>
+              פרמטרים לשיפוט תוצאות Pipeline
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
