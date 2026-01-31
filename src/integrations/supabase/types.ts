@@ -14,6 +14,173 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_key_deliveries: {
+        Row: {
+          api_key_id: string
+          created_at: string
+          customer_id: string
+          delivered: boolean | null
+          expires_at: string
+          id: string
+          plaintext_key: string
+        }
+        Insert: {
+          api_key_id: string
+          created_at?: string
+          customer_id: string
+          delivered?: boolean | null
+          expires_at: string
+          id?: string
+          plaintext_key: string
+        }
+        Update: {
+          api_key_id?: string
+          created_at?: string
+          customer_id?: string
+          delivered?: boolean | null
+          expires_at?: string
+          id?: string
+          plaintext_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_key_deliveries_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_key_deliveries_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_keys: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          key_hash: string
+          key_prefix: string
+          label: string | null
+          last_used_at: string | null
+          rate_limit_tier: string
+          revoked_at: string | null
+          revoked_reason: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          key_hash: string
+          key_prefix: string
+          label?: string | null
+          last_used_at?: string | null
+          rate_limit_tier?: string
+          revoked_at?: string | null
+          revoked_reason?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          key_hash?: string
+          key_prefix?: string
+          label?: string | null
+          last_used_at?: string | null
+          rate_limit_tier?: string
+          revoked_at?: string | null
+          revoked_reason?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_requests: {
+        Row: {
+          api_key_id: string
+          chain: string
+          confidence: number
+          created_at: string
+          credits_charged: number
+          customer_id: string
+          decision: string
+          endpoint: string
+          flags: string[]
+          id: string
+          ip: string | null
+          response_time_ms: number | null
+          result_json: Json
+          risk_score: number
+          target_address: string
+          user_agent: string | null
+        }
+        Insert: {
+          api_key_id: string
+          chain?: string
+          confidence: number
+          created_at?: string
+          credits_charged: number
+          customer_id: string
+          decision: string
+          endpoint: string
+          flags?: string[]
+          id?: string
+          ip?: string | null
+          response_time_ms?: number | null
+          result_json: Json
+          risk_score: number
+          target_address: string
+          user_agent?: string | null
+        }
+        Update: {
+          api_key_id?: string
+          chain?: string
+          confidence?: number
+          created_at?: string
+          credits_charged?: number
+          customer_id?: string
+          decision?: string
+          endpoint?: string
+          flags?: string[]
+          id?: string
+          ip?: string | null
+          response_time_ms?: number | null
+          result_json?: Json
+          risk_score?: number
+          target_address?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_requests_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "api_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       artifacts: {
         Row: {
           content: string
@@ -138,6 +305,47 @@ export type Database = {
         }
         Relationships: []
       }
+      credit_events: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string
+          id: string
+          metadata: Json | null
+          ref_id: string | null
+          source: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_id: string
+          id?: string
+          metadata?: Json | null
+          ref_id?: string | null
+          source: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string
+          id?: string
+          metadata?: Json | null
+          ref_id?: string | null
+          source?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_packs: {
         Row: {
           created_at: string
@@ -186,6 +394,8 @@ export type Database = {
           credits_balance: number
           customer_id: string
           id: string
+          total_credits_burned: number | null
+          total_credits_purchased: number | null
           updated_at: string
         }
         Insert: {
@@ -193,6 +403,8 @@ export type Database = {
           credits_balance?: number
           customer_id: string
           id?: string
+          total_credits_burned?: number | null
+          total_credits_purchased?: number | null
           updated_at?: string
         }
         Update: {
@@ -200,6 +412,8 @@ export type Database = {
           credits_balance?: number
           customer_id?: string
           id?: string
+          total_credits_burned?: number | null
+          total_credits_purchased?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -211,6 +425,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      denylist: {
+        Row: {
+          active: boolean | null
+          blocked_by: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          reason: string | null
+          type: string
+          value: string
+        }
+        Insert: {
+          active?: boolean | null
+          blocked_by?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          reason?: string | null
+          type: string
+          value: string
+        }
+        Update: {
+          active?: boolean | null
+          blocked_by?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          reason?: string | null
+          type?: string
+          value?: string
+        }
+        Relationships: []
+      }
+      endpoint_costs: {
+        Row: {
+          cost_credits: number
+          created_at: string
+          description: string | null
+          endpoint_name: string
+          is_active: boolean | null
+        }
+        Insert: {
+          cost_credits: number
+          created_at?: string
+          description?: string | null
+          endpoint_name: string
+          is_active?: boolean | null
+        }
+        Update: {
+          cost_credits?: number
+          created_at?: string
+          description?: string | null
+          endpoint_name?: string
+          is_active?: boolean | null
+        }
+        Relationships: []
       }
       failure_insights: {
         Row: {
@@ -431,6 +702,35 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rate_limits: {
+        Row: {
+          api_key_id: string
+          id: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          api_key_id: string
+          id?: string
+          request_count?: number
+          window_start: string
+        }
+        Update: {
+          api_key_id?: string
+          id?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rate_limits_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
             referencedColumns: ["id"]
           },
         ]
