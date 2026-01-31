@@ -11,6 +11,8 @@ import {
   Activity,
   DollarSign,
   ExternalLink,
+  Shield,
+  Key,
 } from 'lucide-react';
 
 const navItems = [
@@ -20,6 +22,11 @@ const navItems = [
   { icon: Wallet, label: 'קופה', href: '/treasury' },
   { icon: Activity, label: 'מערכת', href: '/system' },
   { icon: Settings, label: 'הגדרות', href: '/settings' },
+];
+
+const adminItems = [
+  { icon: Shield, label: 'אבטחה', href: '/admin/security' },
+  { icon: Key, label: 'API Keys', href: '/admin/api-keys' },
 ];
 
 export function AppSidebar() {
@@ -61,6 +68,31 @@ export function AppSidebar() {
             </Link>
           );
         })}
+        
+        {/* Admin Section */}
+        <div className="pt-4 mt-4 border-t border-sidebar-border">
+          <p className="px-3 text-xs font-semibold text-muted-foreground mb-2">ADMIN</p>
+          {adminItems.map((item) => {
+            const isActive = location.pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                to={item.href}
+                className={cn(
+                  'nav-link group',
+                  isActive && 'active'
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="flex-1">{item.label}</span>
+                {isActive && (
+                  <ChevronRight className="w-4 h-4 opacity-50" />
+                )}
+              </Link>
+            );
+          })}
+        </div>
+        
         {/* Quick link to landing page */}
         <a
           href="/landing"

@@ -15,6 +15,9 @@ import SystemDashboard from "./pages/SystemDashboard";
 import Landing from "./pages/Landing";
 import MoneyMachine from "./pages/MoneyMachine";
 import ApiDocs from "./pages/ApiDocs";
+import ApiAccess from "./pages/ApiAccess";
+import AdminSecurity from "./pages/AdminSecurity";
+import AdminApiKeys from "./pages/AdminApiKeys";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +35,7 @@ const App = () => (
             <Route path="/api-docs" element={<ApiDocs />} />
             <Route path="/purchase" element={<Purchase />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
+            <Route path="/api-access" element={<ApiAccess />} />
             
             {/* Admin Routes - Control Panel */}
             <Route path="/" element={<MoneyMachine />} />
@@ -41,6 +45,8 @@ const App = () => (
             <Route path="/treasury" element={<Treasury />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/system" element={<SystemDashboard />} />
+            <Route path="/admin/security" element={<AdminSecurity />} />
+            <Route path="/admin/api-keys" element={<AdminApiKeys />} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>

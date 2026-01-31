@@ -457,6 +457,7 @@ serve(async (req) => {
             .from('credit_wallets')
             .update({
               credits_balance: wallet.credits_balance + payment.credits_purchased,
+              total_credits_purchased: (wallet.total_credits_purchased || 0) + payment.credits_purchased,
               updated_at: new Date().toISOString(),
             })
             .eq('id', wallet.id);
@@ -466,7 +467,47 @@ serve(async (req) => {
             .insert({
               customer_id: payment.customer_id,
               credits_balance: payment.credits_purchased,
+              total_credits_purchased: payment.credits_purchased,
             });
+        }
+
+        // Insert credit event (INSERT-ONLY ledger)
+        await supabase.from('credit_events').insert({
+          customer_id: payment.customer_id,
+          type: 'credit_add',
+          amount: payment.credits_purchased,
+          source: 'payment',
+          ref_id: payment.id,
+          metadata: {
+            charge_id: chargeId,
+            amount_usd: payment.amount_usd,
+            pack_id: payment.pack_id,
+          },
+        });
+
+        // Provision API Key automatically
+        let apiKeyProvisioned = false;
+        try {
+          const provisionResponse = await fetch(
+            `${SUPABASE_URL}/functions/v1/provision-api-key`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+              },
+              body: JSON.stringify({
+                customer_id: payment.customer_id,
+                payment_id: payment.id,
+                mode: 'create_if_missing',
+              }),
+            }
+          );
+          const provisionResult = await provisionResponse.json();
+          apiKeyProvisioned = provisionResult.success === true;
+          console.log(`🔑 API Key provision result:`, provisionResult);
+        } catch (provisionError) {
+          console.error('API Key provision error:', provisionError);
         }
 
         // ========== TELEGRAM: Only if ALL conditions met ==========
@@ -533,6 +574,7 @@ serve(async (req) => {
             telegram_sent: telegramSent,
             ledger_inserted: ledgerInserted,
             ledger_skipped_duplicate: ledgerSkippedDuplicate,
+            api_key_provisioned: apiKeyProvisioned,
             source: 'coinbase_webhook',
           },
         });
