@@ -14,6 +14,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import SystemDashboard from "./pages/SystemDashboard";
 import Landing from "./pages/Landing";
 import MoneyMachine from "./pages/MoneyMachine";
+import ApiDocs from "./pages/ApiDocs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Routes>
             {/* Public Routes - Customer Acquisition */}
             <Route path="/landing" element={<Landing />} />
+            <Route path="/api-docs" element={<ApiDocs />} />
             <Route path="/purchase" element={<Purchase />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
             

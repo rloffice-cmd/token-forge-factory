@@ -294,6 +294,26 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* API Section */}
+      <section className="py-20 bg-muted/30">
+        <div className="container mx-auto px-4 text-center">
+          <Badge className="mb-4 py-2 px-4 bg-primary/10 text-primary border-primary/20">
+            <Code2 className="w-4 h-4 mr-2" />
+            B2B Integration
+          </Badge>
+          <h2 className="text-3xl font-bold mb-4">
+            שילוב ב-API
+          </h2>
+          <p className="text-muted-foreground mb-6 max-w-xl mx-auto">
+            לקוחות עסקיים יכולים לשלב את השירות ישירות באפליקציה שלהם
+          </p>
+          <Button variant="outline" onClick={() => navigate('/api-docs')}>
+            <Code2 className="w-4 h-4 mr-2" />
+            צפה בתיעוד API
+          </Button>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20">
         <div className="container mx-auto px-4">
