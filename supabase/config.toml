@@ -1,1 +1,4 @@
 project_id = "flsdahpijdvkohwiinqm"
+
+[functions.daily-sweep]
+verify_jwt = false

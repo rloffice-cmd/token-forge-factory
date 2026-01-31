@@ -9,13 +9,15 @@ import {
   ChevronRight,
   ShoppingCart,
   Activity,
+  DollarSign,
+  ExternalLink,
 } from 'lucide-react';
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'דשבורד', href: '/' },
+  { icon: DollarSign, label: 'Money Machine', href: '/' },
+  { icon: LayoutDashboard, label: 'דשבורד', href: '/dashboard' },
   { icon: FileCode2, label: 'ג׳ובים', href: '/jobs' },
   { icon: Wallet, label: 'קופה', href: '/treasury' },
-  { icon: ShoppingCart, label: 'רכישה', href: '/purchase' },
   { icon: Activity, label: 'מערכת', href: '/system' },
   { icon: Settings, label: 'הגדרות', href: '/settings' },
 ];
@@ -59,6 +61,16 @@ export function AppSidebar() {
             </Link>
           );
         })}
+        {/* Quick link to landing page */}
+        <a
+          href="/landing"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="nav-link text-muted-foreground hover:text-foreground mt-4"
+        >
+          <ExternalLink className="w-5 h-5" />
+          <span className="flex-1">דף נחיתה</span>
+        </a>
       </nav>
 
       {/* Status indicator */}

@@ -12,6 +12,8 @@ import Settings from "./pages/Settings";
 import Purchase from "./pages/Purchase";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import SystemDashboard from "./pages/SystemDashboard";
+import Landing from "./pages/Landing";
+import MoneyMachine from "./pages/MoneyMachine";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,14 +26,20 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            {/* Public Routes - Customer Acquisition */}
+            <Route path="/landing" element={<Landing />} />
+            <Route path="/purchase" element={<Purchase />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
+            
+            {/* Admin Routes - Control Panel */}
+            <Route path="/" element={<MoneyMachine />} />
+            <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/jobs" element={<Jobs />} />
             <Route path="/jobs/:id" element={<JobDetailsPage />} />
             <Route path="/treasury" element={<Treasury />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/purchase" element={<Purchase />} />
-            <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/system" element={<SystemDashboard />} />
+            
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
