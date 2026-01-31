@@ -12,8 +12,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// OpenRouter API endpoint (works with LOVABLE_API_KEY)
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// Lovable AI Gateway endpoint
+const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
 
 interface JobTask {
   id: string;
@@ -230,7 +230,7 @@ async function processWithAI(task: JobTask, apiKey: string): Promise<AIResult> {
   const userPrompt = buildUserPrompt(serviceType, input);
 
   try {
-    const response = await fetch(OPENROUTER_URL, {
+    const response = await fetch(LOVABLE_AI_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
