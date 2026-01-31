@@ -31,8 +31,9 @@ export const NETWORK_CONFIG = {
 export type NetworkType = keyof typeof NETWORK_CONFIG;
 
 // Treasury Safe address - THIS IS WHERE THE MONEY LIVES
-// Replace with your actual Safe address after creation
-export const TREASURY_SAFE_ADDRESS = import.meta.env.VITE_TREASURY_SAFE_ADDRESS || '';
+// Fetched from database via useTreasuryWallet hook
+// This constant is kept for backward compatibility but should use the hook
+export const TREASURY_SAFE_ADDRESS = '';
 
 // User's destination wallet for payouts
 export const USER_PAYOUT_ADDRESS = '0xA3A10bf24FE60f1733CC77E6D00763E9C12a9d0C' as const;

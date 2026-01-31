@@ -34,18 +34,16 @@ import { useAccount } from 'wagmi';
 import { formatEther, parseEther } from 'viem';
 import { useQuery } from '@tanstack/react-query';
 import { 
-  TREASURY_SAFE_ADDRESS, 
   USER_PAYOUT_ADDRESS,
   MIN_WITHDRAWAL_ETH,
   getSafeBalance,
   getEthPrice,
   isSafeOwner,
   getSafeExplorerUrl,
-  getTxExplorerUrl,
   formatSafeBalance,
 } from '@/lib/safe';
 import { web3Modal, formatAddress } from '@/lib/web3';
-import { useCreateCashoutRequest } from '@/hooks/useTreasury';
+import { useCreateCashoutRequest, useTreasuryWallet } from '@/hooks/useTreasury';
 import { toast } from 'sonner';
 
 export function WithdrawPanel() {
@@ -55,11 +53,15 @@ export function WithdrawPanel() {
   const { address, isConnected } = useAccount();
   const createCashout = useCreateCashoutRequest();
   
+  // Get treasury wallet from database
+  const { data: treasuryWallet, isLoading: walletLoading } = useTreasuryWallet();
+  const treasurySafeAddress = treasuryWallet?.address || '';
+  
   // Get Safe balance from chain (SOURCE OF TRUTH)
   const { data: safeBalance, isLoading: balanceLoading, refetch: refetchBalance } = useQuery({
-    queryKey: ['safe-balance', TREASURY_SAFE_ADDRESS],
-    queryFn: () => getSafeBalance(TREASURY_SAFE_ADDRESS),
-    enabled: !!TREASURY_SAFE_ADDRESS,
+    queryKey: ['safe-balance', treasurySafeAddress],
+    queryFn: () => getSafeBalance(treasurySafeAddress),
+    enabled: !!treasurySafeAddress,
     refetchInterval: 30000,
   });
   
@@ -72,12 +74,12 @@ export function WithdrawPanel() {
   
   // Check if connected wallet is Safe owner
   const { data: isOwner, isLoading: ownerLoading } = useQuery({
-    queryKey: ['safe-owner', TREASURY_SAFE_ADDRESS, address],
-    queryFn: () => isSafeOwner(TREASURY_SAFE_ADDRESS, address!),
-    enabled: !!TREASURY_SAFE_ADDRESS && !!address,
+    queryKey: ['safe-owner', treasurySafeAddress, address],
+    queryFn: () => isSafeOwner(treasurySafeAddress, address!),
+    enabled: !!treasurySafeAddress && !!address,
   });
   
-  const isLoading = balanceLoading || priceLoading || ownerLoading;
+  const isLoading = walletLoading || balanceLoading || priceLoading || ownerLoading;
   const numAmount = parseFloat(amount) || 0;
   const safeBalanceEth = safeBalance ? parseFloat(formatEther(safeBalance.eth)) : 0;
   const usdValue = numAmount * (ethPrice || 0);
@@ -88,7 +90,7 @@ export function WithdrawPanel() {
     numAmount >= MIN_WITHDRAWAL_ETH && 
     numAmount <= safeBalanceEth &&
     !isCreatingProposal &&
-    !!TREASURY_SAFE_ADDRESS;
+    !!treasurySafeAddress;
   
   const handleConnect = () => {
     web3Modal.open();
@@ -101,7 +103,7 @@ export function WithdrawPanel() {
     
     try {
       // 1. Create cashout request in database for tracking
-      const request = await createCashout.mutateAsync({
+      await createCashout.mutateAsync({
         amount_dtf: numAmount * (ethPrice || 3500) / 0.42, // Convert ETH to DTF equivalent
         amount_usd: usdValue,
         amount_eth: numAmount,
@@ -113,8 +115,7 @@ export function WithdrawPanel() {
       toast.info('בקשת משיכה נוצרה. יש לאשר ב-Safe.');
       
       // 2. Open Safe interface for signing
-      // In production, would use Safe SDK to create proposal
-      const safeUrl = getSafeExplorerUrl(TREASURY_SAFE_ADDRESS);
+      const safeUrl = getSafeExplorerUrl(treasurySafeAddress);
       window.open(safeUrl, '_blank');
       
       toast.success(
@@ -133,7 +134,7 @@ export function WithdrawPanel() {
   };
   
   // No Safe configured
-  if (!TREASURY_SAFE_ADDRESS) {
+  if (!treasurySafeAddress) {
     return (
       <Card className="glass-card">
         <CardHeader>
@@ -179,12 +180,12 @@ export function WithdrawPanel() {
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Treasury Safe:</span>
             <a
-              href={getSafeExplorerUrl(TREASURY_SAFE_ADDRESS)}
+              href={getSafeExplorerUrl(treasurySafeAddress)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-primary hover:underline font-mono text-sm"
             >
-              {formatAddress(TREASURY_SAFE_ADDRESS)}
+              {formatAddress(treasurySafeAddress)}
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
