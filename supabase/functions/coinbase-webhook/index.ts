@@ -1,9 +1,11 @@
 /**
- * Coinbase Commerce Webhook Handler
+ * Coinbase Commerce Webhook Handler - PRODUCTION ONLY
  * 
- * PRODUCTION-GRADE: Real ETH revenue tracking
- * CRITICAL: Verifies webhook signature before processing
- * Handles payment confirmation and credits allocation
+ * CRITICAL RULES:
+ * 1. Telegram ONLY on charge:confirmed or charge:resolved
+ * 2. All other events: DB only, NO Telegram
+ * 3. Signature verification REQUIRED
+ * 4. No demo/test mode notifications
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -15,16 +17,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-cc-webhook-signature',
 };
 
+// Events that trigger Telegram notifications
+const TELEGRAM_EVENTS = ['charge:confirmed', 'charge:resolved'];
+
 /**
  * Verify Coinbase Commerce webhook signature
- * CRITICAL: Never trust unverified webhooks - FAIL HARD
+ * CRITICAL: Reject ALL unverified webhooks
  */
 function verifySignature(payload: string, signature: string, secret: string): boolean {
   try {
     const hmac = createHmac('sha256', secret);
     hmac.update(payload);
     const expectedSignature = hmac.digest('hex');
-    // Constant-time comparison to prevent timing attacks
+    
     if (signature.length !== expectedSignature.length) return false;
     let result = 0;
     for (let i = 0; i < signature.length; i++) {
@@ -38,30 +43,50 @@ function verifySignature(payload: string, signature: string, secret: string): bo
 }
 
 /**
- * Send Telegram notification
+ * Send Telegram notification - ONLY for real confirmed payments
  */
-async function sendTelegram(
+async function sendTelegramAlert(
   botToken: string, 
   chatId: string, 
-  message: string
-): Promise<void> {
+  eventType: string,
+  chargeData: any,
+  paymentDetails: { amount: number; currency: string; txHash: string | null }
+): Promise<boolean> {
   try {
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const chargeId = chargeData?.id || 'unknown';
+    const chargeCode = chargeData?.code || '';
+    
+    // Build message in Hebrew
+    const message = `💰 <b>איתי!!!</b>
+נכנסה עסקה אמיתית 🚀
+
+<b>סוג אירוע:</b> ${eventType}
+<b>סכום:</b> ${paymentDetails.amount} ${paymentDetails.currency}
+<b>רשת:</b> ${chargeData?.payments?.[0]?.network || 'ethereum'}
+<b>Charge ID:</b> <code>${chargeId}</code>
+${chargeCode ? `<b>Charge Code:</b> <code>${chargeCode}</code>` : ''}
+${paymentDetails.txHash ? `<b>TX:</b> <a href="https://etherscan.io/tx/${paymentDetails.txHash}">View</a>` : ''}`;
+
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
         text: message,
         parse_mode: 'HTML',
+        disable_web_page_preview: true,
       }),
     });
+    
+    return response.ok;
   } catch (e) {
     console.error('Telegram send failed:', e);
+    return false;
   }
 }
 
 /**
- * Extract payment details from Coinbase charge data
+ * Extract payment details from Coinbase charge
  */
 function extractPaymentDetails(chargeData: any): {
   currency: string;
@@ -83,6 +108,7 @@ function extractPaymentDetails(chargeData: any): {
     };
   }
   
+  // Fallback to first payment
   if (payments.length > 0) {
     const firstPayment = payments[0];
     return {
@@ -90,6 +116,17 @@ function extractPaymentDetails(chargeData: any): {
       amount: parseFloat(firstPayment.value?.crypto?.amount || '0'),
       network: firstPayment.network || 'ethereum',
       txHash: firstPayment.transaction_id || null,
+    };
+  }
+  
+  // Fallback to pricing info
+  const pricing = chargeData?.pricing;
+  if (pricing?.ethereum) {
+    return {
+      currency: 'ETH',
+      amount: parseFloat(pricing.ethereum.amount || '0'),
+      network: 'ethereum',
+      txHash: null,
     };
   }
   
@@ -115,30 +152,44 @@ serve(async (req) => {
     );
   }
 
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
   try {
     const rawBody = await req.text();
     const signature = req.headers.get('x-cc-webhook-signature');
 
+    // SECURITY: Reject requests without signature
     if (!signature) {
       console.error('SECURITY: Missing webhook signature - REJECTED');
-      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-        await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-          '🚨 <b>אזהרת אבטחה!</b>\n\nWebhook ללא חתימה נדחה'
-        );
-      }
+      
+      // Log security event but NO Telegram
+      await supabase.from('notifications').insert({
+        event_type: 'security_alert',
+        message: 'Webhook rejected: missing signature',
+        was_sent: false,
+        is_test: false,
+        source: 'webhook',
+        metadata: { ip: req.headers.get('x-forwarded-for') },
+      });
+      
       return new Response(
         JSON.stringify({ error: 'Missing signature' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // SECURITY: Verify signature
     if (!verifySignature(rawBody, signature, WEBHOOK_SECRET)) {
       console.error('SECURITY: Invalid webhook signature - REJECTED');
-      if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-        await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-          '🚨 <b>אזהרת אבטחה!</b>\n\nWebhook עם חתימה לא תקינה נדחה'
-        );
-      }
+      
+      await supabase.from('notifications').insert({
+        event_type: 'security_alert',
+        message: 'Webhook rejected: invalid signature',
+        was_sent: false,
+        is_test: false,
+        source: 'webhook',
+      });
+      
       return new Response(
         JSON.stringify({ error: 'Invalid signature' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -149,181 +200,248 @@ serve(async (req) => {
     const eventType = event.event?.type;
     const chargeData = event.event?.data;
 
-    console.log(`Webhook verified: ${eventType}`, { charge_id: chargeData?.id });
+    console.log(`✅ Webhook verified: ${eventType}`, { charge_id: chargeData?.id });
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    const { data: payment, error: findError } = await supabase
+    // Find related payment
+    const { data: payment } = await supabase
       .from('payments')
       .select('*, users_customers(email)')
       .eq('charge_id', chargeData?.id)
       .single();
 
-    if (findError || !payment) {
-      console.error('Payment not found for charge:', chargeData?.id);
-      return new Response(
-        JSON.stringify({ received: true, warning: 'Payment not found' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const customerEmail = (payment?.users_customers as any)?.email || 'Unknown';
+    const paymentDetails = extractPaymentDetails(chargeData);
+    
+    // Determine if Telegram should be sent
+    const shouldSendTelegram = TELEGRAM_EVENTS.includes(eventType) && 
+                               TELEGRAM_BOT_TOKEN && 
+                               TELEGRAM_CHAT_ID &&
+                               paymentDetails.amount > 0;
 
-    const customerEmail = (payment.users_customers as any)?.email || 'Unknown';
-
+    // Process by event type
     switch (eventType) {
       case 'charge:created':
-        await supabase
-          .from('payments')
-          .update({ status: 'pending' })
-          .eq('id', payment.id);
+        if (payment) {
+          await supabase
+            .from('payments')
+            .update({ status: 'pending' })
+            .eq('id', payment.id);
+        }
+        
+        await supabase.from('notifications').insert({
+          event_type: eventType,
+          charge_id: chargeData?.id,
+          amount: paymentDetails.amount,
+          currency: paymentDetails.currency,
+          message: `Charge created: ${chargeData?.id}`,
+          was_sent: false, // NO Telegram for created
+          is_test: false,
+          source: 'webhook',
+          metadata: { raw_event: event },
+        });
         break;
 
-      case 'charge:confirmed': {
-        const paymentDetails = extractPaymentDetails(chargeData);
+      case 'charge:pending':
+        if (payment) {
+          await supabase
+            .from('payments')
+            .update({ status: 'pending' })
+            .eq('id', payment.id);
+        }
         
-        const expectedUsd = payment.amount_usd;
-        const receivedUsd = chargeData?.pricing?.local?.amount;
-        
-        if (receivedUsd && Math.abs(expectedUsd - parseFloat(receivedUsd)) > 1) {
-          console.error('AMOUNT MISMATCH:', { expected: expectedUsd, received: receivedUsd });
-          if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-            await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-              `⚠️ <b>חוסר התאמה בסכום!</b>\n\nצפי: $${expectedUsd}\nהתקבל: $${receivedUsd}\nCharge: ${chargeData?.id}`
-            );
+        await supabase.from('notifications').insert({
+          event_type: eventType,
+          charge_id: chargeData?.id,
+          amount: paymentDetails.amount,
+          currency: paymentDetails.currency,
+          message: `Payment pending: ${chargeData?.id}`,
+          was_sent: false,
+          is_test: false,
+          source: 'webhook',
+          metadata: { raw_event: event },
+        });
+        break;
+
+      case 'charge:confirmed':
+      case 'charge:resolved': {
+        // Update payment status
+        if (payment) {
+          await supabase
+            .from('payments')
+            .update({
+              status: 'confirmed',
+              confirmed_at: new Date().toISOString(),
+              amount_eth: paymentDetails.amount,
+              metadata: {
+                ...payment.metadata,
+                confirmed_data: chargeData,
+                tx_hash: paymentDetails.txHash,
+                currency: paymentDetails.currency,
+                network: paymentDetails.network,
+              },
+            })
+            .eq('id', payment.id);
+
+          // Add to treasury ledger (INSERT-ONLY)
+          await supabase
+            .from('treasury_ledger')
+            .insert({
+              job_id: payment.id,
+              amount: paymentDetails.amount,
+              asset: paymentDetails.currency,
+              currency: paymentDetails.currency,
+              amount_usd: payment.amount_usd,
+              direction: 'IN',
+              tx_hash: paymentDetails.txHash,
+              payment_id: payment.id,
+              payer_email: customerEmail,
+              charge_code: payment.charge_code,
+              network: paymentDetails.network,
+            });
+
+          // Update credit wallet
+          const { data: wallet } = await supabase
+            .from('credit_wallets')
+            .select('*')
+            .eq('customer_id', payment.customer_id)
+            .single();
+
+          if (wallet) {
+            await supabase
+              .from('credit_wallets')
+              .update({
+                credits_balance: wallet.credits_balance + payment.credits_purchased,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', wallet.id);
+          } else {
+            await supabase
+              .from('credit_wallets')
+              .insert({
+                customer_id: payment.customer_id,
+                credits_balance: payment.credits_purchased,
+              });
           }
         }
 
-        await supabase
-          .from('payments')
-          .update({
-            status: 'confirmed',
-            confirmed_at: new Date().toISOString(),
-            amount_eth: paymentDetails.amount,
-            metadata: {
-              ...payment.metadata,
-              confirmed_data: chargeData,
-              tx_hash: paymentDetails.txHash,
-              currency: paymentDetails.currency,
-              network: paymentDetails.network,
-            },
-          })
-          .eq('id', payment.id);
-
-        await supabase
-          .from('treasury_ledger')
-          .insert({
-            job_id: payment.id,
-            amount: paymentDetails.amount,
-            asset: paymentDetails.currency,
-            currency: paymentDetails.currency,
-            amount_usd: payment.amount_usd,
-            direction: 'IN',
-            tx_hash: paymentDetails.txHash,
-            payment_id: payment.id,
-            payer_email: customerEmail,
-            charge_code: payment.charge_code,
-            network: paymentDetails.network,
-          });
-
-        const { data: wallet } = await supabase
-          .from('credit_wallets')
-          .select('*')
-          .eq('customer_id', payment.customer_id)
-          .single();
-
-        if (wallet) {
-          await supabase
-            .from('credit_wallets')
-            .update({
-              credits_balance: wallet.credits_balance + payment.credits_purchased,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', wallet.id);
-        } else {
-          await supabase
-            .from('credit_wallets')
-            .insert({
-              customer_id: payment.customer_id,
-              credits_balance: payment.credits_purchased,
-            });
+        // Send Telegram ONLY for confirmed/resolved with amount > 0
+        let telegramSent = false;
+        if (shouldSendTelegram) {
+          telegramSent = await sendTelegramAlert(
+            TELEGRAM_BOT_TOKEN!,
+            TELEGRAM_CHAT_ID!,
+            eventType,
+            chargeData,
+            paymentDetails
+          );
+          console.log(`📱 Telegram sent: ${telegramSent}`);
         }
 
+        // Log notification
+        await supabase.from('notifications').insert({
+          event_type: eventType,
+          charge_id: chargeData?.id,
+          amount: paymentDetails.amount,
+          currency: paymentDetails.currency,
+          message: `💰 Payment confirmed: $${payment?.amount_usd || 0} USD (${paymentDetails.amount} ${paymentDetails.currency})`,
+          was_sent: telegramSent,
+          is_test: false,
+          source: 'webhook',
+          metadata: { 
+            tx_hash: paymentDetails.txHash,
+            customer_email: customerEmail,
+            credits_purchased: payment?.credits_purchased,
+          },
+        });
+
+        // Audit log
         await supabase.from('audit_logs').insert({
-          job_id: payment.id,
+          job_id: payment?.id || '00000000-0000-0000-0000-000000000000',
           action: 'PAYMENT_CONFIRMED',
           metadata: {
-            customer_id: payment.customer_id,
+            customer_id: payment?.customer_id,
             customer_email: customerEmail,
-            credits_added: payment.credits_purchased,
-            amount_usd: payment.amount_usd,
+            credits_added: payment?.credits_purchased,
+            amount_usd: payment?.amount_usd,
             amount_crypto: paymentDetails.amount,
             currency: paymentDetails.currency,
             network: paymentDetails.network,
             tx_hash: paymentDetails.txHash,
             charge_id: chargeData?.id,
-            charge_code: payment.charge_code,
+            telegram_sent: telegramSent,
+            source: 'coinbase_webhook',
           },
         });
-
-        if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-          const txLink = paymentDetails.txHash 
-            ? `\n<a href="https://etherscan.io/tx/${paymentDetails.txHash}">צפה ב-Etherscan</a>`
-            : '';
-          
-          await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-            `💰 <b>תשלום אושר!</b>\n\nסכום: $${payment.amount_usd} USD\n${paymentDetails.currency}: ${paymentDetails.amount}\nקרדיטים: +${payment.credits_purchased}\nלקוח: ${customerEmail}${txLink}`
-          );
-        }
         break;
       }
 
       case 'charge:failed':
-        await supabase
-          .from('payments')
-          .update({ status: 'failed' })
-          .eq('id', payment.id);
+        if (payment) {
+          await supabase
+            .from('payments')
+            .update({ status: 'failed' })
+            .eq('id', payment.id);
+        }
 
-        await supabase.from('audit_logs').insert({
-          job_id: payment.id,
-          action: 'PAYMENT_FAILED',
-          metadata: {
-            customer_id: payment.customer_id,
-            customer_email: customerEmail,
-            charge_id: chargeData?.id,
-            reason: chargeData?.timeline?.slice(-1)?.[0]?.status,
-          },
+        await supabase.from('notifications').insert({
+          event_type: eventType,
+          charge_id: chargeData?.id,
+          amount: paymentDetails.amount,
+          currency: paymentDetails.currency,
+          message: `Payment failed: ${chargeData?.id}`,
+          was_sent: false, // NO Telegram for failures
+          is_test: false,
+          source: 'webhook',
+          metadata: { reason: chargeData?.timeline?.slice(-1)?.[0]?.status },
         });
 
-        if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-          await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-            `❌ <b>תשלום נכשל</b>\n\nסכום: $${payment.amount_usd} USD\nלקוח: ${customerEmail}`
-          );
-        }
-        break;
-
-      case 'charge:pending':
-        await supabase
-          .from('payments')
-          .update({ status: 'pending' })
-          .eq('id', payment.id);
+        // Audit log for failed payments
+        await supabase.from('audit_logs').insert({
+          job_id: payment?.id || '00000000-0000-0000-0000-000000000000',
+          action: 'PAYMENT_FAILED',
+          metadata: {
+            customer_id: payment?.customer_id,
+            charge_id: chargeData?.id,
+            reason: chargeData?.timeline?.slice(-1)?.[0]?.status,
+            source: 'coinbase_webhook',
+          },
+        });
         break;
 
       default:
         console.log('Unhandled event type:', eventType);
+        
+        await supabase.from('notifications').insert({
+          event_type: eventType,
+          charge_id: chargeData?.id,
+          message: `Unhandled event: ${eventType}`,
+          was_sent: false,
+          is_test: false,
+          source: 'webhook',
+          metadata: { raw_event: event },
+        });
     }
 
     return new Response(
-      JSON.stringify({ received: true, event_type: eventType }),
+      JSON.stringify({ 
+        received: true, 
+        event_type: eventType,
+        telegram_sent: TELEGRAM_EVENTS.includes(eventType) && paymentDetails.amount > 0,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('Webhook processing error:', error);
     
-    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
-      await sendTelegram(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
-        `🚨 <b>שגיאת Webhook!</b>\n\n${error instanceof Error ? error.message : 'Unknown error'}`
-      );
-    }
+    await supabase.from('notifications').insert({
+      event_type: 'error',
+      message: `Webhook error: ${error instanceof Error ? error.message : 'Unknown'}`,
+      was_sent: false,
+      is_test: false,
+      source: 'webhook',
+      metadata: { error: String(error) },
+    });
     
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),

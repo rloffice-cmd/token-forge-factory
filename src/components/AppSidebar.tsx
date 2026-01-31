@@ -7,12 +7,16 @@ import {
   Settings,
   Zap,
   ChevronRight,
+  ShoppingCart,
+  Activity,
 } from 'lucide-react';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'דשבורד', href: '/' },
   { icon: FileCode2, label: 'ג׳ובים', href: '/jobs' },
   { icon: Wallet, label: 'קופה', href: '/treasury' },
+  { icon: ShoppingCart, label: 'רכישה', href: '/purchase' },
+  { icon: Activity, label: 'מערכת', href: '/system' },
   { icon: Settings, label: 'הגדרות', href: '/settings' },
 ];
 
@@ -64,7 +68,7 @@ export function AppSidebar() {
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
             <div className="flex-1">
               <p className="text-sm font-medium">מערכת פעילה</p>
-              <p className="text-xs text-muted-foreground">MOCK Mode</p>
+              <p className="text-xs text-muted-foreground">Production Mode</p>
             </div>
           </div>
         </div>
