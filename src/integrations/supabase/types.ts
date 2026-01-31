@@ -89,9 +89,12 @@ export type Database = {
           eth_price_usd: number | null
           id: string
           network: string
+          safe_address: string | null
+          safe_tx_hash: string | null
           signed_at: string | null
           status: string
           submitted_at: string | null
+          to_wallet_address: string | null
           tx_hash: string | null
           wallet_address: string
         }
@@ -105,9 +108,12 @@ export type Database = {
           eth_price_usd?: number | null
           id?: string
           network?: string
+          safe_address?: string | null
+          safe_tx_hash?: string | null
           signed_at?: string | null
           status?: string
           submitted_at?: string | null
+          to_wallet_address?: string | null
           tx_hash?: string | null
           wallet_address: string
         }
@@ -121,13 +127,90 @@ export type Database = {
           eth_price_usd?: number | null
           id?: string
           network?: string
+          safe_address?: string | null
+          safe_tx_hash?: string | null
           signed_at?: string | null
           status?: string
           submitted_at?: string | null
+          to_wallet_address?: string | null
           tx_hash?: string | null
           wallet_address?: string
         }
         Relationships: []
+      }
+      credit_packs: {
+        Row: {
+          created_at: string
+          credits: number
+          description: string | null
+          description_he: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          is_popular: boolean | null
+          name: string
+          name_he: string
+          price_usd: number
+        }
+        Insert: {
+          created_at?: string
+          credits: number
+          description?: string | null
+          description_he?: string | null
+          features?: Json | null
+          id: string
+          is_active?: boolean | null
+          is_popular?: boolean | null
+          name: string
+          name_he: string
+          price_usd: number
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          description?: string | null
+          description_he?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          is_popular?: boolean | null
+          name?: string
+          name_he?: string
+          price_usd?: number
+        }
+        Relationships: []
+      }
+      credit_wallets: {
+        Row: {
+          created_at: string
+          credits_balance: number
+          customer_id: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credits_balance?: number
+          customer_id: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credits_balance?: number
+          customer_id?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_wallets_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       failure_insights: {
         Row: {
@@ -185,27 +268,36 @@ export type Database = {
       }
       jobs: {
         Row: {
+          cost_credits: number | null
           created_at: string
+          customer_id: string | null
           id: string
           iteration: number
+          payment_id: string | null
           score: number | null
           status: string
           task_id: string
           updated_at: string
         }
         Insert: {
+          cost_credits?: number | null
           created_at?: string
+          customer_id?: string | null
           id?: string
           iteration?: number
+          payment_id?: string | null
           score?: number | null
           status?: string
           task_id: string
           updated_at?: string
         }
         Update: {
+          cost_credits?: number | null
           created_at?: string
+          customer_id?: string | null
           id?: string
           iteration?: number
+          payment_id?: string | null
           score?: number | null
           status?: string
           task_id?: string
@@ -213,10 +305,83 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "jobs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jobs_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "jobs_task_id_fkey"
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount_eth: number | null
+          amount_usd: number
+          charge_code: string | null
+          charge_id: string | null
+          confirmed_at: string | null
+          created_at: string
+          credits_purchased: number
+          customer_id: string
+          hosted_url: string | null
+          id: string
+          metadata: Json | null
+          pack_id: string | null
+          provider: string
+          status: string
+        }
+        Insert: {
+          amount_eth?: number | null
+          amount_usd: number
+          charge_code?: string | null
+          charge_id?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          credits_purchased?: number
+          customer_id: string
+          hosted_url?: string | null
+          id?: string
+          metadata?: Json | null
+          pack_id?: string | null
+          provider?: string
+          status?: string
+        }
+        Update: {
+          amount_eth?: number | null
+          amount_usd?: number
+          charge_code?: string | null
+          charge_id?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          credits_purchased?: number
+          customer_id?: string
+          hosted_url?: string | null
+          id?: string
+          metadata?: Json | null
+          pack_id?: string | null
+          provider?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
             referencedColumns: ["id"]
           },
         ]
@@ -280,6 +445,39 @@ export type Database = {
           },
         ]
       }
+      treasury_settings: {
+        Row: {
+          alert_threshold_dtf: number | null
+          created_at: string
+          id: string
+          min_withdrawal_eth: number
+          network: string
+          payout_wallet_address: string | null
+          treasury_safe_address: string | null
+          updated_at: string
+        }
+        Insert: {
+          alert_threshold_dtf?: number | null
+          created_at?: string
+          id?: string
+          min_withdrawal_eth?: number
+          network?: string
+          payout_wallet_address?: string | null
+          treasury_safe_address?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alert_threshold_dtf?: number | null
+          created_at?: string
+          id?: string
+          min_withdrawal_eth?: number
+          network?: string
+          payout_wallet_address?: string | null
+          treasury_safe_address?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       treasury_wallet: {
         Row: {
           address: string
@@ -301,6 +499,30 @@ export type Database = {
           id?: string
           label?: string | null
           network?: string
+        }
+        Relationships: []
+      }
+      users_customers: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
