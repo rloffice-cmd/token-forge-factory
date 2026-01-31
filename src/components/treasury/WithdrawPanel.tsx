@@ -133,7 +133,7 @@ export function WithdrawPanel() {
     }
   };
   
-  // No Safe configured
+  // No Safe configured - show payout address info
   if (!treasurySafeAddress) {
     return (
       <Card className="glass-card">
@@ -143,24 +143,51 @@ export function WithdrawPanel() {
             משיכת כספים
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertTriangle className="w-4 h-4" />
+        <CardContent className="space-y-4">
+          <Alert>
+            <Info className="w-4 h-4" />
             <AlertDescription>
-              <strong>Treasury Safe לא מוגדר!</strong>
+              <strong>מצב Watch-Only</strong>
               <br />
-              יש להוסיף את VITE_TREASURY_SAFE_ADDRESS בהגדרות.
+              כרגע המערכת עוקבת אחרי תשלומים נכנסים בלבד.
               <br />
-              <a 
-                href="https://app.safe.global" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="underline"
-              >
-                צור Safe חדש כאן
-              </a>
+              כדי לאפשר משיכות, יש להגדיר Treasury Safe.
             </AlertDescription>
           </Alert>
+          
+          <div className="p-4 rounded-lg bg-muted/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">כתובת יעד למשיכה (Exodus):</span>
+            </div>
+            <div className="font-mono text-sm break-all bg-background/50 p-2 rounded">
+              {USER_PAYOUT_ADDRESS}
+            </div>
+            <a
+              href={`https://etherscan.io/address/${USER_PAYOUT_ADDRESS}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              צפה ב-Etherscan
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+          
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2">
+              להוספת Treasury Safe בעתיד:
+            </p>
+            <a 
+              href="https://app.safe.global" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              <Wallet className="w-4 h-4" />
+              צור Safe חדש
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
         </CardContent>
       </Card>
     );
