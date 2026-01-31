@@ -149,17 +149,24 @@ serve(async (req) => {
       console.error('Failed to save payment:', paymentError);
     }
 
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      job_id: payment?.id || '00000000-0000-0000-0000-000000000000',
+    // Audit log - use a sentinel job_id for payment events
+    // This is valid because audit_logs.job_id references jobs table, 
+    // but we need to log payment events too
+    const auditResult = await supabase.from('audit_logs').insert({
+      job_id: 'a0000000-0000-0000-0000-000000000001', // Sentinel ID for payment audits
       action: 'PAYMENT_CREATED',
       metadata: {
+        payment_id: payment?.id,
         customer_id: customer.id,
         pack_id: pack.id,
         charge_id: charge.id,
         amount_usd: pack.price_usd,
       },
     });
+    
+    if (auditResult.error) {
+      console.warn('Audit log insert failed:', auditResult.error);
+    }
 
     return new Response(
       JSON.stringify({
