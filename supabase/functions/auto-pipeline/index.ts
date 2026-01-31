@@ -73,14 +73,17 @@ serve(async (req) => {
     // Create and run a new job with retry logic
     const result = await runWithRetry(supabase, DEFAULT_TASK_ID);
 
-    // Send notification based on result
-    if (result.success && result.score !== undefined && result.score >= 0.95) {
-      await sendNotification(supabase, 'success', '🎉 ג\'וב הושלם בהצלחה!', 
-        `ציון: ${(result.score * 100).toFixed(0)}%\nJob ID: ${result.jobId}`);
-    } else if (!result.success && result.error?.includes('Kill Gate')) {
-      await sendNotification(supabase, 'kill_gate', 'Kill Gate הופעל',
+    // NOTIFICATION POLICY: Only send alerts for REAL issues
+    // ❌ NO notifications for: regular job success, regular job failure
+    // ✅ YES notifications for: stuck jobs, system errors, Kill Gate after all retries
+    // Regular job results are logged to audit_logs only
+    
+    if (!result.success && result.retryAttempt === MAX_RETRIES && result.error?.includes('Kill Gate')) {
+      // Only notify on Kill Gate after ALL retries exhausted
+      await sendNotification(supabase, 'kill_gate', '⚠️ Kill Gate - כל הניסיונות נכשלו',
         result.error || 'Unknown error', { jobId: result.jobId, retries: result.retryAttempt });
     }
+    // Note: Success notifications removed - real money alerts come from coinbase-webhook only
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
