@@ -124,27 +124,72 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get treasury wallet (Safe address)
-    const { data: wallet, error: walletError } = await supabase
-      .from('treasury_wallet')
-      .select('address, network')
+    // Get treasury settings to check if Safe is configured
+    const { data: settings, error: settingsError } = await supabase
+      .from('treasury_settings')
+      .select('treasury_safe_address, network')
       .limit(1)
       .maybeSingle();
     
-    if (walletError) throw walletError;
+    // Check treasury_settings first (preferred)
+    const safeAddress = settings?.treasury_safe_address;
+    const network = settings?.network || 'ethereum';
     
-    if (!wallet || !wallet.address || wallet.address === '0x0000000000000000000000000000000000000000') {
+    // If no Safe address in settings, check treasury_wallet table as fallback
+    let walletAddress = safeAddress;
+    if (!walletAddress) {
+      const { data: wallet } = await supabase
+        .from('treasury_wallet')
+        .select('address, network')
+        .limit(1)
+        .maybeSingle();
+      walletAddress = wallet?.address;
+    }
+    
+    // Validate we have a real Safe address (not empty, not zero address)
+    const invalidAddresses = [
+      '',
+      null,
+      undefined,
+      '0x0000000000000000000000000000000000000000',
+    ];
+    
+    if (!walletAddress || invalidAddresses.includes(walletAddress)) {
+      console.log('⏸️ No Treasury Safe configured - skipping tracker');
       return new Response(
         JSON.stringify({ 
-          message: 'No treasury wallet configured',
+          message: 'No Treasury Safe configured - tracker disabled',
           tracked: 0,
+          skipped: true,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
     
-    const network = wallet.network || 'ethereum';
-    console.log(`📡 Tracking Safe: ${wallet.address} on ${network}`);
+    // Verify it's actually a Safe (contract, not EOA) by checking code
+    try {
+      const client = getPublicClient(network);
+      const code = await client.getCode({ address: walletAddress as `0x${string}` });
+      
+      // If no code, it's an EOA (regular wallet), not a Safe
+      if (!code || code === '0x') {
+        console.log(`⚠️ Address ${walletAddress} is an EOA, not a Safe contract - skipping`);
+        return new Response(
+          JSON.stringify({ 
+            message: 'Treasury address is an EOA, not a Safe contract - tracker disabled',
+            address: walletAddress,
+            tracked: 0,
+            skipped: true,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } catch (codeError) {
+      console.error('Failed to verify Safe contract:', codeError);
+      // Continue anyway - might be network issue
+    }
+    
+    console.log(`📡 Tracking Safe: ${walletAddress} on ${network}`);
     
     // Get pending/submitted cashout requests
     const { data: pendingRequests, error: requestsError } = await supabase
@@ -168,7 +213,7 @@ Deno.serve(async (req) => {
     console.log(`📋 Found ${pendingRequests.length} pending requests`);
     
     // Get recent Safe transactions
-    const safeTransactions = await getSafeTransactions(wallet.address, network);
+    const safeTransactions = await getSafeTransactions(walletAddress, network);
     console.log(`🔗 Found ${safeTransactions.length} Safe transactions`);
     
     const updates: Array<{ id: string; status: string; tx_hash?: string }> = [];
