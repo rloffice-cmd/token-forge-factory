@@ -9,9 +9,9 @@ import { ExternalLink, History, Clock, CheckCircle2, XCircle, Send, FileSignatur
 import { useCashoutRequests } from '@/hooks/useTreasury';
 import { getEtherscanUrl, formatAddress } from '@/lib/web3';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { PayoutStatus } from '@/types/treasury';
 
-const statusConfig: Record<PayoutStatus, { 
+
+const statusConfig: Record<string, { 
   label: string; 
   icon: React.ReactNode; 
   className: string;
@@ -41,6 +41,17 @@ const statusConfig: Record<PayoutStatus, {
     icon: <XCircle className="w-3 h-3" />,
     className: 'bg-destructive/20 text-destructive border-destructive/30',
   },
+  cancelled: { 
+    label: 'בוטל', 
+    icon: <XCircle className="w-3 h-3" />,
+    className: 'bg-muted text-muted-foreground',
+  },
+};
+
+const defaultStatus = {
+  label: 'לא ידוע',
+  icon: <Clock className="w-3 h-3" />,
+  className: 'bg-muted text-muted-foreground',
 };
 
 export function CashoutHistory() {
@@ -92,7 +103,7 @@ export function CashoutHistory() {
       <CardContent>
         <div className="space-y-4">
           {requests.map((request) => {
-            const status = statusConfig[request.status];
+            const status = statusConfig[request.status] || defaultStatus;
             
             return (
               <div
