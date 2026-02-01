@@ -2,7 +2,8 @@
  * Micro Product: Webhook Health Check
  * Price: $0.25 per call
  * Returns: reachable, response_time_ms, status_code
- * NO retries, NO replay - just diagnosis
+ * 
+ * SECURITY: SSRF Protection - blocks private IPs, localhost, link-local addresses
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -16,12 +17,89 @@ import {
   updatePainScores,
   triggerAutoOfferEvaluation,
   MICRO_PRICING,
-  ESTIMATED_LOSS_DEFAULTS,
 } from "../_shared/micro-utils.ts";
 
 const PRODUCT_NAME = 'webhook-check';
 const PRODUCT_PRICE = MICRO_PRICING[PRODUCT_NAME];
-const TIMEOUT_MS = 10000; // 10 second timeout
+const TIMEOUT_MS = 5000; // 5 second timeout
+
+// Estimated loss defaults for this product
+const LOSS_DEFAULTS = {
+  unreachable: 300,
+  slow: 150,
+};
+
+// SSRF Protection: Block private/internal addresses
+function isBlockedUrl(urlString: string): { blocked: boolean; reason?: string } {
+  try {
+    const url = new URL(urlString);
+    const hostname = url.hostname.toLowerCase();
+    
+    // Block localhost variants
+    if (hostname === 'localhost' || 
+        hostname === '127.0.0.1' || 
+        hostname === '0.0.0.0' ||
+        hostname === '::1' ||
+        hostname.endsWith('.localhost')) {
+      return { blocked: true, reason: 'localhost_blocked' };
+    }
+    
+    // Block .local TLD
+    if (hostname.endsWith('.local')) {
+      return { blocked: true, reason: 'local_tld_blocked' };
+    }
+    
+    // Block internal hostnames
+    if (hostname === 'metadata' || 
+        hostname === 'metadata.google.internal' ||
+        hostname.includes('internal')) {
+      return { blocked: true, reason: 'internal_hostname_blocked' };
+    }
+    
+    // Check for IP addresses
+    const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    const match = hostname.match(ipv4Regex);
+    
+    if (match) {
+      const [, a, b, c] = match.map(Number);
+      
+      // Block RFC1918 private ranges
+      // 10.0.0.0/8
+      if (a === 10) {
+        return { blocked: true, reason: 'private_ip_10' };
+      }
+      // 172.16.0.0/12
+      if (a === 172 && b >= 16 && b <= 31) {
+        return { blocked: true, reason: 'private_ip_172' };
+      }
+      // 192.168.0.0/16
+      if (a === 192 && b === 168) {
+        return { blocked: true, reason: 'private_ip_192' };
+      }
+      // 127.0.0.0/8 loopback
+      if (a === 127) {
+        return { blocked: true, reason: 'loopback_ip' };
+      }
+      // 169.254.0.0/16 link-local (AWS metadata, etc.)
+      if (a === 169 && b === 254) {
+        return { blocked: true, reason: 'link_local_ip' };
+      }
+      // 0.0.0.0/8
+      if (a === 0) {
+        return { blocked: true, reason: 'zero_network' };
+      }
+    }
+    
+    // Block non-http(s) protocols
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return { blocked: true, reason: 'invalid_protocol' };
+    }
+    
+    return { blocked: false };
+  } catch {
+    return { blocked: true, reason: 'invalid_url' };
+  }
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -67,6 +145,18 @@ serve(async (req) => {
       );
     }
 
+    // SSRF Protection: Check if URL is blocked
+    const ssrfCheck = isBlockedUrl(webhook_url);
+    if (ssrfCheck.blocked) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'URL not allowed for security reasons',
+          reason: ssrfCheck.reason,
+        }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Validate URL format
     let parsedUrl: URL;
     try {
@@ -106,6 +196,7 @@ serve(async (req) => {
           source: 'micro-webhook-check'
         }),
         signal: controller.signal,
+        redirect: 'manual', // Don't follow redirects - SSRF protection
       });
 
       clearTimeout(timeoutId);
@@ -130,17 +221,16 @@ serve(async (req) => {
     // Calculate severity and estimated loss
     let severity: number;
     let estimatedLossUsd: number;
-    const lossDefaults = ESTIMATED_LOSS_DEFAULTS[PRODUCT_NAME] as Record<string, number>;
 
     if (!reachable) {
       severity = 9;
-      estimatedLossUsd = lossDefaults.unreachable;
+      estimatedLossUsd = LOSS_DEFAULTS.unreachable;
     } else if (statusCode !== expected_status) {
       severity = 7;
-      estimatedLossUsd = lossDefaults.unreachable / 2;
+      estimatedLossUsd = LOSS_DEFAULTS.unreachable / 2;
     } else if (responseTimeMs > 800) {
       severity = 4;
-      estimatedLossUsd = lossDefaults.slow;
+      estimatedLossUsd = LOSS_DEFAULTS.slow;
     } else {
       severity = 1;
       estimatedLossUsd = 0;
@@ -171,7 +261,7 @@ serve(async (req) => {
       );
     }
 
-    // Record event
+    // Record event - sanitize URL (don't store query params which may contain secrets)
     const eventResult = await recordMicroEvent(
       supabase,
       customerId,

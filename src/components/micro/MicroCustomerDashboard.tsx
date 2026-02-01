@@ -164,20 +164,47 @@ export default function MicroCustomerDashboard({ apiKey }: MicroCustomerDashboar
                 </span>
                 . Guardian מונע/מתקן את זה אוטונומית.
               </p>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
                 <span className="text-2xl font-bold text-primary">
                   ${data.guardian_offer.price_usd}
                 </span>
                 <span className="text-muted-foreground">/חודש</span>
-                {data.guardian_offer.payment_link && (
+                {data.guardian_offer.payment_link ? (
                   <Button asChild className="gap-2">
                     <a href={data.guardian_offer.payment_link} target="_blank" rel="noopener noreferrer">
                       הפעל Guardian
                       <ExternalLink className="h-4 w-4" />
                     </a>
                   </Button>
+                ) : (
+                  <Button 
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(
+                          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/guardian-offer`,
+                          {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ offer_id: data.guardian_offer!.id }),
+                          }
+                        );
+                        if (response.ok) {
+                          window.location.reload();
+                        }
+                      } catch (e) {
+                        console.error('Failed to create payment link:', e);
+                      }
+                    }}
+                    className="gap-2"
+                  >
+                    צור לינק תשלום
+                    <Zap className="h-4 w-4" />
+                  </Button>
                 )}
               </div>
+              <p className="text-xs text-muted-foreground">
+                סטטוס: {data.guardian_offer.status} | תוקף: {format(new Date(data.guardian_offer.expires_at), 'dd/MM/yyyy')}
+              </p>
             </AlertDescription>
           </Alert>
         )}
