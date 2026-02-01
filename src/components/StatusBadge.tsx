@@ -7,7 +7,7 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const statusConfig: Record<JobStatus, { label: string; className: string }> = {
+const statusConfig: Record<string, { label: string; className: string }> = {
   CREATED: { label: 'נוצר', className: 'status-created' },
   GENERATED: { label: 'קוד נוצר', className: 'status-generated' },
   TESTS_BUILT: { label: 'טסטים נבנו', className: 'status-generated' },
@@ -22,9 +22,11 @@ const statusConfig: Record<JobStatus, { label: string; className: string }> = {
   DROPPED: { label: 'נדחה', className: 'status-dropped' },
 };
 
+const defaultStatus = { label: 'לא ידוע', className: 'status-created' };
+
 export const StatusBadge = forwardRef<HTMLSpanElement, StatusBadgeProps>(
   ({ status, className }, ref) => {
-    const config = statusConfig[status];
+    const config = statusConfig[status] || defaultStatus;
     
     return (
       <span ref={ref} className={cn('status-badge', config.className, className)}>
