@@ -5,18 +5,20 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createPublicClient, http, formatEther } from 'https://esm.sh/viem@2';
-import { mainnet, sepolia } from 'https://esm.sh/viem@2/chains';
+import { createPublicClient, http, formatEther, defineChain } from 'https://esm.sh/viem@2';
+import { mainnet, sepolia, base } from 'https://esm.sh/viem@2/chains';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Safe Transaction Service URLs
-const SAFE_TX_SERVICE = {
+// Safe Transaction Service URLs - includes Base network
+const SAFE_TX_SERVICE: Record<string, string> = {
   ethereum: 'https://safe-transaction-mainnet.safe.global',
+  mainnet: 'https://safe-transaction-mainnet.safe.global',
   sepolia: 'https://safe-transaction-sepolia.safe.global',
+  base: 'https://safe-transaction-base.safe.global',
 };
 
 interface SafeTransaction {
@@ -31,16 +33,20 @@ interface SafeTransaction {
   nonce: number;
 }
 
-// Get public client for chain verification
+// Get public client for chain verification - supports Base network
 function getPublicClient(network: string) {
-  const chain = network === 'sepolia' ? sepolia : mainnet;
-  const rpcUrl = network === 'sepolia' 
-    ? 'https://rpc.sepolia.org'
-    : 'https://eth.llamarpc.com';
+  const chainConfigs: Record<string, { chain: typeof base; rpcUrl: string }> = {
+    base: { chain: base, rpcUrl: 'https://mainnet.base.org' },
+    ethereum: { chain: mainnet, rpcUrl: 'https://eth.llamarpc.com' },
+    mainnet: { chain: mainnet, rpcUrl: 'https://eth.llamarpc.com' },
+    sepolia: { chain: sepolia, rpcUrl: 'https://rpc.sepolia.org' },
+  };
+  
+  const config = chainConfigs[network] || chainConfigs.base;
   
   return createPublicClient({
-    chain,
-    transport: http(rpcUrl),
+    chain: config.chain,
+    transport: http(config.rpcUrl, { timeout: 10000 }),
   });
 }
 
@@ -355,9 +361,13 @@ Deno.serve(async (req) => {
             const request = pendingRequests.find(r => r.id === update.id);
             if (!request) continue;
             
-            const explorerUrl = network === 'sepolia'
-              ? `https://sepolia.etherscan.io/tx/${update.tx_hash}`
-              : `https://etherscan.io/tx/${update.tx_hash}`;
+            const explorerUrls: Record<string, string> = {
+              base: `https://basescan.org/tx/${update.tx_hash}`,
+              sepolia: `https://sepolia.etherscan.io/tx/${update.tx_hash}`,
+              ethereum: `https://etherscan.io/tx/${update.tx_hash}`,
+              mainnet: `https://etherscan.io/tx/${update.tx_hash}`,
+            };
+            const explorerUrl = explorerUrls[network] || explorerUrls.base;
             
             const message = `✅ *משיכה אושרה אוטומטית*\n\n` +
               `💰 סכום: ${request.amount_eth?.toFixed(6)} ETH\n` +
