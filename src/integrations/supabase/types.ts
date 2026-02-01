@@ -245,6 +245,75 @@ export type Database = {
           },
         ]
       }
+      campaign_experiments: {
+        Row: {
+          auto_implement_winner: boolean | null
+          control_variant: Json
+          created_at: string
+          ended_at: string | null
+          experiment_type: string
+          hypothesis: string
+          id: string
+          implemented_at: string | null
+          minimum_sample_size: number | null
+          name: string
+          primary_metric: string
+          results: Json | null
+          scheduled_end_at: string | null
+          secondary_metrics: string[] | null
+          started_at: string | null
+          statistical_significance: number | null
+          status: string | null
+          test_variants: Json
+          traffic_split: Json | null
+          winner_variant: string | null
+        }
+        Insert: {
+          auto_implement_winner?: boolean | null
+          control_variant: Json
+          created_at?: string
+          ended_at?: string | null
+          experiment_type: string
+          hypothesis: string
+          id?: string
+          implemented_at?: string | null
+          minimum_sample_size?: number | null
+          name: string
+          primary_metric: string
+          results?: Json | null
+          scheduled_end_at?: string | null
+          secondary_metrics?: string[] | null
+          started_at?: string | null
+          statistical_significance?: number | null
+          status?: string | null
+          test_variants?: Json
+          traffic_split?: Json | null
+          winner_variant?: string | null
+        }
+        Update: {
+          auto_implement_winner?: boolean | null
+          control_variant?: Json
+          created_at?: string
+          ended_at?: string | null
+          experiment_type?: string
+          hypothesis?: string
+          id?: string
+          implemented_at?: string | null
+          minimum_sample_size?: number | null
+          name?: string
+          primary_metric?: string
+          results?: Json | null
+          scheduled_end_at?: string | null
+          secondary_metrics?: string[] | null
+          started_at?: string | null
+          statistical_significance?: number | null
+          status?: string | null
+          test_variants?: Json
+          traffic_split?: Json | null
+          winner_variant?: string | null
+        }
+        Relationships: []
+      }
       cashout_requests: {
         Row: {
           amount_dtf: number
@@ -647,6 +716,350 @@ export type Database = {
           },
         ]
       }
+      leads: {
+        Row: {
+          acquisition_campaign: string | null
+          acquisition_channel: string | null
+          budget_signals: string | null
+          company: string | null
+          composite_score: number | null
+          converted_at: string | null
+          created_at: string
+          customer_id: string | null
+          email: string | null
+          engagement_score: number | null
+          first_contact_at: string | null
+          funnel_stage: string | null
+          id: string
+          intent_score: number | null
+          interests: Json | null
+          last_contact_at: string | null
+          lifetime_value_usd: number | null
+          notes: string | null
+          pain_points: Json | null
+          raw_data: Json | null
+          referred_by: string | null
+          relevance_score: number | null
+          source: string
+          source_id: string | null
+          source_url: string | null
+          status: string
+          tags: string[] | null
+          tech_stack: Json | null
+          updated_at: string
+          username: string | null
+          wallet_address: string | null
+        }
+        Insert: {
+          acquisition_campaign?: string | null
+          acquisition_channel?: string | null
+          budget_signals?: string | null
+          company?: string | null
+          composite_score?: number | null
+          converted_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          email?: string | null
+          engagement_score?: number | null
+          first_contact_at?: string | null
+          funnel_stage?: string | null
+          id?: string
+          intent_score?: number | null
+          interests?: Json | null
+          last_contact_at?: string | null
+          lifetime_value_usd?: number | null
+          notes?: string | null
+          pain_points?: Json | null
+          raw_data?: Json | null
+          referred_by?: string | null
+          relevance_score?: number | null
+          source: string
+          source_id?: string | null
+          source_url?: string | null
+          status?: string
+          tags?: string[] | null
+          tech_stack?: Json | null
+          updated_at?: string
+          username?: string | null
+          wallet_address?: string | null
+        }
+        Update: {
+          acquisition_campaign?: string | null
+          acquisition_channel?: string | null
+          budget_signals?: string | null
+          company?: string | null
+          composite_score?: number | null
+          converted_at?: string | null
+          created_at?: string
+          customer_id?: string | null
+          email?: string | null
+          engagement_score?: number | null
+          first_contact_at?: string | null
+          funnel_stage?: string | null
+          id?: string
+          intent_score?: number | null
+          interests?: Json | null
+          last_contact_at?: string | null
+          lifetime_value_usd?: number | null
+          notes?: string | null
+          pain_points?: Json | null
+          raw_data?: Json | null
+          referred_by?: string | null
+          relevance_score?: number | null
+          source?: string
+          source_id?: string | null
+          source_url?: string | null
+          status?: string
+          tags?: string[] | null
+          tech_stack?: Json | null
+          updated_at?: string
+          username?: string | null
+          wallet_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_referred_by_fkey"
+            columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      learning_events: {
+        Row: {
+          actual_impact: Json | null
+          change_description: string
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          event_type: string
+          expected_impact: Json | null
+          id: string
+          is_reversible: boolean | null
+          measured_at: string | null
+          new_state: Json | null
+          previous_state: Json | null
+          rollback_reason: string | null
+          rolled_back_at: string | null
+          trigger_insight_id: string | null
+          trigger_reason: string | null
+        }
+        Insert: {
+          actual_impact?: Json | null
+          change_description: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          event_type: string
+          expected_impact?: Json | null
+          id?: string
+          is_reversible?: boolean | null
+          measured_at?: string | null
+          new_state?: Json | null
+          previous_state?: Json | null
+          rollback_reason?: string | null
+          rolled_back_at?: string | null
+          trigger_insight_id?: string | null
+          trigger_reason?: string | null
+        }
+        Update: {
+          actual_impact?: Json | null
+          change_description?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          event_type?: string
+          expected_impact?: Json | null
+          id?: string
+          is_reversible?: boolean | null
+          measured_at?: string | null
+          new_state?: Json | null
+          previous_state?: Json | null
+          rollback_reason?: string | null
+          rolled_back_at?: string | null
+          trigger_insight_id?: string | null
+          trigger_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "learning_events_trigger_insight_id_fkey"
+            columns: ["trigger_insight_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_insights"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_insights: {
+        Row: {
+          affected_entities: Json | null
+          auto_implementable: boolean | null
+          category: string
+          confidence: number | null
+          created_at: string
+          description: string
+          evidence: Json
+          generated_by: string | null
+          generation_prompt: string | null
+          id: string
+          impact_measured: Json | null
+          implemented_at: string | null
+          implemented_by: string | null
+          insight_type: string
+          metrics_after: Json | null
+          metrics_before: Json | null
+          model_version: string | null
+          priority: string | null
+          recommendation: string | null
+          sample_size: number | null
+          statistical_significance: number | null
+          status: string | null
+          title: string
+        }
+        Insert: {
+          affected_entities?: Json | null
+          auto_implementable?: boolean | null
+          category: string
+          confidence?: number | null
+          created_at?: string
+          description: string
+          evidence?: Json
+          generated_by?: string | null
+          generation_prompt?: string | null
+          id?: string
+          impact_measured?: Json | null
+          implemented_at?: string | null
+          implemented_by?: string | null
+          insight_type: string
+          metrics_after?: Json | null
+          metrics_before?: Json | null
+          model_version?: string | null
+          priority?: string | null
+          recommendation?: string | null
+          sample_size?: number | null
+          statistical_significance?: number | null
+          status?: string | null
+          title: string
+        }
+        Update: {
+          affected_entities?: Json | null
+          auto_implementable?: boolean | null
+          category?: string
+          confidence?: number | null
+          created_at?: string
+          description?: string
+          evidence?: Json
+          generated_by?: string | null
+          generation_prompt?: string | null
+          id?: string
+          impact_measured?: Json | null
+          implemented_at?: string | null
+          implemented_by?: string | null
+          insight_type?: string
+          metrics_after?: Json | null
+          metrics_before?: Json | null
+          model_version?: string | null
+          priority?: string | null
+          recommendation?: string | null
+          sample_size?: number | null
+          statistical_significance?: number | null
+          status?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
+      message_performance: {
+        Row: {
+          body_template: string | null
+          channel: string
+          click_rate: number | null
+          clicks: number | null
+          confidence_level: number | null
+          conversion_rate: number | null
+          conversions: number | null
+          created_at: string
+          deprecated_at: string | null
+          deprecated_reason: string | null
+          id: string
+          is_active: boolean | null
+          is_winner: boolean | null
+          open_rate: number | null
+          opens: number | null
+          persona: string | null
+          positive_replies: number | null
+          replies: number | null
+          reply_rate: number | null
+          sample_size: number | null
+          sends: number | null
+          subject_template: string | null
+          template_id: string
+          template_name: string | null
+          variant: string | null
+        }
+        Insert: {
+          body_template?: string | null
+          channel: string
+          click_rate?: number | null
+          clicks?: number | null
+          confidence_level?: number | null
+          conversion_rate?: number | null
+          conversions?: number | null
+          created_at?: string
+          deprecated_at?: string | null
+          deprecated_reason?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_winner?: boolean | null
+          open_rate?: number | null
+          opens?: number | null
+          persona?: string | null
+          positive_replies?: number | null
+          replies?: number | null
+          reply_rate?: number | null
+          sample_size?: number | null
+          sends?: number | null
+          subject_template?: string | null
+          template_id: string
+          template_name?: string | null
+          variant?: string | null
+        }
+        Update: {
+          body_template?: string | null
+          channel?: string
+          click_rate?: number | null
+          clicks?: number | null
+          confidence_level?: number | null
+          conversion_rate?: number | null
+          conversions?: number | null
+          created_at?: string
+          deprecated_at?: string | null
+          deprecated_reason?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_winner?: boolean | null
+          open_rate?: number | null
+          opens?: number | null
+          persona?: string | null
+          positive_replies?: number | null
+          replies?: number | null
+          reply_rate?: number | null
+          sample_size?: number | null
+          sends?: number | null
+          subject_template?: string | null
+          template_id?: string
+          template_name?: string | null
+          variant?: string | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           amount: number | null
@@ -688,6 +1101,86 @@ export type Database = {
           was_sent?: boolean
         }
         Relationships: []
+      }
+      outreach_queue: {
+        Row: {
+          ai_model: string | null
+          channel: string
+          created_at: string
+          error_message: string | null
+          external_message_id: string | null
+          generation_metadata: Json | null
+          id: string
+          lead_id: string
+          message_body: string
+          message_variant: string | null
+          persona: string | null
+          priority: number | null
+          prompt_version: string | null
+          response_received_at: string | null
+          response_sentiment: string | null
+          retry_count: number | null
+          scheduled_at: string
+          sent_at: string | null
+          status: string
+          subject: string | null
+          template_id: string | null
+        }
+        Insert: {
+          ai_model?: string | null
+          channel: string
+          created_at?: string
+          error_message?: string | null
+          external_message_id?: string | null
+          generation_metadata?: Json | null
+          id?: string
+          lead_id: string
+          message_body: string
+          message_variant?: string | null
+          persona?: string | null
+          priority?: number | null
+          prompt_version?: string | null
+          response_received_at?: string | null
+          response_sentiment?: string | null
+          retry_count?: number | null
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          template_id?: string | null
+        }
+        Update: {
+          ai_model?: string | null
+          channel?: string
+          created_at?: string
+          error_message?: string | null
+          external_message_id?: string | null
+          generation_metadata?: Json | null
+          id?: string
+          lead_id?: string
+          message_body?: string
+          message_variant?: string | null
+          persona?: string | null
+          priority?: number | null
+          prompt_version?: string | null
+          response_received_at?: string | null
+          response_sentiment?: string | null
+          retry_count?: number | null
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string | null
+          template_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outreach_queue_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       payments: {
         Row: {
