@@ -1083,6 +1083,45 @@ export type Database = {
           },
         ]
       }
+      growth_forecasts: {
+        Row: {
+          actual_value: number | null
+          confidence: number | null
+          created_at: string
+          factors: Json | null
+          forecast_date: string
+          id: string
+          metric_name: string
+          model_version: string | null
+          period: string
+          predicted_value: number
+        }
+        Insert: {
+          actual_value?: number | null
+          confidence?: number | null
+          created_at?: string
+          factors?: Json | null
+          forecast_date: string
+          id?: string
+          metric_name: string
+          model_version?: string | null
+          period: string
+          predicted_value: number
+        }
+        Update: {
+          actual_value?: number | null
+          confidence?: number | null
+          created_at?: string
+          factors?: Json | null
+          forecast_date?: string
+          id?: string
+          metric_name?: string
+          model_version?: string | null
+          period?: string
+          predicted_value?: number
+        }
+        Relationships: []
+      }
       guardian_offers: {
         Row: {
           charge_id: string | null
@@ -1245,6 +1284,62 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      landing_variants: {
+        Row: {
+          angle: string | null
+          conversion_rate: number | null
+          conversions: number | null
+          created_at: string
+          element_key: string
+          experiment_id: string | null
+          hypothesis: string | null
+          id: string
+          is_active: boolean | null
+          is_winner: boolean | null
+          text_content: string
+          variant_key: string
+          views: number | null
+        }
+        Insert: {
+          angle?: string | null
+          conversion_rate?: number | null
+          conversions?: number | null
+          created_at?: string
+          element_key: string
+          experiment_id?: string | null
+          hypothesis?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_winner?: boolean | null
+          text_content: string
+          variant_key: string
+          views?: number | null
+        }
+        Update: {
+          angle?: string | null
+          conversion_rate?: number | null
+          conversions?: number | null
+          created_at?: string
+          element_key?: string
+          experiment_id?: string | null
+          hypothesis?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_winner?: boolean | null
+          text_content?: string
+          variant_key?: string
+          views?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "landing_variants_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_experiments"
             referencedColumns: ["id"]
           },
         ]
@@ -1949,6 +2044,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      optimization_events: {
+        Row: {
+          action_taken: string
+          auto_implemented: boolean | null
+          confidence: number | null
+          created_at: string
+          event_type: string
+          id: string
+          impact_measured: Json | null
+          new_value: Json | null
+          optimizer: string
+          previous_value: Json | null
+          rolled_back_at: string | null
+          target_entity: string | null
+          target_id: string | null
+        }
+        Insert: {
+          action_taken: string
+          auto_implemented?: boolean | null
+          confidence?: number | null
+          created_at?: string
+          event_type: string
+          id?: string
+          impact_measured?: Json | null
+          new_value?: Json | null
+          optimizer: string
+          previous_value?: Json | null
+          rolled_back_at?: string | null
+          target_entity?: string | null
+          target_id?: string | null
+        }
+        Update: {
+          action_taken?: string
+          auto_implemented?: boolean | null
+          confidence?: number | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          impact_measured?: Json | null
+          new_value?: Json | null
+          optimizer?: string
+          previous_value?: Json | null
+          rolled_back_at?: string | null
+          target_entity?: string | null
+          target_id?: string | null
+        }
+        Relationships: []
       }
       outreach_jobs: {
         Row: {

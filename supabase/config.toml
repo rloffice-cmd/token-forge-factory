@@ -113,3 +113,12 @@ verify_jwt = false
 
 [functions.landing-ab-test]
 verify_jwt = false
+
+[functions.continuous-optimizer]
+verify_jwt = false
+
+[functions.landing-optimizer]
+verify_jwt = false
+
+[functions.growth-brain]
+verify_jwt = false
