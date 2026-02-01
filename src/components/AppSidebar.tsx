@@ -19,8 +19,8 @@ import {
 
 const navItems = [
   { icon: DollarSign, label: 'Money Machine', href: '/' },
-  { icon: Brain, label: 'אינטליגנציה', href: '/intelligence' },
-  { icon: Compass, label: 'גילוי', href: '/discovery' },
+  { icon: Brain, label: 'Brain Dashboard', href: '/brain' },
+  { icon: Compass, label: 'אינטליגנציה', href: '/intelligence' },
   { icon: LayoutDashboard, label: 'דשבורד', href: '/dashboard' },
   { icon: FileCode2, label: 'ג׳ובים', href: '/jobs' },
   { icon: Wallet, label: 'קופה', href: '/treasury' },

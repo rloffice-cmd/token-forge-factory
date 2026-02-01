@@ -53,3 +53,21 @@ verify_jwt = false
 
 [functions.fulfillment-provisioner]
 verify_jwt = false
+
+[functions.brain-scan]
+verify_jwt = false
+
+[functions.brain-score]
+verify_jwt = false
+
+[functions.brain-close]
+verify_jwt = false
+
+[functions.brain-fulfill]
+verify_jwt = false
+
+[functions.brain-discover-sources]
+verify_jwt = false
+
+[functions.ingest-webhook]
+verify_jwt = false
