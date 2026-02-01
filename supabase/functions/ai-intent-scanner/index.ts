@@ -77,41 +77,56 @@ const INTENT_SIGNALS = {
   },
 };
 
-// Platforms to scan with their configurations
+// Platforms to scan with their configurations - Using APIs and RSS feeds that don't block
 const SCAN_TARGETS = [
-  // Reddit - High intent communities
+  // Hacker News - Direct API (works perfectly)
   {
-    name: 'Reddit Crypto Dev',
-    url: 'https://www.reddit.com/r/CryptoCurrency/search/?q=wallet%20risk%20OR%20payment%20webhook%20OR%20transaction%20monitoring&t=week&sort=new',
-    type: 'reddit_search',
-  },
-  {
-    name: 'Reddit ethdev',
-    url: 'https://www.reddit.com/r/ethdev/search/?q=security%20OR%20monitoring%20OR%20webhook&t=week&sort=new',
-    type: 'reddit_search',
-  },
-  {
-    name: 'Reddit SaaS',
-    url: 'https://www.reddit.com/r/SaaS/search/?q=payment%20OR%20webhook%20OR%20monitoring&t=week&sort=new',
-    type: 'reddit_search',
-  },
-  // Hacker News
-  {
-    name: 'HN Crypto',
+    name: 'HN Blockchain',
     url: 'https://hn.algolia.com/api/v1/search_by_date?query=blockchain%20payment%20security&tags=story',
     type: 'hn_api',
   },
-  // Twitter/X via Nitter (public)
   {
-    name: 'Twitter Web3 Devs',
-    url: 'https://nitter.net/search?q=need+wallet+risk+OR+webhook+failed+OR+payment+missing&f=tweets',
-    type: 'twitter_search',
+    name: 'HN Webhook',
+    url: 'https://hn.algolia.com/api/v1/search_by_date?query=webhook%20failed%20OR%20webhook%20retry&tags=story,comment',
+    type: 'hn_api',
   },
-  // Stack Overflow
   {
-    name: 'SO Blockchain',
-    url: 'https://stackoverflow.com/questions/tagged/blockchain+or+ethereum+or+solidity?tab=Newest',
-    type: 'stackoverflow',
+    name: 'HN Web3',
+    url: 'https://hn.algolia.com/api/v1/search_by_date?query=web3%20wallet%20security&tags=story,comment',
+    type: 'hn_api',
+  },
+  // Reddit via RSS (public, doesn't require auth)
+  {
+    name: 'Reddit ethdev RSS',
+    url: 'https://www.reddit.com/r/ethdev/new/.rss',
+    type: 'rss_feed',
+  },
+  {
+    name: 'Reddit SaaS RSS',
+    url: 'https://www.reddit.com/r/SaaS/new/.rss',
+    type: 'rss_feed',
+  },
+  {
+    name: 'Reddit cryptocurrency RSS',
+    url: 'https://www.reddit.com/r/cryptocurrency/new/.rss',
+    type: 'rss_feed',
+  },
+  // Dev.to - Open RSS feeds
+  {
+    name: 'Dev.to Webhooks',
+    url: 'https://dev.to/feed/tag/webhooks',
+    type: 'rss_feed',
+  },
+  {
+    name: 'Dev.to Web3',
+    url: 'https://dev.to/feed/tag/web3',
+    type: 'rss_feed',
+  },
+  // Stack Exchange API (public)
+  {
+    name: 'SO Ethereum',
+    url: 'https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&tagged=ethereum&site=stackoverflow&filter=withbody',
+    type: 'stackexchange_api',
   },
 ];
 
@@ -165,8 +180,30 @@ serve(async (req) => {
             const data = await response.json();
             content = JSON.stringify(data.hits?.slice(0, 20) || []);
           }
+        } else if (target.type === 'stackexchange_api') {
+          // Stack Exchange API
+          const response = await fetch(target.url, {
+            headers: { 'Accept-Encoding': 'gzip' },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            content = JSON.stringify(data.items?.slice(0, 15) || []);
+          }
+        } else if (target.type === 'rss_feed') {
+          // RSS feed - direct fetch
+          const response = await fetch(target.url, {
+            headers: { 
+              'User-Agent': 'Mozilla/5.0 (compatible; IntentBot/1.0)',
+              'Accept': 'application/rss+xml, application/xml, text/xml',
+            },
+          });
+          if (response.ok) {
+            content = await response.text();
+          } else {
+            console.warn(`RSS fetch failed for ${target.name}: ${response.status}`);
+          }
         } else if (firecrawlKey) {
-          // Use Firecrawl for web scraping
+          // Use Firecrawl for other web scraping
           const scrapeResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
             method: 'POST',
             headers: {
