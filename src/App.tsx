@@ -26,6 +26,7 @@ import MicroAdminDashboard from "./pages/MicroAdminDashboard";
 import Sources from "./pages/Sources";
 import AgentMarketplace from "./pages/AgentMarketplace";
 import AffiliateAdmin from "./pages/AffiliateAdmin";
+import DigitalProducts from "./pages/DigitalProducts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,6 +46,7 @@ const App = () => (
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/api-access" element={<ApiAccess />} />
             <Route path="/agents" element={<AgentMarketplace />} />
+            <Route path="/products" element={<DigitalProducts />} />
             
             {/* Admin Routes - Control Panel */}
             <Route path="/" element={<MoneyMachine />} />

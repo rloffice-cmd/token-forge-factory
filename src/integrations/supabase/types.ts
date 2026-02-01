@@ -1257,6 +1257,109 @@ export type Database = {
         }
         Relationships: []
       }
+      digital_products: {
+        Row: {
+          category: string
+          content_url: string | null
+          created_at: string
+          description: string
+          description_he: string
+          id: string
+          is_active: boolean | null
+          name: string
+          name_he: string
+          preview_content: string | null
+          price_usd: number
+          sales_count: number | null
+        }
+        Insert: {
+          category: string
+          content_url?: string | null
+          created_at?: string
+          description: string
+          description_he: string
+          id?: string
+          is_active?: boolean | null
+          name: string
+          name_he: string
+          preview_content?: string | null
+          price_usd: number
+          sales_count?: number | null
+        }
+        Update: {
+          category?: string
+          content_url?: string | null
+          created_at?: string
+          description?: string
+          description_he?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          name_he?: string
+          preview_content?: string | null
+          price_usd?: number
+          sales_count?: number | null
+        }
+        Relationships: []
+      }
+      digital_purchases: {
+        Row: {
+          charge_id: string | null
+          created_at: string
+          customer_email: string
+          download_count: number | null
+          download_url: string | null
+          expires_at: string | null
+          id: string
+          payment_id: string | null
+          product_id: string | null
+        }
+        Insert: {
+          charge_id?: string | null
+          created_at?: string
+          customer_email: string
+          download_count?: number | null
+          download_url?: string | null
+          expires_at?: string | null
+          id?: string
+          payment_id?: string | null
+          product_id?: string | null
+        }
+        Update: {
+          charge_id?: string | null
+          created_at?: string
+          customer_email?: string
+          download_count?: number | null
+          download_url?: string | null
+          expires_at?: string | null
+          id?: string
+          payment_id?: string | null
+          product_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "digital_purchases_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "digital_purchases_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "digital_purchases_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "digital_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       endpoint_costs: {
         Row: {
           cost_credits: number
@@ -2074,6 +2177,66 @@ export type Database = {
           variant?: string | null
         }
         Relationships: []
+      }
+      micro_consultations: {
+        Row: {
+          ai_response: string | null
+          answered_at: string | null
+          category: string
+          charge_id: string | null
+          created_at: string
+          customer_email: string
+          id: string
+          payment_id: string | null
+          price_usd: number
+          question: string
+          rating: number | null
+          status: string
+        }
+        Insert: {
+          ai_response?: string | null
+          answered_at?: string | null
+          category?: string
+          charge_id?: string | null
+          created_at?: string
+          customer_email: string
+          id?: string
+          payment_id?: string | null
+          price_usd?: number
+          question: string
+          rating?: number | null
+          status?: string
+        }
+        Update: {
+          ai_response?: string | null
+          answered_at?: string | null
+          category?: string
+          charge_id?: string | null
+          created_at?: string
+          customer_email?: string
+          id?: string
+          payment_id?: string | null
+          price_usd?: number
+          question?: string
+          rating?: number | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "micro_consultations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "micro_consultations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       micro_events: {
         Row: {
