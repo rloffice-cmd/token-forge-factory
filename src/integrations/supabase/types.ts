@@ -537,6 +537,48 @@ export type Database = {
           },
         ]
       }
+      improvement_suggestions: {
+        Row: {
+          category: string
+          confidence: number | null
+          created_at: string
+          description: string
+          evidence: Json | null
+          id: string
+          implemented_at: string | null
+          priority: string
+          source: string
+          status: string
+          title: string
+        }
+        Insert: {
+          category: string
+          confidence?: number | null
+          created_at?: string
+          description: string
+          evidence?: Json | null
+          id?: string
+          implemented_at?: string | null
+          priority?: string
+          source: string
+          status?: string
+          title: string
+        }
+        Update: {
+          category?: string
+          confidence?: number | null
+          created_at?: string
+          description?: string
+          evidence?: Json | null
+          id?: string
+          implemented_at?: string | null
+          priority?: string
+          source?: string
+          status?: string
+          title?: string
+        }
+        Relationships: []
+      }
       jobs: {
         Row: {
           cost_credits: number | null
@@ -734,6 +776,120 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scaling_rules: {
+        Row: {
+          action_config: Json
+          action_type: string
+          cooldown_minutes: number | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          last_triggered_at: string | null
+          rule_name: string
+          trigger_condition: string
+          trigger_count: number | null
+        }
+        Insert: {
+          action_config?: Json
+          action_type: string
+          cooldown_minutes?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_triggered_at?: string | null
+          rule_name: string
+          trigger_condition: string
+          trigger_count?: number | null
+        }
+        Update: {
+          action_config?: Json
+          action_type?: string
+          cooldown_minutes?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          last_triggered_at?: string | null
+          rule_name?: string
+          trigger_condition?: string
+          trigger_count?: number | null
+        }
+        Relationships: []
+      }
+      service_catalog: {
+        Row: {
+          category: string
+          config: Json | null
+          created_at: string
+          description: string | null
+          discovered_by: string | null
+          id: string
+          launched_at: string | null
+          metrics: Json | null
+          name: string
+          service_key: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          config?: Json | null
+          created_at?: string
+          description?: string | null
+          discovered_by?: string | null
+          id?: string
+          launched_at?: string | null
+          metrics?: Json | null
+          name: string
+          service_key: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          config?: Json | null
+          created_at?: string
+          description?: string | null
+          discovered_by?: string | null
+          id?: string
+          launched_at?: string | null
+          metrics?: Json | null
+          name?: string
+          service_key?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      system_metrics: {
+        Row: {
+          created_at: string
+          dimensions: Json | null
+          id: string
+          metric_name: string
+          metric_type: string
+          metric_value: number
+          recorded_at: string
+        }
+        Insert: {
+          created_at?: string
+          dimensions?: Json | null
+          id?: string
+          metric_name: string
+          metric_type?: string
+          metric_value: number
+          recorded_at?: string
+        }
+        Update: {
+          created_at?: string
+          dimensions?: Json | null
+          id?: string
+          metric_name?: string
+          metric_type?: string
+          metric_value?: number
+          recorded_at?: string
+        }
+        Relationships: []
       }
       tasks: {
         Row: {
