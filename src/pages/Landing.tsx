@@ -1,6 +1,6 @@
 /**
  * Landing Page - Enterprise Grade Customer Acquisition
- * דף נחיתה Premium עם אנימציות מתקדמות ו-UX מושלם
+ * דף נחיתה Premium עם Free Trial, Trust Signals ו-UX מושלם
  */
 
 import { useState, useEffect } from 'react';
@@ -27,10 +27,23 @@ import {
   DollarSign,
   Bot,
   Star,
-  ChevronDown
+  ChevronDown,
+  Gift,
+  Key,
+  Copy,
+  Users,
+  Award
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { 
+  TechPartners, 
+  TrustBadges, 
+  CaseStudyCards, 
+  TestimonialSection,
+  GuaranteeBadge,
+  LiveActivityFeed 
+} from '@/components/landing/TrustSignals';
 
 // Animated counter hook
 function useCounter(end: number, duration: number = 2000, delay: number = 0) {
@@ -128,47 +141,53 @@ export default function Landing() {
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setIsVisible(true);
   }, []);
 
-  const handleGetStarted = async () => {
+  // Free Trial handler
+  const handleFreeTrial = async () => {
     if (!email) {
-      toast.error('הזן אימייל כדי להתחיל');
+      toast.error('הזן אימייל כדי לקבל גישה חינם');
       return;
     }
 
     setIsLoading(true);
     try {
-      const { data: packs } = await supabase
-        .from('credit_packs')
-        .select('id')
-        .eq('is_active', true)
-        .order('credits', { ascending: true })
-        .limit(1)
-        .single();
-
-      if (!packs) {
-        navigate('/purchase');
-        return;
-      }
-
-      const { data, error } = await supabase.functions.invoke('create-coinbase-checkout', {
-        body: { pack_id: packs.id, customer_email: email },
+      const { data, error } = await supabase.functions.invoke('provision-free-trial', {
+        body: { email },
       });
 
       if (error) throw error;
-      if (data.hosted_url) {
-        sessionStorage.setItem('pending_charge_id', data.charge_id);
-        sessionStorage.setItem('pending_email', email);
-        window.location.href = data.hosted_url;
+
+      if (data.already_used) {
+        toast.error(data.error);
+        return;
+      }
+
+      if (data.api_key) {
+        setApiKey(data.api_key);
+        setShowApiKey(true);
+        toast.success('מזל טוב! קיבלת 10 קריאות API בחינם 🎉');
       }
     } catch (error) {
-      console.error('Checkout error:', error);
+      console.error('Free trial error:', error);
       toast.error('שגיאה - נסה שוב');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const copyApiKey = () => {
+    if (apiKey) {
+      navigator.clipboard.writeText(apiKey);
+      setCopied(true);
+      toast.success('הועתק!');
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
@@ -214,36 +233,69 @@ export default function Landing() {
             ופערים בתשלומים — <span className="text-primary font-semibold">בסנטים בודדים לבדיקה</span>
           </p>
 
-          {/* CTA */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
-            <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-primary to-emerald-500 rounded-lg blur opacity-25 group-hover:opacity-50 transition duration-500" />
-              <Input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="relative w-72 h-14 text-center text-lg bg-background border-2 border-primary/30 focus:border-primary"
-                dir="ltr"
-              />
+          {/* CTA - Free Trial */}
+          {showApiKey && apiKey ? (
+            <Card className="max-w-md mx-auto mb-16 border-2 border-primary/50 bg-primary/5">
+              <CardContent className="p-6">
+                <div className="text-center mb-4">
+                  <CheckCircle2 className="w-12 h-12 text-primary mx-auto mb-2" />
+                  <h3 className="text-xl font-bold">הנה ה-API Key שלך!</h3>
+                  <p className="text-sm text-muted-foreground">שמור אותו - לא תראה אותו שוב</p>
+                </div>
+                <div className="relative mb-4">
+                  <Input value={apiKey} readOnly className="font-mono text-sm pr-12" dir="ltr" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute left-1 top-1/2 -translate-y-1/2"
+                    onClick={copyApiKey}
+                  >
+                    {copied ? <CheckCircle2 className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <div className="flex justify-center gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-primary">10</div>
+                    <div className="text-muted-foreground">קרדיטים</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-primary">∞</div>
+                    <div className="text-muted-foreground">תוקף</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+              <div className="relative group">
+                <div className="absolute -inset-1 bg-gradient-to-r from-primary to-primary/60 rounded-lg blur opacity-25 group-hover:opacity-50 transition duration-500" />
+                <Input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="relative w-72 h-14 text-center text-lg bg-background border-2 border-primary/30 focus:border-primary"
+                  dir="ltr"
+                />
+              </div>
+              <Button 
+                size="lg" 
+                className="h-14 px-8 text-lg gap-2 shadow-lg"
+                onClick={handleFreeTrial}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <span className="animate-spin">⏳</span>
+                ) : (
+                  <>
+                    <Gift className="w-5 h-5" />
+                    קבל 10 קריאות בחינם
+                    <ArrowRight className="w-5 h-5 mr-1" />
+                  </>
+                )}
+              </Button>
             </div>
-            <Button 
-              size="lg" 
-              className="h-14 px-8 text-lg gap-2 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary/90 hover:to-emerald-500/90 shadow-lg shadow-primary/25"
-              onClick={handleGetStarted}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <span className="animate-spin">⏳</span>
-              ) : (
-                <>
-                  <Zap className="w-5 h-5" />
-                  התחל עכשיו
-                  <ArrowRight className="w-5 h-5 mr-1" />
-                </>
-              )}
-            </Button>
-          </div>
+          )}
 
           {/* Trust Signals */}
           <div className="flex flex-wrap justify-center gap-8 text-sm text-muted-foreground">
@@ -282,6 +334,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* Tech Partners / Trust Signals */}
+      <TechPartners />
 
       {/* Products Section */}
       <section className="py-24">
@@ -516,13 +571,13 @@ export default function Landing() {
       </section>
 
       {/* Final CTA */}
-      <section className="py-24 bg-gradient-to-br from-primary/10 via-background to-warning/5">
+      <section className="py-24 bg-gradient-to-br from-primary/10 via-background to-muted/30">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
             מוכן לגלות מה מתחמק ממך?
           </h2>
           <p className="text-xl text-muted-foreground mb-12">
-            התחל עם $9 בלבד. בלי מנויים, בלי התחייבות.
+            התחל עם 10 קריאות בחינם. בלי כרטיס אשראי.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -537,11 +592,11 @@ export default function Landing() {
             <Button 
               size="lg" 
               className="h-14 px-8 text-lg gap-2"
-              onClick={handleGetStarted}
+              onClick={handleFreeTrial}
               disabled={isLoading}
             >
-              <Zap className="w-5 h-5" />
-              התחל עכשיו
+              <Gift className="w-5 h-5" />
+              קבל גישה חינם
             </Button>
           </div>
         </div>

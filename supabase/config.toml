@@ -122,3 +122,6 @@ verify_jwt = false
 
 [functions.growth-brain]
 verify_jwt = false
+
+[functions.provision-free-trial]
+verify_jwt = false
