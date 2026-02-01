@@ -89,3 +89,12 @@ verify_jwt = false
 
 [functions.micro-dashboard-value]
 verify_jwt = false
+
+[functions.ai-content-engine]
+verify_jwt = false
+
+[functions.ai-intent-scanner]
+verify_jwt = false
+
+[functions.distribution-orchestrator]
+verify_jwt = false

@@ -573,6 +573,63 @@ export type Database = {
           },
         ]
       }
+      content_queue: {
+        Row: {
+          body: string
+          content_type: string
+          context: string | null
+          created_at: string
+          cta: string | null
+          hashtags: string[] | null
+          id: string
+          performance_data: Json | null
+          platform: string
+          product: string | null
+          published_at: string | null
+          published_url: string | null
+          scheduled_for: string | null
+          status: string
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          content_type: string
+          context?: string | null
+          created_at?: string
+          cta?: string | null
+          hashtags?: string[] | null
+          id?: string
+          performance_data?: Json | null
+          platform: string
+          product?: string | null
+          published_at?: string | null
+          published_url?: string | null
+          scheduled_for?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          content_type?: string
+          context?: string | null
+          created_at?: string
+          cta?: string | null
+          hashtags?: string[] | null
+          id?: string
+          performance_data?: Json | null
+          platform?: string
+          product?: string | null
+          published_at?: string | null
+          published_url?: string | null
+          scheduled_for?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       credit_events: {
         Row: {
           amount: number
@@ -1151,9 +1208,11 @@ export type Database = {
         Row: {
           acquisition_campaign: string | null
           acquisition_channel: string | null
+          author: string | null
           budget_signals: string | null
           company: string | null
           composite_score: number | null
+          content: string | null
           converted_at: string | null
           created_at: string
           customer_id: string | null
@@ -1164,6 +1223,7 @@ export type Database = {
           id: string
           intent_score: number | null
           interests: Json | null
+          keywords_matched: string[] | null
           last_contact_at: string | null
           lifetime_value_usd: number | null
           notes: string | null
@@ -1173,10 +1233,12 @@ export type Database = {
           relevance_score: number | null
           source: string
           source_id: string | null
+          source_type: string | null
           source_url: string | null
           status: string
           tags: string[] | null
           tech_stack: Json | null
+          title: string | null
           updated_at: string
           username: string | null
           wallet_address: string | null
@@ -1184,9 +1246,11 @@ export type Database = {
         Insert: {
           acquisition_campaign?: string | null
           acquisition_channel?: string | null
+          author?: string | null
           budget_signals?: string | null
           company?: string | null
           composite_score?: number | null
+          content?: string | null
           converted_at?: string | null
           created_at?: string
           customer_id?: string | null
@@ -1197,6 +1261,7 @@ export type Database = {
           id?: string
           intent_score?: number | null
           interests?: Json | null
+          keywords_matched?: string[] | null
           last_contact_at?: string | null
           lifetime_value_usd?: number | null
           notes?: string | null
@@ -1206,10 +1271,12 @@ export type Database = {
           relevance_score?: number | null
           source: string
           source_id?: string | null
+          source_type?: string | null
           source_url?: string | null
           status?: string
           tags?: string[] | null
           tech_stack?: Json | null
+          title?: string | null
           updated_at?: string
           username?: string | null
           wallet_address?: string | null
@@ -1217,9 +1284,11 @@ export type Database = {
         Update: {
           acquisition_campaign?: string | null
           acquisition_channel?: string | null
+          author?: string | null
           budget_signals?: string | null
           company?: string | null
           composite_score?: number | null
+          content?: string | null
           converted_at?: string | null
           created_at?: string
           customer_id?: string | null
@@ -1230,6 +1299,7 @@ export type Database = {
           id?: string
           intent_score?: number | null
           interests?: Json | null
+          keywords_matched?: string[] | null
           last_contact_at?: string | null
           lifetime_value_usd?: number | null
           notes?: string | null
@@ -1239,10 +1309,12 @@ export type Database = {
           relevance_score?: number | null
           source?: string
           source_id?: string | null
+          source_type?: string | null
           source_url?: string | null
           status?: string
           tags?: string[] | null
           tech_stack?: Json | null
+          title?: string | null
           updated_at?: string
           username?: string | null
           wallet_address?: string | null
@@ -1844,6 +1916,7 @@ export type Database = {
           id: string
           lead_id: string
           message_body: string
+          message_content: string | null
           message_variant: string | null
           persona: string | null
           priority: number | null
@@ -1853,9 +1926,11 @@ export type Database = {
           retry_count: number | null
           scheduled_at: string
           sent_at: string | null
+          source_url: string | null
           status: string
           subject: string | null
           template_id: string | null
+          updated_at: string | null
         }
         Insert: {
           ai_model?: string | null
@@ -1867,6 +1942,7 @@ export type Database = {
           id?: string
           lead_id: string
           message_body: string
+          message_content?: string | null
           message_variant?: string | null
           persona?: string | null
           priority?: number | null
@@ -1876,9 +1952,11 @@ export type Database = {
           retry_count?: number | null
           scheduled_at?: string
           sent_at?: string | null
+          source_url?: string | null
           status?: string
           subject?: string | null
           template_id?: string | null
+          updated_at?: string | null
         }
         Update: {
           ai_model?: string | null
@@ -1890,6 +1968,7 @@ export type Database = {
           id?: string
           lead_id?: string
           message_body?: string
+          message_content?: string | null
           message_variant?: string | null
           persona?: string | null
           priority?: number | null
@@ -1899,9 +1978,11 @@ export type Database = {
           retry_count?: number | null
           scheduled_at?: string
           sent_at?: string | null
+          source_url?: string | null
           status?: string
           subject?: string | null
           template_id?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
