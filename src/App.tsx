@@ -21,6 +21,8 @@ import AdminApiKeys from "./pages/AdminApiKeys";
 import Intelligence from "./pages/Intelligence";
 import Discovery from "./pages/Discovery";
 import BrainDashboard from "./pages/BrainDashboard";
+import MicroLanding from "./pages/MicroLanding";
+import MicroAdminDashboard from "./pages/MicroAdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +53,8 @@ const App = () => (
             <Route path="/intelligence" element={<Intelligence />} />
             <Route path="/discovery" element={<Discovery />} />
             <Route path="/brain" element={<BrainDashboard />} />
+            <Route path="/micro" element={<MicroLanding />} />
+            <Route path="/micro/admin" element={<MicroAdminDashboard />} />
             <Route path="/admin/security" element={<AdminSecurity />} />
             <Route path="/admin/api-keys" element={<AdminApiKeys />} />
             

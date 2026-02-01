@@ -71,3 +71,21 @@ verify_jwt = false
 
 [functions.ingest-webhook]
 verify_jwt = false
+
+[functions.micro-wallet-risk]
+verify_jwt = false
+
+[functions.micro-webhook-check]
+verify_jwt = false
+
+[functions.micro-payment-drift]
+verify_jwt = false
+
+[functions.micro-brain-evaluate]
+verify_jwt = false
+
+[functions.guardian-offer]
+verify_jwt = false
+
+[functions.micro-dashboard-value]
+verify_jwt = false
