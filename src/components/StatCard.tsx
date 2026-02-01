@@ -40,26 +40,26 @@ export function StatCard({
   return (
     <div
       className={cn(
-        'stat-card relative overflow-hidden',
+        'stat-card relative overflow-hidden p-4 lg:p-6',
         'bg-gradient-to-bl',
         variantStyles[variant],
         className
       )}
     >
       {/* Glow effect */}
-      <div className="absolute top-0 left-0 w-32 h-32 -translate-x-1/2 -translate-y-1/2 bg-gradient-radial from-primary/20 to-transparent blur-2xl opacity-50" />
+      <div className="absolute top-0 left-0 w-24 lg:w-32 h-24 lg:h-32 -translate-x-1/2 -translate-y-1/2 bg-gradient-radial from-primary/20 to-transparent blur-2xl opacity-50" />
       
-      <div className="relative flex items-start justify-between">
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold tracking-tight">{value}</p>
+      <div className="relative flex items-start justify-between gap-2">
+        <div className="space-y-1 lg:space-y-2 min-w-0 flex-1">
+          <p className="text-xs lg:text-sm text-muted-foreground truncate">{title}</p>
+          <p className="text-xl lg:text-3xl font-bold tracking-tight">{value}</p>
           {subtitle && (
-            <p className="text-xs text-muted-foreground">{subtitle}</p>
+            <p className="text-[10px] lg:text-xs text-muted-foreground truncate">{subtitle}</p>
           )}
           {trend && (
             <p
               className={cn(
-                'text-xs font-medium',
+                'text-[10px] lg:text-xs font-medium',
                 trend.isPositive ? 'text-success' : 'text-destructive'
               )}
             >
@@ -68,8 +68,8 @@ export function StatCard({
           )}
         </div>
         
-        <div className={cn('p-3 rounded-xl', iconStyles[variant])}>
-          <Icon className="w-6 h-6" />
+        <div className={cn('p-2 lg:p-3 rounded-lg lg:rounded-xl flex-shrink-0', iconStyles[variant])}>
+          <Icon className="w-4 h-4 lg:w-6 lg:h-6" />
         </div>
       </div>
     </div>

@@ -53,7 +53,7 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <AppLayout>
-        <div className="p-8 flex items-center justify-center min-h-[50vh]">
+        <div className="p-4 lg:p-8 flex items-center justify-center min-h-[50vh]">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AppLayout>
@@ -63,7 +63,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <AppLayout>
-        <div className="p-8">
+        <div className="p-4 lg:p-8">
           <div className="text-center text-destructive">
             שגיאה בטעינת נתונים: {error.message}
           </div>
@@ -75,7 +75,7 @@ export default function Dashboard() {
   if (!stats) {
     return (
       <AppLayout>
-        <div className="p-8">
+        <div className="p-4 lg:p-8">
           <div className="text-center text-muted-foreground">
             אין נתונים להצגה
           </div>
@@ -86,11 +86,11 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="p-8 space-y-8">
+      <div className="p-4 lg:p-8 space-y-6 lg:space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold">דשבורד</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl lg:text-3xl font-bold">דשבורד</h1>
+          <p className="text-muted-foreground mt-1 text-sm lg:text-base">
             סקירה כללית של מערכת Token Forge Factory
           </p>
         </div>
@@ -106,8 +106,8 @@ export default function Dashboard() {
           hasFirstPayment={hasFirstPayment || false}
         />
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Stats grid - 2 columns on mobile, 4 on desktop */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-6">
           <StatCard
             title="ג׳ובים היום"
             value={stats.jobsToday}
@@ -138,12 +138,12 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Charts and table */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
+        {/* Charts and table - stack on mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
+          <div className="lg:col-span-2 order-2 lg:order-1">
             <JobsTable jobs={stats.recentJobs} />
           </div>
-          <div>
+          <div className="order-1 lg:order-2">
             <StatusChart distribution={stats.statusDistribution} />
           </div>
         </div>
