@@ -74,13 +74,8 @@ Deno.serve(async (req) => {
     // Fetch approved opportunities that haven't been processed
     const { data: opportunities, error: oppError } = await supabase
       .from('opportunities')
-      .select(`
-        *,
-        signals!signal_id_v2(*),
-        offers(*)
-      `)
+      .select(`*, offers(*)`)
       .eq('status', 'approved')
-      .is('closing_attempts', null)
       .order('composite_score', { ascending: false })
       .limit(20);
     
@@ -96,10 +91,28 @@ Deno.serve(async (req) => {
     const projectUrl = supabaseUrl.replace('.supabase.co', '');
 
     for (const opp of (opportunities || []) as any[]) {
-      const signal = opp.signals as Signal;
       const offer = opp.offers as Offer;
       
-      if (!signal || !offer) continue;
+      // Fetch signal separately (no FK constraint)
+      let signal: Signal | null = null;
+      if (opp.signal_id_v2) {
+        const { data: signalData } = await supabase
+          .from('demand_signals')
+          .select('id, query_text, source_url, payload_json')
+          .eq('id', opp.signal_id_v2)
+          .single();
+        
+        if (signalData) {
+          signal = {
+            id: signalData.id,
+            title: signalData.query_text || '',
+            url: signalData.source_url || '',
+            author: signalData.payload_json?.author || ''
+          };
+        }
+      }
+      
+      if (!offer) continue;
 
       // Generate signed landing link
       const token = await generateSignedToken({
@@ -120,8 +133,8 @@ Deno.serve(async (req) => {
         result: 'pending',
         metadata_json: {
           offer_code: offer.code,
-          signal_title: signal.title,
-          signal_url: signal.url,
+          signal_title: signal?.title || '',
+          signal_url: signal?.url || '',
           score: opp.composite_score
         }
       });
@@ -131,7 +144,7 @@ Deno.serve(async (req) => {
       // Queue outreach if enabled (low volume mode)
       if (settings.outreach_enabled && results.outreach_queued < (settings.max_daily_outreach || 10)) {
         // Only queue if we have an author (potential contact)
-        if (signal.author && signal.author.length > 0) {
+        if (signal?.author && signal.author.length > 0) {
           await supabase.from('outreach_queue').insert({
             lead_id: opp.id, // Using opportunity as lead reference
             channel: 'comment_template',

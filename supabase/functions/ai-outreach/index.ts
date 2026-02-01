@@ -129,9 +129,9 @@ Return JSON with:
             {
               role: 'user',
               content: `Lead context:
-Source: ${lead.source_type}
-Their post/question: "${lead.title}"
-Details: "${lead.content.slice(0, 500)}"
+Source: ${lead.source_type || 'unknown'}
+Their post/question: "${lead.title || 'No title'}"
+Details: "${(lead.content || '').slice(0, 500)}"
 Author: ${lead.author || 'Unknown'}
 
 Write an initial outreach message for ${lead.source_type === 'reddit' ? 'Reddit comment/DM' : 'direct message'}.`

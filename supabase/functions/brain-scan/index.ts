@@ -43,14 +43,32 @@ function detectIntentType(text: string): string {
   return 'other';
 }
 
-// Parse RSS feed
+// Parse RSS feed with better error handling
 async function parseRSSFeed(url: string): Promise<Array<{title: string, link: string, description: string, author: string}>> {
   try {
+    // Skip known problematic sources
+    if (url.includes('news.google.com')) {
+      console.log(`Skipping Google News RSS (known to block): ${url}`);
+      return [];
+    }
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+    
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'Brain-Scanner/1.0' }
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (compatible; Brain-Scanner/1.0)',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*'
+      },
+      signal: controller.signal
     });
     
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      console.warn(`RSS fetch failed for ${url}: HTTP ${response.status}`);
+      return [];
+    }
     
     const text = await response.text();
     const items: Array<{title: string, link: string, description: string, author: string}> = [];
@@ -76,7 +94,11 @@ async function parseRSSFeed(url: string): Promise<Array<{title: string, link: st
     
     return items;
   } catch (error) {
-    console.error(`Failed to parse RSS ${url}:`, error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.warn(`RSS fetch timeout for ${url}`);
+    } else {
+      console.error(`Failed to parse RSS ${url}:`, error);
+    }
     return [];
   }
 }
@@ -157,29 +179,33 @@ Deno.serve(async (req) => {
           
           const fingerprint = await createFingerprint(item.link, item.title);
           
-          // Check if already exists
+          // Check if already exists in demand_signals
           const { data: existing } = await supabase
-            .from('signals')
+            .from('demand_signals')
             .select('id')
-            .eq('fingerprint', fingerprint)
+            .eq('external_id', fingerprint)
             .maybeSingle();
           
           if (existing) continue;
           
-          // Insert new signal
+          // Insert new signal to demand_signals
           const intentType = detectIntentType(fullText);
           
           const { error: insertError } = await supabase
-            .from('signals')
+            .from('demand_signals')
             .insert({
               source_id: source.id,
-              fingerprint,
-              title: item.title.slice(0, 500),
-              raw_text: item.description.slice(0, 2000),
-              author: item.author.slice(0, 100),
-              url: item.link.slice(0, 1000),
-              intent_type: intentType,
-              confidence: intentType !== 'other' ? 0.7 : 0.3
+              external_id: fingerprint,
+              query_text: item.title.slice(0, 500),
+              source_url: item.link.slice(0, 1000),
+              payload_json: {
+                description: item.description.slice(0, 2000),
+                author: item.author.slice(0, 100),
+                intent_type: intentType
+              },
+              urgency_score: intentType !== 'other' ? 0.7 : 0.3,
+              relevance_score: intentType !== 'other' ? 0.7 : 0.3,
+              status: 'new'
             });
           
           if (!insertError) {
