@@ -31,9 +31,11 @@ interface Lead {
   id?: string;
   source_url: string;
   source_type: string;
-  title: string;
+  title?: string | null;
   content: string;
-  author?: string;
+  author?: string | null;
+  username?: string | null;
+  source?: string | null;
   relevance_score: number;
 }
 
@@ -211,7 +213,7 @@ Write an initial outreach message for ${lead.source_type === 'reddit' ? 'Reddit 
     const hotLeads = leadsToProcess.filter(l => l.relevance_score >= 80);
     if (hotLeads.length > 0) {
       const hotLeadsSummary = hotLeads
-        .map(l => `• ${l.title} (${l.relevance_score}%)`)
+        .map(l => `• ${l.title || l.author || l.username || l.source || 'Unknown Lead'} (${l.relevance_score}%)`)
         .join('\n');
       
       await supabase.functions.invoke('telegram-notify', {

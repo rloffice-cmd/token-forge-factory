@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "fmt": {
+    "indentWidth": 2,
+    "singleQuote": true
+  },
+  "nodeModulesDir": "auto"
+}
