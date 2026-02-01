@@ -257,6 +257,45 @@ export type Database = {
           },
         ]
       }
+      auto_offer_rules: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          offer_reason: string
+          priority: number
+          rule_name: string
+          rule_type: string
+          threshold_unit: string
+          threshold_value: number
+          time_window_hours: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          offer_reason: string
+          priority?: number
+          rule_name: string
+          rule_type: string
+          threshold_unit?: string
+          threshold_value: number
+          time_window_hours?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          offer_reason?: string
+          priority?: number
+          rule_name?: string
+          rule_type?: string
+          threshold_unit?: string
+          threshold_value?: number
+          time_window_hours?: number
+        }
+        Relationships: []
+      }
       brain_settings: {
         Row: {
           allowed_contracts: Json
@@ -942,6 +981,62 @@ export type Database = {
           },
         ]
       }
+      guardian_offers: {
+        Row: {
+          charge_id: string | null
+          created_at: string
+          customer_id: string
+          estimated_monthly_loss_usd: number
+          expires_at: string
+          id: string
+          paid_at: string | null
+          payment_link: string | null
+          price_usd: number
+          reason: string
+          sent_at: string | null
+          status: string
+          viewed_at: string | null
+        }
+        Insert: {
+          charge_id?: string | null
+          created_at?: string
+          customer_id: string
+          estimated_monthly_loss_usd?: number
+          expires_at?: string
+          id?: string
+          paid_at?: string | null
+          payment_link?: string | null
+          price_usd?: number
+          reason: string
+          sent_at?: string | null
+          status?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          charge_id?: string | null
+          created_at?: string
+          customer_id?: string
+          estimated_monthly_loss_usd?: number
+          expires_at?: string
+          id?: string
+          paid_at?: string | null
+          payment_link?: string | null
+          price_usd?: number
+          reason?: string
+          sent_at?: string | null
+          status?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_offers_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       improvement_suggestions: {
         Row: {
           category: string
@@ -1396,6 +1491,118 @@ export type Database = {
         }
         Relationships: []
       }
+      micro_events: {
+        Row: {
+          cost_usd: number
+          created_at: string
+          customer_id: string
+          estimated_loss_usd: number
+          id: string
+          product: string
+          raw_input: Json
+          raw_output: Json
+          severity: number
+        }
+        Insert: {
+          cost_usd?: number
+          created_at?: string
+          customer_id: string
+          estimated_loss_usd?: number
+          id?: string
+          product: string
+          raw_input?: Json
+          raw_output?: Json
+          severity?: number
+        }
+        Update: {
+          cost_usd?: number
+          created_at?: string
+          customer_id?: string
+          estimated_loss_usd?: number
+          id?: string
+          product?: string
+          raw_input?: Json
+          raw_output?: Json
+          severity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "micro_events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      micro_pricing: {
+        Row: {
+          created_at: string
+          description: string | null
+          description_he: string | null
+          is_active: boolean
+          price_usd: number
+          product: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          description_he?: string | null
+          is_active?: boolean
+          price_usd: number
+          product: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          description_he?: string | null
+          is_active?: boolean
+          price_usd?: number
+          product?: string
+        }
+        Relationships: []
+      }
+      micro_rate_limits: {
+        Row: {
+          blocked_at: string | null
+          cap_usd: number
+          customer_id: string
+          hits_count: number
+          id: string
+          limit_date: string
+          spent_usd: number
+          updated_at: string
+        }
+        Insert: {
+          blocked_at?: string | null
+          cap_usd?: number
+          customer_id: string
+          hits_count?: number
+          id?: string
+          limit_date?: string
+          spent_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          blocked_at?: string | null
+          cap_usd?: number
+          customer_id?: string
+          hits_count?: number
+          id?: string
+          limit_date?: string
+          spent_usd?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "micro_rate_limits_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           amount: number | null
@@ -1702,6 +1909,56 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pain_scores: {
+        Row: {
+          customer_id: string
+          estimated_loss_usd_total: number
+          events_count: number
+          id: string
+          pain_score_total: number
+          payment_drift_total_usd: number
+          top_problem_type: string | null
+          updated_at: string
+          wallet_risk_high_count: number
+          webhook_failures_count: number
+          window_date: string
+        }
+        Insert: {
+          customer_id: string
+          estimated_loss_usd_total?: number
+          events_count?: number
+          id?: string
+          pain_score_total?: number
+          payment_drift_total_usd?: number
+          top_problem_type?: string | null
+          updated_at?: string
+          wallet_risk_high_count?: number
+          webhook_failures_count?: number
+          window_date?: string
+        }
+        Update: {
+          customer_id?: string
+          estimated_loss_usd_total?: number
+          events_count?: number
+          id?: string
+          pain_score_total?: number
+          payment_drift_total_usd?: number
+          top_problem_type?: string | null
+          updated_at?: string
+          wallet_risk_high_count?: number
+          webhook_failures_count?: number
+          window_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pain_scores_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
             referencedColumns: ["id"]
           },
         ]
