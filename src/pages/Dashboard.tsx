@@ -30,13 +30,23 @@ export default function Dashboard() {
   const { data: hasPayoutWallet } = useQuery({
     queryKey: ['payout-wallet-check'],
     queryFn: async () => {
-      const { data } = await supabase
+      // Check treasury_settings first
+      const { data: treasuryData } = await supabase
         .from('treasury_settings')
         .select('payout_wallet_address')
         .limit(1)
         .maybeSingle();
       
-      return !!(data?.payout_wallet_address);
+      if (treasuryData?.payout_wallet_address) return true;
+      
+      // Fallback to brain_settings
+      const { data: brainData } = await supabase
+        .from('brain_settings')
+        .select('payout_wallet_address')
+        .limit(1)
+        .maybeSingle();
+      
+      return !!(brainData?.payout_wallet_address);
     },
   });
 
