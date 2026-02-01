@@ -140,3 +140,9 @@ verify_jwt = false
 
 [functions.discord-auto-outreach]
 verify_jwt = false
+
+[functions.full-autonomous-engine]
+verify_jwt = false
+
+[functions.daily-autonomous-report]
+verify_jwt = false
