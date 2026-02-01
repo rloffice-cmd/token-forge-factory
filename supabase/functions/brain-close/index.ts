@@ -73,7 +73,9 @@ Deno.serve(async (req) => {
     };
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const projectUrl = supabaseUrl.replace('.supabase.co', '');
+    // Build the frontend URL from project ref
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || 'app';
+    const frontendUrl = `https://${projectRef}.lovable.app`;
 
     for (const opp of (opportunities || []) as any[]) {
       const offer = opp.offers as Offer;
@@ -108,7 +110,7 @@ Deno.serve(async (req) => {
       });
       
       // Landing URL (pointing to the app's landing page)
-      const landingUrl = `${projectUrl}/landing?offer=${offer.code}&t=${token}`;
+      const landingUrl = `${frontendUrl}/landing?offer=${offer.code}&t=${token}`;
       
       // Record closing attempt
       await supabase.from('closing_attempts').insert({
@@ -126,21 +128,64 @@ Deno.serve(async (req) => {
       
       results.links_generated++;
 
-      // Queue outreach if enabled (low volume mode)
+      // Queue outreach if enabled - always queue even without author
       if (settings.outreach_enabled && results.outreach_queued < (settings.max_daily_outreach || 10)) {
-        // Only queue if we have an author (potential contact)
-        if (signalAuthor && signalAuthor.length > 0) {
+        // First, create or find a lead for this opportunity
+        let leadId = null;
+        
+        // Check if lead already exists for this signal URL
+        if (signalUrl) {
+          const { data: existingLead } = await supabase
+            .from('leads')
+            .select('id')
+            .eq('source_url', signalUrl)
+            .maybeSingle();
+          
+          if (existingLead) {
+            leadId = existingLead.id;
+          }
+        }
+        
+        // Create new lead if not found
+        if (!leadId) {
+          const { data: newLead, error: leadError } = await supabase
+            .from('leads')
+            .insert({
+              source: 'brain',
+              source_url: signalUrl || null,
+              title: signalTitle || offer.name,
+              content: `Opportunity for ${offer.name}`,
+              author: signalAuthor || null,
+              relevance_score: opp.composite_score * 100,
+              status: 'new'
+            })
+            .select('id')
+            .single();
+          
+          if (!leadError && newLead) {
+            leadId = newLead.id;
+          }
+        }
+        
+        if (leadId) {
+          // Generate outreach message for this opportunity
+          const outreachMessage = signalAuthor && signalAuthor.length > 0
+            ? `בדיקה מהירה: ${offer.name_he} יכול לעזור לך. נסה חינם: ${landingUrl}`
+            : `מצאנו פתרון לבעיה שלך: ${offer.name_he}. קבל גישה כאן: ${landingUrl}`;
+          
           await supabase.from('outreach_queue').insert({
-            lead_id: opp.id, // Using opportunity as lead reference
-            channel: 'comment_template',
-            message_body: `בדיקה מהירה: ${offer.name_he} יכול לעזור לך. נסה חינם: ${landingUrl}`,
+            lead_id: leadId,
+            channel: signalUrl ? 'comment' : 'direct',
+            message_body: outreachMessage,
             subject: offer.name_he,
             status: 'queued',
             priority: Math.round(opp.composite_score * 10),
+            source_url: signalUrl || null,
             generation_metadata: {
               opportunity_id: opp.id,
               offer_code: offer.code,
-              landing_url: landingUrl
+              landing_url: landingUrl,
+              signal_title: signalTitle
             }
           });
           
