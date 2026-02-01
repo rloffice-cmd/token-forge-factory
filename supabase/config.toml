@@ -44,3 +44,12 @@ verify_jwt = false
 
 [functions.auto-closer]
 verify_jwt = false
+
+[functions.demand-scanner]
+verify_jwt = false
+
+[functions.opportunity-scorer]
+verify_jwt = false
+
+[functions.fulfillment-provisioner]
+verify_jwt = false

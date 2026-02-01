@@ -374,6 +374,67 @@ export type Database = {
         }
         Relationships: []
       }
+      closing_attempts: {
+        Row: {
+          action: string
+          charge_id: string | null
+          checkout_url: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          metadata_json: Json | null
+          opportunity_id: string
+          payment_id: string | null
+          result: string
+        }
+        Insert: {
+          action: string
+          charge_id?: string | null
+          checkout_url?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          metadata_json?: Json | null
+          opportunity_id: string
+          payment_id?: string | null
+          result?: string
+        }
+        Update: {
+          action?: string
+          charge_id?: string | null
+          checkout_url?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          metadata_json?: Json | null
+          opportunity_id?: string
+          payment_id?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "closing_attempts_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_attempts_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "closing_attempts_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_events: {
         Row: {
           amount: number
@@ -495,6 +556,62 @@ export type Database = {
           },
         ]
       }
+      demand_signals: {
+        Row: {
+          category: string | null
+          created_at: string
+          detected_at: string
+          external_id: string | null
+          id: string
+          payload_json: Json
+          query_text: string
+          rejection_reason: string | null
+          relevance_score: number | null
+          source_id: string | null
+          source_url: string | null
+          status: string
+          urgency_score: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          detected_at?: string
+          external_id?: string | null
+          id?: string
+          payload_json?: Json
+          query_text: string
+          rejection_reason?: string | null
+          relevance_score?: number | null
+          source_id?: string | null
+          source_url?: string | null
+          status?: string
+          urgency_score?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          detected_at?: string
+          external_id?: string | null
+          id?: string
+          payload_json?: Json
+          query_text?: string
+          rejection_reason?: string | null
+          relevance_score?: number | null
+          source_id?: string | null
+          source_url?: string | null
+          status?: string
+          urgency_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demand_signals_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "offer_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       denylist: {
         Row: {
           active: boolean | null
@@ -552,6 +669,33 @@ export type Database = {
         }
         Relationships: []
       }
+      engine_config: {
+        Row: {
+          config_key: string
+          config_value: Json
+          created_at: string
+          description: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          config_key: string
+          config_value: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          config_key?: string
+          config_value?: Json
+          created_at?: string
+          description?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       failure_insights: {
         Row: {
           confidence: number
@@ -602,6 +746,93 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fulfillment_jobs: {
+        Row: {
+          api_key_id: string | null
+          artifact_url: string | null
+          created_at: string
+          delivered_at: string | null
+          delivery_email: string | null
+          delivery_type: string
+          error_message: string | null
+          id: string
+          offer_id: string | null
+          opportunity_id: string | null
+          payment_id: string
+          queued_at: string
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          api_key_id?: string | null
+          artifact_url?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          delivery_email?: string | null
+          delivery_type: string
+          error_message?: string | null
+          id?: string
+          offer_id?: string | null
+          opportunity_id?: string | null
+          payment_id: string
+          queued_at?: string
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          api_key_id?: string | null
+          artifact_url?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          delivery_email?: string | null
+          delivery_type?: string
+          error_message?: string | null
+          id?: string
+          offer_id?: string | null
+          opportunity_id?: string | null
+          payment_id?: string
+          queued_at?: string
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fulfillment_jobs_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fulfillment_jobs_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fulfillment_jobs_opportunity_id_fkey"
+            columns: ["opportunity_id"]
+            isOneToOne: false
+            referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fulfillment_jobs_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fulfillment_jobs_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
             referencedColumns: ["id"]
           },
         ]
@@ -1101,6 +1332,161 @@ export type Database = {
           was_sent?: boolean
         }
         Relationships: []
+      }
+      offer_sources: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          last_scanned_at: string | null
+          name: string
+          scan_config: Json
+          scan_interval_minutes: number
+          source_type: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_scanned_at?: string | null
+          name: string
+          scan_config?: Json
+          scan_interval_minutes?: number
+          source_type: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_scanned_at?: string | null
+          name?: string
+          scan_config?: Json
+          scan_interval_minutes?: number
+          source_type?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      offers: {
+        Row: {
+          created_at: string
+          delivery_config: Json
+          delivery_type: string
+          description: string | null
+          description_he: string | null
+          id: string
+          is_active: boolean
+          keywords: string[]
+          min_value_usd: number
+          name: string
+          name_he: string
+          pack_id: string | null
+          terms_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          delivery_config?: Json
+          delivery_type: string
+          description?: string | null
+          description_he?: string | null
+          id?: string
+          is_active?: boolean
+          keywords?: string[]
+          min_value_usd?: number
+          name: string
+          name_he: string
+          pack_id?: string | null
+          terms_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          delivery_config?: Json
+          delivery_type?: string
+          description?: string | null
+          description_he?: string | null
+          id?: string
+          is_active?: boolean
+          keywords?: string[]
+          min_value_usd?: number
+          name?: string
+          name_he?: string
+          pack_id?: string | null
+          terms_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offers_pack_id_fkey"
+            columns: ["pack_id"]
+            isOneToOne: false
+            referencedRelation: "credit_packs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      opportunities: {
+        Row: {
+          approved_at: string | null
+          auto_approved: boolean | null
+          composite_score: number | null
+          confidence_score: number | null
+          created_at: string
+          expected_value_usd: number | null
+          id: string
+          offer_id: string | null
+          rejection_reason: string | null
+          risk_flags: string[] | null
+          signal_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          auto_approved?: boolean | null
+          composite_score?: number | null
+          confidence_score?: number | null
+          created_at?: string
+          expected_value_usd?: number | null
+          id?: string
+          offer_id?: string | null
+          rejection_reason?: string | null
+          risk_flags?: string[] | null
+          signal_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          auto_approved?: boolean | null
+          composite_score?: number | null
+          confidence_score?: number | null
+          created_at?: string
+          expected_value_usd?: number | null
+          id?: string
+          offer_id?: string | null
+          rejection_reason?: string | null
+          risk_flags?: string[] | null
+          signal_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "opportunities_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "offers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "opportunities_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "demand_signals"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       outreach_queue: {
         Row: {
