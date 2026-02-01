@@ -131,7 +131,7 @@ Return JSON with:
               content: `Lead context:
 Source: ${lead.source_type || 'unknown'}
 Their post/question: "${lead.title || 'No title'}"
-Details: "${(lead.content || '').slice(0, 500)}"
+Details: "${lead.content ? lead.content.slice(0, 500) : 'No details available'}"
 Author: ${lead.author || 'Unknown'}
 
 Write an initial outreach message for ${lead.source_type === 'reddit' ? 'Reddit comment/DM' : 'direct message'}.`
@@ -174,11 +174,11 @@ Write an initial outreach message for ${lead.source_type === 'reddit' ? 'Reddit 
           scheduled_for: outreach.scheduled_for,
         });
         
-        // Update lead status
+        // Update lead status to a valid status value
         if (lead.id) {
           await supabase
             .from('leads')
-            .update({ status: 'outreach_queued' })
+            .update({ status: 'contacted' })
             .eq('id', lead.id);
         }
       }
@@ -222,16 +222,24 @@ Write an initial outreach message for ${lead.source_type === 'reddit' ? 'Reddit 
       });
     }
 
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      job_id: 'a0000000-0000-0000-0000-000000000003', // Sentinel for outreach
-      action: 'outreach_generated',
-      metadata: {
-        leads_processed: leadsToProcess.length,
-        messages_created: outreachMessages.length,
-        hot_leads: hotLeads.length,
-      },
-    });
+    // Audit log - get a valid job_id
+    const { data: validJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .limit(1)
+      .single();
+    
+    if (validJob) {
+      await supabase.from('audit_logs').insert({
+        job_id: validJob.id,
+        action: 'outreach_generated',
+        metadata: {
+          leads_processed: leadsToProcess.length,
+          messages_created: outreachMessages.length,
+          hot_leads: hotLeads.length,
+        },
+      });
+    }
 
     return new Response(
       JSON.stringify({
