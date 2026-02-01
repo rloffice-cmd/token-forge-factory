@@ -125,3 +125,18 @@ verify_jwt = false
 
 [functions.provision-free-trial]
 verify_jwt = false
+
+[functions.reddit-auto-outreach]
+verify_jwt = false
+
+[functions.twitter-auto-outreach]
+verify_jwt = false
+
+[functions.autonomous-marketer]
+verify_jwt = false
+
+[functions.hacker-news-outreach]
+verify_jwt = false
+
+[functions.discord-auto-outreach]
+verify_jwt = false
