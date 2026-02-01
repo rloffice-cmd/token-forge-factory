@@ -89,24 +89,58 @@ function estimateValue(offer: Offer, score: number): number {
   return starterPrice * (0.5 + score);
 }
 
-// Match signal to best offer
+// Match signal to best offer - improved matching
 function matchOffer(signal: Signal, offers: Offer[]): Offer | null {
   const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
-  const category = signal.category || '';
+  const category = (signal.category || '').toLowerCase();
   
-  // Risk API keywords
-  if (/risk|security/i.test(category) || 
-      /wallet|contract|scam|malicious|fraud|phishing|audit|security/i.test(text)) {
-    return offers.find(o => o.code === 'risk-api') || null;
+  // Score each offer based on keyword matches
+  let bestOffer: Offer | null = null;
+  let bestScore = 0;
+  
+  for (const offer of offers) {
+    let score = 0;
+    
+    // Check each keyword from the offer
+    for (const keyword of offer.keywords) {
+      if (text.includes(keyword.toLowerCase())) {
+        score += 1;
+      }
+    }
+    
+    // Boost for category match
+    if (category && offer.keywords.some(kw => category.includes(kw.toLowerCase()))) {
+      score += 2;
+    }
+    
+    // Additional matching patterns for risk-api
+    if (offer.code === 'risk-api') {
+      if (/risk\s*assess|vulnerab|threat|attack|exploit|hack|phish|fraud|scam|malicious|drainer|honeypot/i.test(text)) {
+        score += 3;
+      }
+      if (/crypto|blockchain|web3|defi|nft|token|smart\s*contract|on-?chain/i.test(text)) {
+        score += 1;
+      }
+    }
+    
+    // Additional matching patterns for webhook-monitor
+    if (offer.code === 'webhook-monitor') {
+      if (/webhook|web\s*hook|callback|endpoint|integration|debug.*api|api.*debug/i.test(text)) {
+        score += 3;
+      }
+      if (/stripe|shopify|payment|notification|event.*driven|real-?time/i.test(text)) {
+        score += 1;
+      }
+    }
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestOffer = offer;
+    }
   }
   
-  // Webhook monitor keywords
-  if (/webhook|api|integration/i.test(category) ||
-      /webhook|replay|retry|signature|verify|events/i.test(text)) {
-    return offers.find(o => o.code === 'webhook-monitor') || null;
-  }
-  
-  return null;
+  // Minimum threshold to match
+  return bestScore >= 2 ? bestOffer : null;
 }
 
 Deno.serve(async (req) => {

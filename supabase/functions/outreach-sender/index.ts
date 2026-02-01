@@ -32,8 +32,8 @@ serve(async (req) => {
       .from('outreach_queue')
       .select('*')
       .eq('status', 'queued')
-      .lte('scheduled_for', now)
-      .order('scheduled_for', { ascending: true })
+      .lte('scheduled_at', now)
+      .order('scheduled_at', { ascending: true })
       .limit(20);
 
     if (!queuedMessages || queuedMessages.length === 0) {
@@ -171,16 +171,24 @@ Write a ${message.message_type === 'follow_up_1' ? 'first follow-up' :
       }
     }
 
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      job_id: 'a0000000-0000-0000-0000-000000000005', // Sentinel
-      action: 'outreach_batch_sent',
-      metadata: {
-        total_queued: queuedMessages.length,
-        sent: sent,
-        failed: failed,
-      },
-    });
+    // Audit log - get valid job_id
+    const { data: validJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .limit(1)
+      .single();
+    
+    if (validJob) {
+      await supabase.from('audit_logs').insert({
+        job_id: validJob.id,
+        action: 'outreach_batch_sent',
+        metadata: {
+          total_queued: queuedMessages.length,
+          sent: sent,
+          failed: failed,
+        },
+      });
+    }
 
     return new Response(
       JSON.stringify({
