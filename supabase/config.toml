@@ -155,3 +155,6 @@ verify_jwt = false
 
 [functions.affiliate-click-tracker]
 verify_jwt = false
+
+[functions.dynamic-pricing-engine]
+verify_jwt = false

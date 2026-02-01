@@ -2910,6 +2910,93 @@ export type Database = {
           },
         ]
       }
+      pricing_history: {
+        Row: {
+          ai_confidence: number | null
+          change_percent: number
+          created_at: string
+          id: string
+          is_successful: boolean | null
+          measured_at: string | null
+          metrics_snapshot: Json | null
+          new_price_usd: number
+          old_price_usd: number
+          performance_after: Json | null
+          product_id: string
+          product_name: string
+          product_type: string
+          reason: string
+        }
+        Insert: {
+          ai_confidence?: number | null
+          change_percent: number
+          created_at?: string
+          id?: string
+          is_successful?: boolean | null
+          measured_at?: string | null
+          metrics_snapshot?: Json | null
+          new_price_usd: number
+          old_price_usd: number
+          performance_after?: Json | null
+          product_id: string
+          product_name: string
+          product_type: string
+          reason: string
+        }
+        Update: {
+          ai_confidence?: number | null
+          change_percent?: number
+          created_at?: string
+          id?: string
+          is_successful?: boolean | null
+          measured_at?: string | null
+          metrics_snapshot?: Json | null
+          new_price_usd?: number
+          old_price_usd?: number
+          performance_after?: Json | null
+          product_id?: string
+          product_name?: string
+          product_type?: string
+          reason?: string
+        }
+        Relationships: []
+      }
+      pricing_rules: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          max_change_percent: number
+          max_price_usd: number
+          min_price_usd: number
+          optimization_goal: string
+          product_type: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_change_percent?: number
+          max_price_usd?: number
+          min_price_usd?: number
+          optimization_goal?: string
+          product_type: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_change_percent?: number
+          max_price_usd?: number
+          min_price_usd?: number
+          optimization_goal?: string
+          product_type?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           api_key_id: string
