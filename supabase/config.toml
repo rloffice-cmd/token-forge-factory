@@ -104,3 +104,6 @@ verify_jwt = false
 
 [functions.outreach-retry-worker]
 verify_jwt = false
+
+[functions.brain-daily-metrics]
+verify_jwt = false

@@ -23,6 +23,7 @@ import Discovery from "./pages/Discovery";
 import BrainDashboard from "./pages/BrainDashboard";
 import MicroLanding from "./pages/MicroLanding";
 import MicroAdminDashboard from "./pages/MicroAdminDashboard";
+import Sources from "./pages/Sources";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,6 +53,7 @@ const App = () => (
             <Route path="/system" element={<SystemDashboard />} />
             <Route path="/intelligence" element={<Intelligence />} />
             <Route path="/discovery" element={<Discovery />} />
+            <Route path="/sources" element={<Sources />} />
             <Route path="/brain" element={<BrainDashboard />} />
             <Route path="/micro" element={<MicroLanding />} />
             <Route path="/micro/admin" element={<MicroAdminDashboard />} />
