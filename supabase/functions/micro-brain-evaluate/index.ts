@@ -1,6 +1,8 @@
 /**
  * Brain Evaluate - Pain Detection & Auto-Offer Engine
- * Evaluates customer pain scores and triggers Guardian offers
+ * Evaluates customer pain from micro_events and triggers Guardian offers
+ * 
+ * FIXED: Now evaluates rules using time_window_hours from micro_events directly
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -17,11 +19,20 @@ serve(async (req) => {
   }
 
   try {
-    // Validate admin token
+    // Validate admin token - STRICT equality check
     const authHeader = req.headers.get('authorization');
     const adminToken = Deno.env.get('ADMIN_API_TOKEN');
     
-    if (!authHeader || !authHeader.includes(adminToken || '')) {
+    if (!adminToken) {
+      console.error('ADMIN_API_TOKEN not configured');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    const expectedAuth = `Bearer ${adminToken}`;
+    if (!authHeader || authHeader !== expectedAuth) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -43,33 +54,6 @@ serve(async (req) => {
       );
     }
 
-    const today = new Date().toISOString().split('T')[0];
-
-    // Get customer's pain scores for today
-    const { data: painData } = await supabase
-      .from('pain_scores')
-      .select('*')
-      .eq('customer_id', customer_id)
-      .eq('window_date', today)
-      .maybeSingle();
-
-    const pain = painData as any;
-    if (!pain) {
-      return new Response(
-        JSON.stringify({ evaluated: true, offer_triggered: false, reason: 'No pain data' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Get active rules
-    const { data: rulesData } = await supabase
-      .from('auto_offer_rules')
-      .select('*')
-      .eq('is_active', true)
-      .order('priority', { ascending: true });
-
-    const rules = (rulesData || []) as any[];
-
     // Check if customer already has an active offer
     const { data: existingOffer } = await supabase
       .from('guardian_offers')
@@ -85,42 +69,127 @@ serve(async (req) => {
       );
     }
 
-    // Evaluate rules
+    // Get active rules
+    const { data: rulesData } = await supabase
+      .from('auto_offer_rules')
+      .select('*')
+      .eq('is_active', true)
+      .order('priority', { ascending: true });
+
+    const rules = (rulesData || []) as any[];
+
+    if (rules.length === 0) {
+      return new Response(
+        JSON.stringify({ evaluated: true, offer_triggered: false, reason: 'No active rules' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Evaluate each rule by querying micro_events with the rule's time_window_hours
     let triggeredRule: any = null;
     let offerReason: string | null = null;
+    let estimatedLossFromEvents = 0;
 
     for (const rule of rules) {
+      const windowHours = rule.time_window_hours || 24;
+      const windowStart = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+      
       let triggered = false;
 
       switch (rule.rule_type) {
-        case 'wallet_high':
-          if (pain.wallet_risk_high_count >= rule.threshold_value) {
+        case 'wallet_high': {
+          // Count HIGH risk wallet events in the time window
+          const { count } = await supabase
+            .from('micro_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('customer_id', customer_id)
+            .eq('product', 'wallet-risk')
+            .gte('created_at', windowStart)
+            .filter('raw_output->>risk_level', 'eq', 'HIGH');
+
+          if ((count || 0) >= rule.threshold_value) {
             triggered = true;
             offerReason = 'wallet_high';
+            
+            // Calculate estimated loss from these events
+            const { data: lossEvents } = await supabase
+              .from('micro_events')
+              .select('estimated_loss_usd')
+              .eq('customer_id', customer_id)
+              .eq('product', 'wallet-risk')
+              .gte('created_at', windowStart);
+            
+            estimatedLossFromEvents = (lossEvents || []).reduce((sum, e: any) => sum + (e.estimated_loss_usd || 0), 0);
           }
           break;
+        }
 
-        case 'payment_drift':
-          if (pain.payment_drift_total_usd >= rule.threshold_value) {
+        case 'payment_drift': {
+          // Sum drift_usd from payment-drift events in the time window
+          const { data: driftEvents } = await supabase
+            .from('micro_events')
+            .select('raw_output, estimated_loss_usd')
+            .eq('customer_id', customer_id)
+            .eq('product', 'payment-drift')
+            .gte('created_at', windowStart)
+            .filter('raw_output->>status', 'eq', 'MISMATCH');
+
+          const totalDrift = (driftEvents || []).reduce((sum, e: any) => {
+            const drift = e.raw_output?.drift_usd || 0;
+            return sum + drift;
+          }, 0);
+
+          if (totalDrift >= rule.threshold_value) {
             triggered = true;
             offerReason = 'payment_drift';
+            estimatedLossFromEvents = (driftEvents || []).reduce((sum, e: any) => sum + (e.estimated_loss_usd || 0), 0);
           }
           break;
+        }
 
-        case 'webhook_failures':
-          if (pain.webhook_failures_count >= rule.threshold_value) {
+        case 'webhook_failures': {
+          // Count unreachable webhook events in the time window
+          const { count } = await supabase
+            .from('micro_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('customer_id', customer_id)
+            .eq('product', 'webhook-check')
+            .gte('created_at', windowStart)
+            .filter('raw_output->>reachable', 'eq', 'false');
+
+          if ((count || 0) >= rule.threshold_value) {
             triggered = true;
             offerReason = 'webhook_failures';
+            
+            const { data: failEvents } = await supabase
+              .from('micro_events')
+              .select('estimated_loss_usd')
+              .eq('customer_id', customer_id)
+              .eq('product', 'webhook-check')
+              .gte('created_at', windowStart);
+            
+            estimatedLossFromEvents = (failEvents || []).reduce((sum, e: any) => sum + (e.estimated_loss_usd || 0), 0);
           }
           break;
+        }
 
-        case 'combined':
-          // Combined score threshold
-          if (pain.pain_score_total >= rule.threshold_value) {
+        case 'combined': {
+          // Sum all estimated_loss_usd in the time window
+          const { data: allEvents } = await supabase
+            .from('micro_events')
+            .select('estimated_loss_usd, severity')
+            .eq('customer_id', customer_id)
+            .gte('created_at', windowStart);
+
+          const totalPainScore = (allEvents || []).reduce((sum, e: any) => sum + (e.severity || 0), 0);
+
+          if (totalPainScore >= rule.threshold_value) {
             triggered = true;
             offerReason = 'combined';
+            estimatedLossFromEvents = (allEvents || []).reduce((sum, e: any) => sum + (e.estimated_loss_usd || 0), 0);
           }
           break;
+        }
       }
 
       if (triggered) {
@@ -130,31 +199,44 @@ serve(async (req) => {
     }
 
     if (!triggeredRule) {
+      // Get current pain summary for response
+      const today = new Date().toISOString().split('T')[0];
+      const { data: painData } = await supabase
+        .from('pain_scores')
+        .select('*')
+        .eq('customer_id', customer_id)
+        .eq('window_date', today)
+        .maybeSingle();
+
+      const pain = painData as any;
+
       return new Response(
         JSON.stringify({ 
           evaluated: true, 
           offer_triggered: false, 
           reason: 'No rules matched',
-          pain_summary: {
+          pain_summary: pain ? {
             pain_score_total: pain.pain_score_total,
             estimated_loss_usd_total: pain.estimated_loss_usd_total,
             wallet_risk_high_count: pain.wallet_risk_high_count,
             webhook_failures_count: pain.webhook_failures_count,
             payment_drift_total_usd: pain.payment_drift_total_usd,
-          }
+          } : null
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Create Guardian offer
-    const estimatedMonthlyLoss = pain.estimated_loss_usd_total * 30; // Extrapolate to monthly
+    // Calculate estimated monthly loss from the window data
+    const windowHours = triggeredRule.time_window_hours || 24;
+    const estimatedMonthlyLoss = (estimatedLossFromEvents / windowHours) * 24 * 30;
 
+    // Create Guardian offer
     const { data: offer, error: offerError } = await supabase
       .from('guardian_offers')
       .insert({
         customer_id,
-        estimated_monthly_loss_usd: estimatedMonthlyLoss,
+        estimated_monthly_loss_usd: Math.round(estimatedMonthlyLoss),
         reason: offerReason,
         price_usd: 499,
         status: 'created',
@@ -187,9 +269,10 @@ serve(async (req) => {
         const message = `🎯 *Guardian Offer נוצר!*
 
 📧 לקוח: ${(customer as any)?.email || 'Unknown'}
-💸 הפסד חודשי משוער: $${estimatedMonthlyLoss.toFixed(0)}
+💸 הפסד חודשי משוער: $${Math.round(estimatedMonthlyLoss).toLocaleString()}
 🔥 סיבה: ${offerReason}
-📊 ציון כאב יומי: ${pain.pain_score_total}
+⏱ חלון זמן: ${windowHours} שעות
+📊 הפסד בחלון: $${estimatedLossFromEvents.toFixed(0)}
 
 🔗 Offer ID: \`${(offer as any).id}\``;
 
@@ -213,8 +296,10 @@ serve(async (req) => {
         offer_triggered: true,
         offer_id: (offer as any).id,
         reason: offerReason,
-        estimated_monthly_loss_usd: estimatedMonthlyLoss,
+        estimated_monthly_loss_usd: Math.round(estimatedMonthlyLoss),
         triggered_by_rule: triggeredRule.rule_name,
+        time_window_hours: windowHours,
+        loss_in_window: estimatedLossFromEvents,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
