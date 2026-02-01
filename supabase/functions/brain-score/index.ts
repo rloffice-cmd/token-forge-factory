@@ -134,9 +134,9 @@ Deno.serve(async (req) => {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     
     const { data: signals, error: signalsError } = await supabase
-      .from('signals')
+      .from('demand_signals')
       .select('*, offer_sources(health_score)')
-      .eq('processed', false)
+      .eq('status', 'new')
       .gte('created_at', cutoff)
       .limit(50);
     
@@ -162,8 +162,8 @@ Deno.serve(async (req) => {
       if (!offer) {
         // Mark as processed but no opportunity
         await supabase
-          .from('signals')
-          .update({ processed: true })
+          .from('demand_signals')
+          .update({ status: 'rejected', rejection_reason: 'no_matching_offer' })
           .eq('id', signal.id);
         results.signals_processed++;
         continue;
@@ -179,8 +179,8 @@ Deno.serve(async (req) => {
       
       if (existing) {
         await supabase
-          .from('signals')
-          .update({ processed: true })
+          .from('demand_signals')
+          .update({ status: 'processed' })
           .eq('id', signal.id);
         continue;
       }
@@ -215,8 +215,8 @@ Deno.serve(async (req) => {
 
       // Mark signal as processed
       await supabase
-        .from('signals')
-        .update({ processed: true })
+        .from('demand_signals')
+        .update({ status: 'processed' })
         .eq('id', signal.id);
       
       results.signals_processed++;

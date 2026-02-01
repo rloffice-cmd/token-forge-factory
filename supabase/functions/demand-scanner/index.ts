@@ -154,6 +154,9 @@ async function scanSource(source: OfferSource, supabase: any): Promise<number> {
     case 'github_issues':
       return await scanGitHubIssues(source, supabase, keywords);
     
+    case 'github_search':
+      return await scanGitHubSearch(source, supabase, keywords);
+    
     case 'manual':
       // Manual sources don't auto-scan, signals are added manually
       return 0;
@@ -264,6 +267,91 @@ async function scanGitHubIssues(
 
   } catch (error) {
     console.error('GitHub scan error:', error);
+    throw error;
+  }
+}
+
+// Scan GitHub using code/repo search
+async function scanGitHubSearch(
+  source: OfferSource, 
+  supabase: any, 
+  keywords: string[]
+): Promise<number> {
+  const githubToken = Deno.env.get('GITHUB_TOKEN');
+  if (!githubToken) {
+    console.log('GitHub token not configured, skipping GitHub search');
+    return 0;
+  }
+
+  const searchQuery = keywords.length > 0 
+    ? keywords.join(' OR ')
+    : 'webhook OR api OR integration';
+
+  try {
+    const response = await fetch(
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(searchQuery)}&sort=updated&per_page=${source.scan_config.max_results || 10}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${githubToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'DemandScanner/1.0',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    let signalsCreated = 0;
+
+    for (const repo of data.items || []) {
+      const text = `${repo.name} ${repo.description || ''}`.toLowerCase();
+      const matchedKeywords = keywords.filter(k => text.includes(k.toLowerCase()));
+      const relevanceScore = keywords.length > 0 
+        ? matchedKeywords.length / keywords.length 
+        : 0.5;
+
+      // Determine category
+      let category = 'api';
+      if (text.includes('webhook')) category = 'webhook';
+      else if (text.includes('security') || text.includes('audit')) category = 'security';
+      else if (text.includes('data') || text.includes('enrichment')) category = 'data';
+
+      const { error } = await supabase
+        .from('demand_signals')
+        .upsert({
+          source_id: source.id,
+          external_id: `github-repo-${repo.id}`,
+          source_url: repo.html_url,
+          query_text: repo.full_name,
+          payload_json: {
+            description: (repo.description || '').substring(0, 1000),
+            owner: repo.owner?.login,
+            stars: repo.stargazers_count,
+            forks: repo.forks_count,
+            topics: repo.topics || [],
+            updated_at: repo.updated_at,
+          },
+          urgency_score: Math.min(1, repo.stargazers_count / 1000),
+          relevance_score: relevanceScore,
+          category,
+          status: 'new',
+        }, {
+          onConflict: 'source_id,external_id',
+          ignoreDuplicates: true,
+        });
+
+      if (!error) {
+        signalsCreated++;
+      }
+    }
+
+    return signalsCreated;
+
+  } catch (error) {
+    console.error('GitHub search error:', error);
     throw error;
   }
 }
