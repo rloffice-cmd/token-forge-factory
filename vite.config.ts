@@ -13,6 +13,20 @@ export default defineConfig(({ mode }) => ({
       overlay: false,
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Split large web3 libraries into separate chunks
+          'wagmi': ['wagmi', 'viem', '@web3modal/wagmi'],
+          'safe': ['@safe-global/api-kit', '@safe-global/protocol-kit', '@safe-global/safe-apps-sdk'],
+          'vendor': ['react', 'react-dom', 'react-router-dom'],
+          'charts': ['recharts'],
+          'ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-tabs'],
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     mode === "development" && componentTagger(),
@@ -22,6 +36,8 @@ export default defineConfig(({ mode }) => ({
       manifest: false, // Using public/manifest.json
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Increase max file size limit for large chunks (5MB)
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
