@@ -98,3 +98,9 @@ verify_jwt = false
 
 [functions.distribution-orchestrator]
 verify_jwt = false
+
+[functions.outreach-queue]
+verify_jwt = false
+
+[functions.outreach-retry-worker]
+verify_jwt = false

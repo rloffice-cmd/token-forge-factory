@@ -1905,6 +1905,90 @@ export type Database = {
           },
         ]
       }
+      outreach_jobs: {
+        Row: {
+          attempts: number
+          channel: string
+          confidence: number
+          created_at: string
+          destination: string
+          draft_text: string
+          gate_fail_reason: string | null
+          id: string
+          intent_topic: string | null
+          lead_payload: Json
+          next_retry_at: string | null
+          provider_message_id: string | null
+          provider_response: Json
+          revised_text: string | null
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          channel?: string
+          confidence?: number
+          created_at?: string
+          destination?: string
+          draft_text?: string
+          gate_fail_reason?: string | null
+          id?: string
+          intent_topic?: string | null
+          lead_payload?: Json
+          next_retry_at?: string | null
+          provider_message_id?: string | null
+          provider_response?: Json
+          revised_text?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          channel?: string
+          confidence?: number
+          created_at?: string
+          destination?: string
+          draft_text?: string
+          gate_fail_reason?: string | null
+          id?: string
+          intent_topic?: string | null
+          lead_payload?: Json
+          next_retry_at?: string | null
+          provider_message_id?: string | null
+          provider_response?: Json
+          revised_text?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      outreach_limits: {
+        Row: {
+          cap_count: number
+          id: string
+          limit_date: string
+          sent_count: number
+          updated_at: string
+        }
+        Insert: {
+          cap_count?: number
+          id?: string
+          limit_date?: string
+          sent_count?: number
+          updated_at?: string
+        }
+        Update: {
+          cap_count?: number
+          id?: string
+          limit_date?: string
+          sent_count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       outreach_queue: {
         Row: {
           ai_model: string | null

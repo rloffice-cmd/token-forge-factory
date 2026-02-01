@@ -1,211 +1,267 @@
 /**
- * Outreach Sender - Send Queued Messages
- * שליחת הודעות מתוזמנות ועדכון סטטוסים
- * Runs every 15 minutes via pg_cron
+ * Outreach Sender - Kill Gates + Rate Limit + Telegram Send
+ * שליחה אוטומטית עם Kill Gates, Rate Limiter ו-Self-Heal
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+function mustEnv(name: string): string {
+  const v = Deno.env.get(name);
+  if (!v) throw new Error(`Missing env: ${name}`);
+  return v;
+}
+
+function escapeHtml(s: string): string {
+  return (s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function buildMessage(job: Record<string, unknown>): string {
+  const lead = (job.lead_payload || {}) as Record<string, unknown>;
+  const threadUrl = (lead.thread_url || lead.url || "") as string;
+  const title = (lead.thread_title || lead.title || "") as string;
+  const author = (lead.author_handle || lead.author || "") as string;
+  const conf = Number(job.confidence || 0);
+
+  const header = 
+    `🎯 <b>HIGH INTENT</b> (${Math.round(conf * 100)}%)\n` +
+    `Topic: <b>${escapeHtml(job.intent_topic as string || "unknown")}</b>\n` +
+    `Source: <b>${escapeHtml(job.source as string || "unknown")}</b>\n`;
+
+  const leadLine = 
+    (title ? `\n🧵 <b>${escapeHtml(title)}</b>\n` : "\n") +
+    (author ? `👤 ${escapeHtml(author)}\n` : "") +
+    (threadUrl ? `🔗 ${escapeHtml(threadUrl)}\n` : "");
+
+  // CTA from env
+  const cta = Deno.env.get("MICRO_LANDING_URL") || "";
+  const ctaLine = cta ? `\n👉 <b>Try Micro:</b> ${escapeHtml(cta)}\n` : "";
+
+  const draft = `\n✍️ <b>Auto Draft</b>:\n${escapeHtml((job.revised_text || job.draft_text || "") as string)}\n`;
+
+  return header + leadLine + ctaLine + draft;
+}
+
+async function telegramSend(text: string): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
+  const token = mustEnv("TELEGRAM_BOT_TOKEN");
+  const chatId = mustEnv("TELEGRAM_CHAT_ID");
+
+  const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }),
+  });
+
+  const json = await resp.json().catch(() => ({}));
+  return { ok: resp.ok, status: resp.status, json };
+}
+
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
-  
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
   try {
-    console.log('📤 Outreach Sender processing queue...');
+    const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "";
+    const authHeader = req.headers.get("authorization") || "";
 
-    // Get queued messages that are due
-    const now = new Date().toISOString();
-    const { data: queuedMessages } = await supabase
-      .from('outreach_queue')
-      .select('*')
-      .eq('status', 'queued')
-      .lte('scheduled_at', now)
-      .order('scheduled_at', { ascending: true })
-      .limit(20);
-
-    if (!queuedMessages || queuedMessages.length === 0) {
+    if (!adminToken || !authHeader.includes(adminToken)) {
       return new Response(
-        JSON.stringify({ success: true, message: 'No messages to send' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`Processing ${queuedMessages.length} messages...`);
-
-    let sent = 0;
-    let failed = 0;
-
-    for (const message of queuedMessages) {
-      try {
-        // Generate content for scheduled follow-ups that don't have content yet
-        if (!message.message_content && message.message_type !== 'initial') {
-          const { data: lead } = await supabase
-            .from('leads')
-            .select('*')
-            .eq('id', message.lead_id)
-            .single();
-
-          if (!lead) continue;
-
-          // Get previous messages sent to this lead
-          const { data: prevMessages } = await supabase
-            .from('outreach_queue')
-            .select('message_content, message_type')
-            .eq('lead_id', message.lead_id)
-            .eq('status', 'sent')
-            .order('created_at', { ascending: false })
-            .limit(3);
-
-          // Generate follow-up with AI
-          const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${lovableApiKey}`,
-              'Content-Type': 'application/json',
-              'X-Title': 'Follow-up Generator',
-            },
-            body: JSON.stringify({
-              model: 'google/gemini-3-flash-preview',
-              messages: [
-                {
-                  role: 'system',
-                  content: `You are writing a ${message.message_type} for someone who didn't respond to previous outreach.
-
-Rules:
-1. Be brief and non-pushy
-2. Add new value, don't just repeat
-3. Different angle from previous messages
-4. Friendly, human tone
-5. Max 2-3 sentences
-
-Return just the message text.`
-                },
-                {
-                  role: 'user',
-                  content: `Lead's original need: "${lead.title}"
-Previous messages sent: ${JSON.stringify(prevMessages?.map(m => m.message_content) || [])}
-
-Write a ${message.message_type === 'follow_up_1' ? 'first follow-up' : 
-          message.message_type === 'follow_up_2' ? 'second follow-up' : 
-          'final check-in'}`
-                }
-              ],
-            }),
-          });
-
-          if (aiResponse.ok) {
-            const aiData = await aiResponse.json();
-            message.message_content = aiData.choices?.[0]?.message?.content || '';
-          }
-        }
-
-        if (!message.message_content) {
-          await supabase
-            .from('outreach_queue')
-            .update({ status: 'failed', error: 'No content' })
-            .eq('id', message.id);
-          failed++;
-          continue;
-        }
-
-        // For now, we log the "send" action
-        // In production, this would integrate with Reddit API, email service, etc.
-        console.log(`[SIMULATED SEND] Channel: ${message.channel}`);
-        console.log(`Message: ${message.message_content.slice(0, 100)}...`);
-
-        // Update message status
-        await supabase
-          .from('outreach_queue')
-          .update({ 
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-            message_content: message.message_content, // Save generated content
-          })
-          .eq('id', message.id);
-
-        // Update lead status based on message type
-        if (message.lead_id) {
-          const newStatus = message.message_type === 'initial' ? 'contacted' :
-                           message.message_type === 'closing' ? 'closing_sent' :
-                           `follow_up_${message.message_type.replace('follow_up_', '')}`;
-          
-          await supabase
-            .from('leads')
-            .update({ 
-              status: newStatus,
-              last_contacted_at: new Date().toISOString(),
-            })
-            .eq('id', message.lead_id);
-        }
-
-        sent++;
-
-        // Rate limiting between messages
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-      } catch (error) {
-        console.error(`Failed to send message ${message.id}:`, error);
-        
-        await supabase
-          .from('outreach_queue')
-          .update({ 
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
-          })
-          .eq('id', message.id);
-        
-        failed++;
-      }
-    }
-
-    // Audit log - get valid job_id
-    const { data: validJob } = await supabase
-      .from('jobs')
-      .select('id')
-      .limit(1)
-      .single();
-    
-    if (validJob) {
-      await supabase.from('audit_logs').insert({
-        job_id: validJob.id,
-        action: 'outreach_batch_sent',
-        metadata: {
-          total_queued: queuedMessages.length,
-          sent: sent,
-          failed: failed,
-        },
-      });
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        processed: queuedMessages.length,
-        sent: sent,
-        failed: failed,
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    const supabase = createClient(
+      mustEnv("SUPABASE_URL"),
+      mustEnv("SUPABASE_SERVICE_ROLE_KEY")
     );
 
-  } catch (error) {
-    console.error('Outreach Sender error:', error);
-    
+    const body = await req.json();
+    const jobId = body.job_id;
+
+    if (!jobId) {
+      return new Response(
+        JSON.stringify({ error: "job_id required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Load job
+    const { data: job, error: jobErr } = await supabase
+      .from("outreach_jobs")
+      .select("*")
+      .eq("id", jobId)
+      .single();
+
+    if (jobErr || !job) {
+      throw jobErr || new Error("Job not found");
+    }
+
+    console.log(`📤 Processing job ${jobId}: status=${job.status}`);
+
+    // Idempotency: only send if queued/failed (retry)
+    if (!["queued", "failed"].includes(job.status)) {
+      return new Response(
+        JSON.stringify({ ok: true, skipped: true, status: job.status }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ========== KILL GATES ==========
+    const lead = (job.lead_payload || {}) as Record<string, unknown>;
+    const threadUrl = (lead.thread_url || lead.url) as string;
+    const conf = Number(job.confidence || 0);
+
+    // Gate 1: Lead validity - must have thread_url
+    if (!threadUrl) {
+      console.log(`🚫 Gate: missing_thread_url for job ${jobId}`);
+      await supabase
+        .from("outreach_jobs")
+        .update({ status: "gated", gate_fail_reason: "missing_thread_url" })
+        .eq("id", jobId);
+
+      return new Response(
+        JSON.stringify({ ok: false, gated: true, reason: "missing_thread_url" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Gate 2: Confidence threshold
+    const MIN_CONF = Number(Deno.env.get("OUTREACH_MIN_CONFIDENCE") || "0.85");
+    if (conf < MIN_CONF) {
+      console.log(`🚫 Gate: low_confidence (${conf} < ${MIN_CONF}) for job ${jobId}`);
+      await supabase
+        .from("outreach_jobs")
+        .update({ status: "gated", gate_fail_reason: `low_confidence:${conf}` })
+        .eq("id", jobId);
+
+      return new Response(
+        JSON.stringify({ ok: false, gated: true, reason: "low_confidence", confidence: conf }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Gate 3: Daily cap
+    const today = new Date().toISOString().slice(0, 10);
+    const CAP = Number(Deno.env.get("OUTREACH_DAILY_CAP") || "20");
+
+    const { data: lim } = await supabase
+      .from("outreach_limits")
+      .select("*")
+      .eq("limit_date", today)
+      .maybeSingle();
+
+    const sentCount = Number((lim as Record<string, unknown>)?.sent_count || 0);
+    const capCount = Number((lim as Record<string, unknown>)?.cap_count || CAP);
+
+    if (sentCount >= capCount) {
+      const retryAt = new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(); // 6h
+      console.log(`🚫 Gate: daily_cap_reached (${sentCount}/${capCount}) for job ${jobId}`);
+      
+      await supabase
+        .from("outreach_jobs")
+        .update({
+          status: "gated",
+          gate_fail_reason: "daily_cap_reached",
+          next_retry_at: retryAt,
+        })
+        .eq("id", jobId);
+
+      return new Response(
+        JSON.stringify({ ok: false, gated: true, reason: "daily_cap_reached", sent: sentCount, cap: capCount }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ========== SEND ==========
+    await supabase
+      .from("outreach_jobs")
+      .update({
+        status: "sending",
+        attempts: (job.attempts || 0) + 1,
+      })
+      .eq("id", jobId);
+
+    const message = buildMessage(job);
+    console.log(`📨 Sending to Telegram: ${message.slice(0, 100)}...`);
+
+    const tg = await telegramSend(message);
+
+    if (!tg.ok) {
+      const retryAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
+      console.error(`❌ Telegram failed: ${tg.status}`, tg.json);
+
+      // Check if dead (too many attempts)
+      const attempts = (job.attempts || 0) + 1;
+      const newStatus = attempts >= 5 ? "dead" : "failed";
+
+      await supabase
+        .from("outreach_jobs")
+        .update({
+          status: newStatus,
+          provider_response: tg.json || {},
+          gate_fail_reason: `telegram_failed:${tg.status}`,
+          next_retry_at: newStatus === "failed" ? retryAt : null,
+        })
+        .eq("id", jobId);
+
+      return new Response(
+        JSON.stringify({ ok: false, sent: false, error: "telegram_failed", status: tg.status }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const messageId = (tg.json?.result as Record<string, unknown>)?.message_id?.toString() || null;
+    console.log(`✅ Sent! message_id: ${messageId}`);
+
+    // Increment daily limit
+    if (lim) {
+      await supabase
+        .from("outreach_limits")
+        .update({ sent_count: sentCount + 1 })
+        .eq("id", (lim as Record<string, unknown>).id);
+    } else {
+      await supabase
+        .from("outreach_limits")
+        .insert({ limit_date: today, sent_count: 1, cap_count: capCount });
+    }
+
+    // Mark as sent
+    await supabase
+      .from("outreach_jobs")
+      .update({
+        status: "sent",
+        provider_message_id: messageId,
+        provider_response: tg.json || {},
+        gate_fail_reason: null,
+        next_retry_at: null,
+      })
+      .eq("id", jobId);
+
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ ok: true, sent: true, message_id: messageId }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (e) {
+    console.error("outreach-sender error:", e);
+    return new Response(
+      JSON.stringify({ error: e instanceof Error ? e.message : "Internal server error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
