@@ -146,3 +146,12 @@ verify_jwt = false
 
 [functions.daily-autonomous-report]
 verify_jwt = false
+
+[functions.agent-marketplace-engine]
+verify_jwt = false
+
+[functions.affiliate-automation-engine]
+verify_jwt = false
+
+[functions.affiliate-click-tracker]
+verify_jwt = false

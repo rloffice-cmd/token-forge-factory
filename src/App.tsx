@@ -24,6 +24,8 @@ import BrainDashboard from "./pages/BrainDashboard";
 import MicroLanding from "./pages/MicroLanding";
 import MicroAdminDashboard from "./pages/MicroAdminDashboard";
 import Sources from "./pages/Sources";
+import AgentMarketplace from "./pages/AgentMarketplace";
+import AffiliateAdmin from "./pages/AffiliateAdmin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +44,7 @@ const App = () => (
             <Route path="/purchase" element={<Purchase />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/api-access" element={<ApiAccess />} />
+            <Route path="/agents" element={<AgentMarketplace />} />
             
             {/* Admin Routes - Control Panel */}
             <Route path="/" element={<MoneyMachine />} />
@@ -59,6 +62,7 @@ const App = () => (
             <Route path="/micro/admin" element={<MicroAdminDashboard />} />
             <Route path="/admin/security" element={<AdminSecurity />} />
             <Route path="/admin/api-keys" element={<AdminApiKeys />} />
+            <Route path="/admin/affiliates" element={<AffiliateAdmin />} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
