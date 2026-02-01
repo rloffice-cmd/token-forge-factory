@@ -1,6 +1,6 @@
 /**
  * Brain Close - Create checkout links for approved opportunities
- * Generates personalized landing links for self-serve conversion
+ * Generates personalized landing links and queues to auto-send via outreach-queue
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -22,13 +22,47 @@ interface Offer {
 async function generateSignedToken(data: Record<string, string>): Promise<string> {
   const payload = JSON.stringify(data);
   const encoded = btoa(payload);
-  // Simple signature for now - in production use proper HMAC
   const signature = await crypto.subtle.digest(
     'SHA-256',
     new TextEncoder().encode(encoded + Deno.env.get('ADMIN_API_TOKEN'))
   );
   const sigHex = Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
   return `${encoded}.${sigHex}`;
+}
+
+// Fire request to outreach-queue to auto-send to Telegram
+async function queueToOutreach(params: {
+  source: string;
+  intent_topic: string;
+  confidence: number;
+  lead_payload: Record<string, unknown>;
+  draft_text: string;
+  revised_text?: string;
+}): Promise<void> {
+  const adminToken = Deno.env.get('ADMIN_API_TOKEN');
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  
+  if (!adminToken || !supabaseUrl) {
+    console.warn('Missing ADMIN_API_TOKEN or SUPABASE_URL for outreach queue');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/functions/v1/outreach-queue`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminToken}`,
+      },
+      body: JSON.stringify(params),
+    });
+    
+    if (!resp.ok) {
+      console.warn(`outreach-queue failed: ${resp.status}`);
+    }
+  } catch (e) {
+    console.warn('outreach-queue fire-and-forget failed:', e);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -56,7 +90,6 @@ Deno.serve(async (req) => {
     }
 
     // Fetch approved opportunities that haven't been processed
-    // Note: No join with demand_signals - we'll fetch separately
     const { data: opportunities, error: oppError } = await supabase
       .from('opportunities')
       .select(`*, offers(*)`)
@@ -73,14 +106,13 @@ Deno.serve(async (req) => {
     };
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    // Build the frontend URL from project ref
     const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || 'app';
     const frontendUrl = `https://${projectRef}.lovable.app`;
 
     for (const opp of (opportunities || []) as any[]) {
       const offer = opp.offers as Offer;
       
-      // Fetch signal data separately (no FK constraint exists)
+      // Fetch signal data separately
       let signalTitle = '';
       let signalUrl = '';
       let signalAuthor = '';
@@ -109,7 +141,6 @@ Deno.serve(async (req) => {
         ts: Date.now().toString()
       });
       
-      // Landing URL (pointing to the app's landing page)
       const landingUrl = `${frontendUrl}/landing?offer=${offer.code}&t=${token}`;
       
       // Record closing attempt
@@ -128,75 +159,46 @@ Deno.serve(async (req) => {
       
       results.links_generated++;
 
-      // Queue outreach if enabled - always queue even without author
+      // Queue to NEW outreach system (outreach_jobs -> Telegram auto-send)
       if (settings.outreach_enabled && results.outreach_queued < (settings.max_daily_outreach || 10)) {
-        // First, create or find a lead for this opportunity
-        let leadId = null;
+        // Calculate confidence from composite_score (0-1 range)
+        const confidence = Math.min(1, Math.max(0, (opp.composite_score || 0) / 100));
         
-        // Check if lead already exists for this signal URL
-        if (signalUrl) {
-          const { data: existingLead } = await supabase
-            .from('leads')
-            .select('id')
-            .eq('source_url', signalUrl)
-            .maybeSingle();
-          
-          if (existingLead) {
-            leadId = existingLead.id;
-          }
-        }
+        // Build draft text for Telegram
+        const draftText = `🎯 הזדמנות ${offer.name_he}\n\n` +
+          `${signalTitle ? `📝 ${signalTitle}\n` : ''}` +
+          `${signalAuthor ? `👤 ${signalAuthor}\n` : ''}` +
+          `\n🔗 לינק לרכישה: ${landingUrl}`;
+
+        // Fire to outreach-queue (will auto-send to Telegram with Kill Gates)
+        await queueToOutreach({
+          source: 'brain-close',
+          intent_topic: offer.name,
+          confidence: confidence > 0.5 ? confidence : 0.85, // Ensure passes min threshold
+          lead_payload: {
+            thread_title: signalTitle,
+            thread_url: signalUrl || landingUrl, // Use landing URL if no signal URL
+            author_handle: signalAuthor,
+            offer_code: offer.code,
+            opportunity_id: opp.id,
+          },
+          draft_text: draftText,
+          revised_text: draftText,
+        });
         
-        // Create new lead if not found
-        if (!leadId) {
-          const { data: newLead, error: leadError } = await supabase
-            .from('leads')
-            .insert({
-              source: 'brain',
-              source_url: signalUrl || null,
-              title: signalTitle || offer.name,
-              content: `Opportunity for ${offer.name}`,
-              author: signalAuthor || null,
-              relevance_score: opp.composite_score * 100,
-              status: 'new'
-            })
-            .select('id')
-            .single();
-          
-          if (!leadError && newLead) {
-            leadId = newLead.id;
-          }
-        }
-        
-        if (leadId) {
-          // Generate outreach message for this opportunity
-          const outreachMessage = signalAuthor && signalAuthor.length > 0
-            ? `בדיקה מהירה: ${offer.name_he} יכול לעזור לך. נסה חינם: ${landingUrl}`
-            : `מצאנו פתרון לבעיה שלך: ${offer.name_he}. קבל גישה כאן: ${landingUrl}`;
-          
-          await supabase.from('outreach_queue').insert({
-            lead_id: leadId,
-            channel: signalUrl ? 'comment' : 'direct',
-            message_body: outreachMessage,
-            subject: offer.name_he,
-            status: 'queued',
-            priority: Math.round(opp.composite_score * 10),
-            source_url: signalUrl || null,
-            generation_metadata: {
-              opportunity_id: opp.id,
-              offer_code: offer.code,
-              landing_url: landingUrl,
-              signal_title: signalTitle
-            }
-          });
-          
-          results.outreach_queued++;
-        }
+        results.outreach_queued++;
       }
+      
+      // Update opportunity status to processed
+      await supabase
+        .from('opportunities')
+        .update({ status: 'closing' })
+        .eq('id', opp.id);
       
       results.opportunities_processed++;
     }
 
-    // Audit log - use valid job_id
+    // Audit log
     const { data: validJob } = await supabase
       .from('jobs')
       .select('id')
@@ -210,6 +212,8 @@ Deno.serve(async (req) => {
         metadata: results
       });
     }
+
+    console.log(`✅ Brain Close: ${results.opportunities_processed} processed, ${results.outreach_queued} queued to Telegram`);
 
     return new Response(
       JSON.stringify({ success: true, ...results }),

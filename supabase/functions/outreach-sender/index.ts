@@ -42,8 +42,11 @@ function buildMessage(job: Record<string, unknown>): string {
     (author ? `👤 ${escapeHtml(author)}\n` : "") +
     (threadUrl ? `🔗 ${escapeHtml(threadUrl)}\n` : "");
 
-  // CTA from env
-  const cta = Deno.env.get("MICRO_LANDING_URL") || "";
+  // CTA - auto-generate from Supabase URL if not set
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || "";
+  const defaultLanding = projectRef ? `https://${projectRef}.lovable.app/landing` : "";
+  const cta = Deno.env.get("MICRO_LANDING_URL") || defaultLanding;
   const ctaLine = cta ? `\n👉 <b>Try Micro:</b> ${escapeHtml(cta)}\n` : "";
 
   const draft = `\n✍️ <b>Auto Draft</b>:\n${escapeHtml((job.revised_text || job.draft_text || "") as string)}\n`;

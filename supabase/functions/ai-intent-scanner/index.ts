@@ -350,38 +350,42 @@ ${content.slice(0, 20000)}`
       }
     }
 
-    // Handle high-urgency signals immediately
+    // Handle high-urgency signals immediately - queue to outreach-jobs for Telegram auto-send
     const criticalSignals = discoveredIntents.filter(s => s.urgency === 'critical' || s.intent_score >= 80);
     
     if (criticalSignals.length > 0) {
-      // Generate immediate responses for critical signals
-      for (const signal of criticalSignals.slice(0, 3)) {
-        await supabase.functions.invoke('ai-content-engine', {
-          body: {
-            mode: 'respond',
-            context: signal.content_snippet,
-            target_platform: signal.source.includes('Reddit') ? 'reddit' : 
-                            signal.source.includes('Twitter') ? 'twitter' : 'forum',
-          },
-        }).catch(() => {/* Silent fail */});
+      const adminToken = Deno.env.get('ADMIN_API_TOKEN');
+      
+      for (const signal of criticalSignals.slice(0, 5)) {
+        // Queue each signal to outreach-queue for auto Telegram send
+        if (adminToken) {
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/outreach-queue`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${adminToken}`,
+              },
+              body: JSON.stringify({
+                source: signal.source,
+                intent_topic: signal.product_fit.join(', ') || 'High Intent',
+                confidence: signal.intent_score / 100,
+                lead_payload: {
+                  thread_title: signal.title,
+                  thread_url: signal.source_url,
+                  author_handle: signal.author || '',
+                },
+                draft_text: `🎯 ${signal.title}\n\n${signal.content_snippet}\n\nProducts: ${signal.product_fit.join(', ')}\nAction: ${signal.recommended_action}`,
+                revised_text: `🎯 ${signal.title}\n\n${signal.content_snippet}`,
+              }),
+            });
+          } catch (e) {
+            console.warn('Failed to queue signal to outreach:', e);
+          }
+        }
       }
-
-      // Alert via Telegram
-      await supabase.functions.invoke('telegram-notify', {
-        body: {
-          message: `🚨 *HIGH INTENT SIGNALS DETECTED!*
-
-${criticalSignals.slice(0, 5).map(s => 
-`• *${s.title}* (${s.intent_score}%)
-  Source: ${s.source}
-  Products: ${s.product_fit.join(', ')}
-  Action: ${s.recommended_action}`
-).join('\n\n')}
-
-📝 Response drafts created automatically`,
-          type: 'high_intent_alert',
-        },
-      }).catch(() => {/* Silent fail */});
+      
+      console.log(`📤 Queued ${Math.min(criticalSignals.length, 5)} critical signals to outreach-queue`);
     }
 
     // Audit log
