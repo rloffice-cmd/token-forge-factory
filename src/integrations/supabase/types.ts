@@ -14,6 +14,378 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliate_clicks: {
+        Row: {
+          clicked_at: string
+          commission_usd: number | null
+          converted: boolean
+          converted_at: string | null
+          id: string
+          ip_hash: string | null
+          program_id: string
+          referrer_url: string | null
+          source: string
+          source_id: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          clicked_at?: string
+          commission_usd?: number | null
+          converted?: boolean
+          converted_at?: string | null
+          id?: string
+          ip_hash?: string | null
+          program_id: string
+          referrer_url?: string | null
+          source: string
+          source_id?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          clicked_at?: string
+          commission_usd?: number | null
+          converted?: boolean
+          converted_at?: string | null
+          id?: string
+          ip_hash?: string | null
+          program_id?: string
+          referrer_url?: string | null
+          source?: string
+          source_id?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_clicks_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_content: {
+        Row: {
+          affiliate_link: string
+          body: string
+          clicks: number
+          content_queue_id: string | null
+          conversions: number
+          created_at: string
+          cta_text: string
+          earnings_usd: number
+          headline: string
+          id: string
+          performance_score: number | null
+          platform: string
+          program_id: string
+          published_at: string | null
+          status: string
+          target_keywords: Json
+        }
+        Insert: {
+          affiliate_link: string
+          body: string
+          clicks?: number
+          content_queue_id?: string | null
+          conversions?: number
+          created_at?: string
+          cta_text: string
+          earnings_usd?: number
+          headline: string
+          id?: string
+          performance_score?: number | null
+          platform: string
+          program_id: string
+          published_at?: string | null
+          status?: string
+          target_keywords?: Json
+        }
+        Update: {
+          affiliate_link?: string
+          body?: string
+          clicks?: number
+          content_queue_id?: string | null
+          conversions?: number
+          created_at?: string
+          cta_text?: string
+          earnings_usd?: number
+          headline?: string
+          id?: string
+          performance_score?: number | null
+          platform?: string
+          program_id?: string
+          published_at?: string | null
+          status?: string
+          target_keywords?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_content_content_queue_id_fkey"
+            columns: ["content_queue_id"]
+            isOneToOne: false
+            referencedRelation: "content_queue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_content_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_earnings: {
+        Row: {
+          amount_usd: number
+          click_id: string | null
+          created_at: string
+          currency: string
+          earned_at: string
+          id: string
+          notes: string | null
+          paid_at: string | null
+          program_id: string
+          reference_id: string | null
+          status: string
+        }
+        Insert: {
+          amount_usd: number
+          click_id?: string | null
+          created_at?: string
+          currency?: string
+          earned_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          program_id: string
+          reference_id?: string | null
+          status?: string
+        }
+        Update: {
+          amount_usd?: number
+          click_id?: string | null
+          created_at?: string
+          currency?: string
+          earned_at?: string
+          id?: string
+          notes?: string | null
+          paid_at?: string | null
+          program_id?: string
+          reference_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "affiliate_earnings_click_id_fkey"
+            columns: ["click_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_clicks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "affiliate_earnings_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      affiliate_programs: {
+        Row: {
+          affiliate_id: string | null
+          affiliate_link_template: string | null
+          base_url: string
+          category: string
+          commission_type: string
+          commission_value: number
+          cookie_days: number | null
+          created_at: string
+          id: string
+          is_active: boolean
+          min_payout_usd: number | null
+          name: string
+          notes: string | null
+          payout_method: string | null
+        }
+        Insert: {
+          affiliate_id?: string | null
+          affiliate_link_template?: string | null
+          base_url: string
+          category: string
+          commission_type?: string
+          commission_value?: number
+          cookie_days?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_payout_usd?: number | null
+          name: string
+          notes?: string | null
+          payout_method?: string | null
+        }
+        Update: {
+          affiliate_id?: string | null
+          affiliate_link_template?: string | null
+          base_url?: string
+          category?: string
+          commission_type?: string
+          commission_value?: number
+          cookie_days?: number | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          min_payout_usd?: number | null
+          name?: string
+          notes?: string | null
+          payout_method?: string | null
+        }
+        Relationships: []
+      }
+      agent_catalog: {
+        Row: {
+          category: string
+          created_at: string
+          delivery_time_hours: number
+          demo_url: string | null
+          description: string
+          description_he: string
+          features: Json
+          id: string
+          is_active: boolean
+          is_featured: boolean
+          name: string
+          name_he: string
+          preview_image: string | null
+          price_eth: number | null
+          price_usd: number
+          sales_count: number
+          tech_stack: Json
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          delivery_time_hours?: number
+          demo_url?: string | null
+          description: string
+          description_he: string
+          features?: Json
+          id?: string
+          is_active?: boolean
+          is_featured?: boolean
+          name: string
+          name_he: string
+          preview_image?: string | null
+          price_eth?: number | null
+          price_usd: number
+          sales_count?: number
+          tech_stack?: Json
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          delivery_time_hours?: number
+          demo_url?: string | null
+          description?: string
+          description_he?: string
+          features?: Json
+          id?: string
+          is_active?: boolean
+          is_featured?: boolean
+          name?: string
+          name_he?: string
+          preview_image?: string | null
+          price_eth?: number | null
+          price_usd?: number
+          sales_count?: number
+          tech_stack?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      agent_orders: {
+        Row: {
+          agent_id: string
+          charge_id: string | null
+          created_at: string
+          customer_email: string
+          customer_telegram: string | null
+          customization_notes: string | null
+          delivered_at: string | null
+          delivery_notes: string | null
+          delivery_url: string | null
+          id: string
+          payment_id: string | null
+          price_eth: number | null
+          price_usd: number
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_id: string
+          charge_id?: string | null
+          created_at?: string
+          customer_email: string
+          customer_telegram?: string | null
+          customization_notes?: string | null
+          delivered_at?: string | null
+          delivery_notes?: string | null
+          delivery_url?: string | null
+          id?: string
+          payment_id?: string | null
+          price_eth?: number | null
+          price_usd: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_id?: string
+          charge_id?: string | null
+          created_at?: string
+          customer_email?: string
+          customer_telegram?: string | null
+          customization_notes?: string | null
+          delivered_at?: string | null
+          delivery_notes?: string | null
+          delivery_url?: string | null
+          id?: string
+          payment_id?: string | null
+          price_eth?: number | null
+          price_usd?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_orders_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "agent_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_orders_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "confirmed_payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_orders_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       api_key_deliveries: {
         Row: {
           api_key_id: string
