@@ -296,6 +296,51 @@ export type Database = {
         }
         Relationships: []
       }
+      brain_metrics_daily: {
+        Row: {
+          approved_count: number
+          checkouts_created: number
+          conversion_rate: number | null
+          created_at: string
+          day: string
+          fulfillment_success_rate: number | null
+          notes: string | null
+          opp_count: number
+          outreach_sent: number
+          paid_count: number
+          revenue_usd: number
+          signals_count: number
+        }
+        Insert: {
+          approved_count?: number
+          checkouts_created?: number
+          conversion_rate?: number | null
+          created_at?: string
+          day: string
+          fulfillment_success_rate?: number | null
+          notes?: string | null
+          opp_count?: number
+          outreach_sent?: number
+          paid_count?: number
+          revenue_usd?: number
+          signals_count?: number
+        }
+        Update: {
+          approved_count?: number
+          checkouts_created?: number
+          conversion_rate?: number | null
+          created_at?: string
+          day?: string
+          fulfillment_success_rate?: number | null
+          notes?: string | null
+          opp_count?: number
+          outreach_sent?: number
+          paid_count?: number
+          revenue_usd?: number
+          signals_count?: number
+        }
+        Relationships: []
+      }
       brain_settings: {
         Row: {
           allowed_contracts: Json
