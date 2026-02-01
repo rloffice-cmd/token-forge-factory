@@ -1,10 +1,14 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+/**
+ * Micro Landing Page - Sensor Products Showcase
+ * דף נחיתה Premium למוצרי ה-Micro Sensors
+ */
+
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { 
   Shield, 
   Wallet, 
@@ -15,239 +19,529 @@ import {
   Zap,
   Code,
   Lock,
-  AlertTriangle
+  AlertTriangle,
+  Bot,
+  TrendingDown,
+  Activity,
+  Eye,
+  ChevronDown,
+  Star,
+  Clock,
+  Terminal
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+// Product configurations
+const PRODUCTS = [
+  {
+    id: 'wallet-risk',
+    name: 'Wallet Risk Ping',
+    nameHe: 'בדיקת סיכון ארנק',
+    price: 0.02,
+    priceDisplay: '$0.02',
+    description: 'האם הארנק הזה בטוח? קבל תשובה מיידית',
+    longDescription: 'בדיקה מקיפה של היסטוריית ארנק, קשרים לגופים מסוכנים, ודפוסי פעילות חשודה.',
+    icon: Wallet,
+    gradient: 'from-orange-500 to-amber-500',
+    bgGlow: 'bg-orange-500/20',
+    features: [
+      'Risk Score 0-100',
+      'Flags: Mixer, Sanctioned, Phishing',
+      'תגובה תוך 50ms',
+      'היסטוריית 90 יום',
+    ],
+    apiExample: `curl -X POST /v1/wallet-risk \\
+  -d '{"address": "0x..."}'
+  
+// Response: { "risk_score": 78, "flags": ["mixer"] }`,
+    useCase: 'לפני כל אינטראקציה עם ארנק חדש',
+  },
+  {
+    id: 'webhook-check',
+    name: 'Webhook Health Check',
+    nameHe: 'בדיקת תקינות Webhook',
+    price: 0.25,
+    priceDisplay: '$0.25',
+    description: 'האם ה-Webhook שלך באמת עובד? בדוק עכשיו',
+    longDescription: 'בדיקת זמינות, מדידת זמני תגובה, ואבחון שגיאות בנקודת הקצה שלך.',
+    icon: Webhook,
+    gradient: 'from-blue-500 to-cyan-500',
+    bgGlow: 'bg-blue-500/20',
+    features: [
+      'בדיקת זמינות (UP/DOWN)',
+      'מדידת Response Time',
+      'בדיקת SSL/TLS',
+      'Status Code Analysis',
+    ],
+    apiExample: `curl -X POST /v1/webhook-check \\
+  -d '{"url": "https://your-endpoint.com/webhook"}'
+  
+// Response: { "status": "healthy", "latency_ms": 45 }`,
+    useCase: 'אחרי כל שינוי בתשתית',
+  },
+  {
+    id: 'payment-drift',
+    name: 'Payment Drift Detector',
+    nameHe: 'גלאי פער בתשלומים',
+    price: 2.00,
+    priceDisplay: '$2.00',
+    description: 'מצא את הכסף שהלך לאיבוד',
+    longDescription: 'השוואה בין תשלומים צפויים לכסף שהתקבל בפועל. מזהה פערים ואנומליות.',
+    icon: DollarSign,
+    gradient: 'from-emerald-500 to-green-500',
+    bgGlow: 'bg-emerald-500/20',
+    features: [
+      'Drift % בין צפוי לבפועל',
+      'זיהוי סכומים חסרים',
+      'התראות אנומליה',
+      'היסטוריית 30 יום',
+    ],
+    apiExample: `curl -X POST /v1/payment-drift \\
+  -d '{"expected": 1000, "received": 970}'
+  
+// Response: { "drift_percent": 3.0, "missing": 30 }`,
+    useCase: 'בסוף כל יום עבודה',
+  },
+];
+
+const COMPARISON = [
+  { feature: 'מחיר לקריאה', sensor: 'סנטים', guardian: 'כלול במנוי' },
+  { feature: 'תיקון אוטומטי', sensor: '❌', guardian: '✅' },
+  { feature: 'התראות', sensor: '❌', guardian: '✅ 24/7' },
+  { feature: 'Retry Logic', sensor: '❌', guardian: '✅ אוטומטי' },
+  { feature: 'חסימת איומים', sensor: 'רק זיהוי', guardian: 'זיהוי + חסימה' },
+];
+
+const FAQ = [
+  {
+    q: 'מה ההבדל בין Sensors ל-Guardian?',
+    a: 'Sensors מגלים בעיות, Guardian מתקן אותן. Sensors הם למי שרוצה לטפל בעצמו, Guardian למי שרוצה אוטומציה מלאה.',
+  },
+  {
+    q: 'יש Free Tier?',
+    a: 'לא. אפילו $0.02 לקריאה מסנן ספאם ומוכיח כוונה אמיתית. אנחנו מעדיפים לקוחות שמשלמים על לקוחות שמנסים.',
+  },
+  {
+    q: 'מה קורה אם אגמור קרדיטים?',
+    a: 'הקריאות יעצרו ותקבל התראה. בלי חיובים נסתרים, בלי הפתעות.',
+  },
+  {
+    q: 'האם אפשר לשלב עם המערכת שלי?',
+    a: 'כן. REST API סטנדרטי, תיעוד מלא, ודוגמאות קוד. שורה אחת של קוד.',
+  },
+];
 
 export default function MicroLanding() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const [activeProduct, setActiveProduct] = useState(0);
 
-  const products = [
-    {
-      id: 'wallet-risk',
-      name: 'Wallet Risk Ping',
-      nameHe: 'בדיקת סיכון ארנק',
-      price: '$0.02',
-      description: 'בדיקה מהירה: האם הארנק הזה מסוכן?',
-      icon: Wallet,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-500/10',
-      features: ['תשובה תוך מילישניות', 'Score + Flags', 'בלי התחייבות'],
-    },
-    {
-      id: 'webhook-check',
-      name: 'Webhook Health Check',
-      nameHe: 'בדיקת תקינות Webhook',
-      price: '$0.25',
-      description: 'בדוק אם ה-Webhook שלך באמת עובד',
-      icon: Webhook,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-500/10',
-      features: ['בדיקת זמינות', 'מדידת Response Time', 'אין Retry - רק אבחון'],
-    },
-    {
-      id: 'payment-drift',
-      name: 'Payment Drift Detector',
-      nameHe: 'גלאי פער בתשלומים',
-      price: '$2.00',
-      description: 'זיהוי פער בין תשלומים צפויים לכסף שהגיע',
-      icon: DollarSign,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      features: ['Snapshot מיידי', 'אחוז סטייה', 'בלי תיקון - רק גילוי'],
-    },
-  ];
+  useEffect(() => {
+    setIsVisible(true);
+  }, []);
+
+  const handlePurchase = async () => {
+    if (!email) {
+      toast.error('הזן אימייל כדי להמשיך');
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const { data: packs } = await supabase
+        .from('credit_packs')
+        .select('id')
+        .eq('is_active', true)
+        .order('price_usd', { ascending: true })
+        .limit(1)
+        .single();
+
+      if (!packs) {
+        navigate('/purchase');
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('create-coinbase-checkout', {
+        body: { pack_id: packs.id, customer_email: email },
+      });
+
+      if (error) throw error;
+      if (data.hosted_url) {
+        sessionStorage.setItem('pending_charge_id', data.charge_id);
+        sessionStorage.setItem('pending_email', email);
+        window.location.href = data.hosted_url;
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      toast.error('שגיאה - נסה שוב');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="min-h-screen bg-background overflow-hidden" dir="rtl">
       {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-background to-orange-500/5" />
-        <div className="relative max-w-7xl mx-auto px-6 py-24">
-          <div className="text-center space-y-6">
-            <Badge variant="outline" className="text-lg px-4 py-2">
-              <Zap className="h-4 w-4 ml-2 text-yellow-500" />
-              Micro Products - Sensor Layer
-            </Badge>
-            
-            <h1 className="text-5xl font-bold bg-gradient-to-r from-foreground to-primary bg-clip-text text-transparent">
-              גלה בעיות לפני שהן גולשות
-            </h1>
-            
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              מוצרי אבחון זולים במיוחד (סנטים-דולרים).
-              <br />
-              לא מתקנים. לא מבטיחים. רק מראים לך את האמת.
-            </p>
+      <section className="relative min-h-[90vh] flex items-center">
+        {/* Animated Background */}
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,hsl(var(--primary)/0.1),transparent_50%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,hsl(38,92%,50%,0.08),transparent_50%)]" />
+          
+          {/* Animated Grid */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--border)/0.03)_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border)/0.03)_1px,transparent_1px)] bg-[size:60px_60px]" />
+          
+          {/* Floating Elements */}
+          <div className="absolute top-20 right-20 w-64 h-64 bg-orange-500/10 rounded-full blur-[100px] animate-pulse" />
+          <div className="absolute bottom-20 left-20 w-80 h-80 bg-blue-500/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1.5s' }} />
+        </div>
 
-            <div className="flex items-center justify-center gap-4 pt-4">
-              <Link to="/purchase">
-                <Button size="lg" className="gap-2">
-                  <Code className="h-5 w-5" />
-                  קבל מפתח API
+        <div className={`relative z-10 max-w-6xl mx-auto px-6 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            {/* Content */}
+            <div>
+              <Badge variant="outline" className="mb-6 px-4 py-2 text-base">
+                <Activity className="w-4 h-4 ml-2 text-primary" />
+                Micro Sensors
+              </Badge>
+
+              <h1 className="text-5xl lg:text-6xl font-bold mb-6 leading-tight">
+                <span className="bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                  שלושה סנסורים.
+                </span>
+                <br />
+                <span className="bg-gradient-to-r from-orange-500 via-primary to-blue-500 bg-clip-text text-transparent">
+                  אלף תובנות.
+                </span>
+              </h1>
+
+              <p className="text-xl text-muted-foreground mb-8 leading-relaxed">
+                API-ים זעירים שמגלים בעיות לפני שהן עולות לך כסף.
+                <br />
+                <span className="font-semibold text-foreground">לא מתקנים. לא מבטיחים. רק מראים את האמת.</span>
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 mb-8">
+                <Input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-14 text-lg"
+                  dir="ltr"
+                />
+                <Button 
+                  size="lg" 
+                  className="h-14 px-8 gap-2"
+                  onClick={handlePurchase}
+                  disabled={isLoading}
+                >
+                  {isLoading ? '...' : <>קבל מפתח API<ArrowRight className="w-5 h-5 mr-1" /></>}
                 </Button>
-              </Link>
-              <Link to="/api-docs">
-                <Button variant="outline" size="lg" className="gap-2">
-                  קרא תיעוד
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+              </div>
+
+              <div className="flex flex-wrap gap-6 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-primary" />
+                  בלי מנויים
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-primary" />
+                  שלם לפי שימוש
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-primary" />
+                  תוצאות מיידיות
+                </div>
+              </div>
+            </div>
+
+            {/* Visual */}
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-transparent rounded-3xl blur-3xl" />
+              <Card className="relative overflow-hidden border-2 border-border/50 bg-card/80 backdrop-blur-xl">
+                <CardContent className="p-0">
+                  {/* Terminal Header */}
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-muted/30">
+                    <div className="w-3 h-3 rounded-full bg-destructive" />
+                    <div className="w-3 h-3 rounded-full bg-warning" />
+                    <div className="w-3 h-3 rounded-full bg-success" />
+                    <span className="text-xs text-muted-foreground mr-4 font-mono">api-demo.sh</span>
+                  </div>
+                  
+                  <div className="p-6 font-mono text-sm space-y-4" dir="ltr">
+                    <div className="text-muted-foreground">
+                      <span className="text-primary">$</span> curl /v1/wallet-risk
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-4">
+                      <pre className="text-xs overflow-x-auto">
+{`{
+  "risk_score": 82,
+  "decision": "HIGH_RISK",
+  "flags": [
+    "mixer_interaction",
+    "rapid_movements"
+  ],
+  "confidence": 0.94
+}`}
+                      </pre>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      Response time: 47ms
+                      <span className="text-primary">• $0.02</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Products Grid */}
-      <div className="max-w-7xl mx-auto px-6 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold mb-4">שלושה מוצרי סנסור</h2>
-          <p className="text-muted-foreground">
-            כל קריאה = תובנה. אין מינימום. אין התחייבות.
-          </p>
-        </div>
+      {/* Products Deep Dive */}
+      <section className="py-24">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+              שלושה מוצרים, שלוש בעיות נפתרות
+            </h2>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+              כל קריאה = תובנה. אין מינימום. אין התחייבות.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {products.map((product) => (
-            <Card key={product.id} className="relative overflow-hidden hover:shadow-lg transition-shadow">
-              <div className={`absolute top-0 left-0 right-0 h-1 ${product.bgColor.replace('/10', '')}`} />
-              <CardHeader>
-                <div className={`w-12 h-12 rounded-lg ${product.bgColor} flex items-center justify-center mb-4`}>
-                  <product.icon className={`h-6 w-6 ${product.color}`} />
+          {/* Product Tabs */}
+          <div className="flex justify-center gap-4 mb-12">
+            {PRODUCTS.map((product, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveProduct(i)}
+                className={`flex items-center gap-2 px-6 py-3 rounded-full transition-all ${
+                  activeProduct === i
+                    ? `bg-gradient-to-r ${product.gradient} text-background shadow-lg`
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                <product.icon className="w-5 h-5" />
+                <span className="hidden sm:inline">{product.nameHe}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Active Product */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <Card className="overflow-hidden border-2 border-border/50">
+              <CardContent className="p-8">
+                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${PRODUCTS[activeProduct].gradient} p-0.5 mb-6`}>
+                  <div className="w-full h-full rounded-2xl bg-card flex items-center justify-center">
+                    {(() => {
+                      const IconComponent = PRODUCTS[activeProduct].icon;
+                      return <IconComponent className="w-8 h-8" />;
+                    })()}
+                  </div>
                 </div>
-                <CardTitle className="flex items-center justify-between">
-                  <span>{product.nameHe}</span>
-                  <Badge variant="secondary" className="text-lg font-bold">
-                    {product.price}
+
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-2xl font-bold mb-1">{PRODUCTS[activeProduct].nameHe}</h3>
+                    <p className="text-muted-foreground">{PRODUCTS[activeProduct].name}</p>
+                  </div>
+                  <Badge variant="secondary" className="text-2xl font-bold px-4 py-2">
+                    {PRODUCTS[activeProduct].priceDisplay}
                   </Badge>
-                </CardTitle>
-                <CardDescription className="text-base">
-                  {product.description}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {product.features.map((feature, i) => (
-                    <li key={i} className="flex items-center gap-2 text-sm">
-                      <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                </div>
+
+                <p className="text-lg mb-6">{PRODUCTS[activeProduct].longDescription}</p>
+
+                <div className="grid grid-cols-2 gap-3 mb-8">
+                  {PRODUCTS[activeProduct].features.map((feature, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
                       {feature}
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
+
+                <div className="p-4 rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                    <Eye className="w-4 h-4" />
+                    מתי להשתמש:
+                  </div>
+                  <p className="font-medium">{PRODUCTS[activeProduct].useCase}</p>
+                </div>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      </div>
 
-      {/* How It Works */}
-      <div className="bg-muted/30 py-16">
-        <div className="max-w-7xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-center mb-12">איך זה עובד?</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {[
-              { step: 1, title: 'רכוש קרדיטים', desc: 'תשלום קריפטו מהיר', icon: Lock },
-              { step: 2, title: 'קבל מפתח API', desc: 'מיידי לאחר תשלום', icon: Code },
-              { step: 3, title: 'בצע בדיקות', desc: 'כל קריאה = סנטים', icon: Zap },
-              { step: 4, title: 'גלה בעיות', desc: 'ותקבל פתרון אוטומטי', icon: Shield },
-            ].map((item) => (
-              <div key={item.step} className="text-center space-y-3">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                  <item.icon className="h-8 w-8 text-primary" />
-                </div>
-                <div className="text-2xl font-bold text-primary">{item.step}</div>
-                <h3 className="font-semibold">{item.title}</h3>
-                <p className="text-sm text-muted-foreground">{item.desc}</p>
+            {/* Code Example */}
+            <Card className="overflow-hidden border-2 border-border/50 bg-muted/20">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-muted/30">
+                <Terminal className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">דוגמת קוד</span>
               </div>
+              <CardContent className="p-6">
+                <pre className="text-sm font-mono overflow-x-auto whitespace-pre-wrap" dir="ltr">
+                  {PRODUCTS[activeProduct].apiExample}
+                </pre>
+                <Button 
+                  className="w-full mt-6" 
+                  onClick={() => navigate('/purchase')}
+                >
+                  <Code className="w-4 h-4 ml-2" />
+                  נסה עכשיו
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Guardian Upsell */}
+      <section className="py-24 bg-gradient-to-br from-primary/5 via-background to-warning/5">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Content */}
+            <div>
+              <Badge className="mb-6 bg-primary text-primary-foreground">
+                <Shield className="w-4 h-4 ml-1" />
+                Guardian Tier
+              </Badge>
+              <h2 className="text-4xl font-bold mb-6">
+                מוצא את אותן בעיות שוב ושוב?
+                <br />
+                <span className="text-primary">Guardian יתקן אותן.</span>
+              </h2>
+              <p className="text-lg text-muted-foreground mb-8">
+                כשהסנסורים מגלים דפוסים בעייתיים חוזרים, Guardian נכנס לפעולה אוטומטית.
+                חוסם ארנקים, מתקן Webhooks, מאזן תשלומים. 24/7.
+              </p>
+
+              <div className="flex items-baseline gap-3 mb-8">
+                <span className="text-5xl font-bold text-primary">$499</span>
+                <span className="text-xl text-muted-foreground">/חודש</span>
+              </div>
+
+              <Button size="lg" onClick={() => navigate('/purchase')}>
+                <Shield className="w-5 h-5 ml-2" />
+                הפעל Guardian
+              </Button>
+            </div>
+
+            {/* Comparison Table */}
+            <Card className="overflow-hidden border-2 border-primary/20">
+              <CardContent className="p-0">
+                <table className="w-full">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-right p-4 font-medium">תכונה</th>
+                      <th className="text-center p-4 font-medium">Sensors</th>
+                      <th className="text-center p-4 font-medium text-primary">Guardian</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {COMPARISON.map((row, i) => (
+                      <tr key={i} className="border-t border-border/50">
+                        <td className="p-4">{row.feature}</td>
+                        <td className="text-center p-4 text-muted-foreground">{row.sensor}</td>
+                        <td className="text-center p-4 font-medium text-primary">{row.guardian}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-24">
+        <div className="max-w-4xl mx-auto px-6">
+          <h2 className="text-4xl font-bold text-center mb-16">שאלות נפוצות</h2>
+          
+          <div className="space-y-6">
+            {FAQ.map((item, i) => (
+              <Card key={i} className="border-border/50">
+                <CardContent className="p-6">
+                  <h3 className="text-lg font-semibold mb-3">{item.q}</h3>
+                  <p className="text-muted-foreground">{item.a}</p>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Guardian Upsell Section */}
-      <div className="max-w-7xl mx-auto px-6 py-16">
-        <Card className="bg-gradient-to-r from-primary/5 to-orange-500/5 border-2 border-primary/20">
-          <CardContent className="p-8 md:p-12">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-              <div className="space-y-4">
-                <Badge className="bg-primary text-primary-foreground">
-                  <Shield className="h-4 w-4 ml-1" />
-                  Guardian Tier
-                </Badge>
-                <h2 className="text-3xl font-bold">
-                  זיהינו בעיה?
-                  <br />
-                  <span className="text-primary">Guardian מתקן אותה.</span>
-                </h2>
-                <p className="text-muted-foreground">
-                  כשהמוצרים הזולים מגלים בעיות חוזרות, המערכת מציעה לך שדרוג אוטומטי ל-Guardian - 
-                  פתרון אוטונומי מלא שמתקן ומגן עליך 24/7.
-                </p>
-                <div className="flex items-center gap-4 pt-4">
-                  <div className="text-4xl font-bold text-primary">$499</div>
-                  <div className="text-muted-foreground">/חודש</div>
-                </div>
-                <ul className="space-y-2">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    תיקון אוטומטי של Webhooks
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    חסימת ארנקים מסוכנים
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-green-500" />
-                    Reconciliation אוטומטי
-                  </li>
-                </ul>
-              </div>
-              <div className="bg-card rounded-lg p-6 border">
-                <div className="flex items-start gap-3 mb-4">
-                  <AlertTriangle className="h-6 w-6 text-orange-500 flex-shrink-0 mt-1" />
-                  <div>
-                    <h4 className="font-semibold">דוגמה להצעה אוטומטית:</h4>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      "זיהינו 3 בדיקות ארנק עם סיכון גבוה ב-24 שעות אחרונות.
-                      הפסד משוער: <span className="text-orange-500 font-bold">$3,000/חודש</span>.
-                      Guardian מונע את זה אוטונומית."
-                    </p>
-                  </div>
-                </div>
-                <Button className="w-full gap-2">
-                  <Shield className="h-4 w-4" />
-                  הפעל Guardian עכשיו
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Rate Limit Notice */}
-      <div className="bg-muted/30 py-8">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            <Lock className="inline h-4 w-4 ml-1" />
-            תקרת שימוש יומית: $20 למשתמש. אין Free Tier. 
-            אפילו $0.01 חשוב - מסנן רעש ומוכיח Intent.
+      {/* Final CTA */}
+      <section className="py-24 bg-muted/30">
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">
+            מוכן לגלות מה מתחמק ממך?
+          </h2>
+          <p className="text-xl text-muted-foreground mb-12">
+            שתי דקות להגדרה. תוצאות מיידיות.
           </p>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+            <Input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-72 h-14 text-lg"
+              dir="ltr"
+            />
+            <Button 
+              size="lg" 
+              className="h-14 px-8 gap-2"
+              onClick={handlePurchase}
+              disabled={isLoading}
+            >
+              <Zap className="w-5 h-5" />
+              התחל עכשיו
+            </Button>
+          </div>
+
+          <div className="flex justify-center gap-8 mt-8 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4" />
+              תשלום מאובטח
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap className="w-4 h-4" />
+              הפעלה מיידית
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
       {/* Footer */}
-      <footer className="border-t py-8">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Micro Stack v0 - Sensor Layer
-          </p>
-          <div className="flex gap-4">
-            <Link to="/api-docs" className="text-sm text-muted-foreground hover:text-foreground">
-              תיעוד API
-            </Link>
-            <Link to="/purchase" className="text-sm text-muted-foreground hover:text-foreground">
-              רכישת קרדיטים
-            </Link>
+      <footer className="py-12 border-t border-border/50">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Activity className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <span className="font-bold">Micro Sensors</span>
+            </div>
+            <div className="flex gap-8 text-sm text-muted-foreground">
+              <Link to="/api-docs" className="hover:text-foreground transition-colors">
+                תיעוד API
+              </Link>
+              <Link to="/purchase" className="hover:text-foreground transition-colors">
+                תמחור
+              </Link>
+              <Link to="/landing" className="hover:text-foreground transition-colors">
+                דף הבית
+              </Link>
+            </div>
+            <div className="text-sm text-muted-foreground">
+              © 2024 Token Forge
+            </div>
           </div>
         </div>
       </footer>

@@ -107,3 +107,9 @@ verify_jwt = false
 
 [functions.brain-daily-metrics]
 verify_jwt = false
+
+[functions.marketing-optimizer]
+verify_jwt = false
+
+[functions.landing-ab-test]
+verify_jwt = false
