@@ -29,3 +29,18 @@ verify_jwt = false
 
 [functions.expansion-engine]
 verify_jwt = false
+
+[functions.self-improvement]
+verify_jwt = false
+
+[functions.lead-hunter]
+verify_jwt = false
+
+[functions.ai-outreach]
+verify_jwt = false
+
+[functions.outreach-sender]
+verify_jwt = false
+
+[functions.auto-closer]
+verify_jwt = false
