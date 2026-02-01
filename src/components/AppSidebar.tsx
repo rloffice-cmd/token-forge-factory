@@ -14,11 +14,13 @@ import {
   Shield,
   Key,
   Brain,
+  Compass,
 } from 'lucide-react';
 
 const navItems = [
   { icon: DollarSign, label: 'Money Machine', href: '/' },
   { icon: Brain, label: 'אינטליגנציה', href: '/intelligence' },
+  { icon: Compass, label: 'גילוי', href: '/discovery' },
   { icon: LayoutDashboard, label: 'דשבורד', href: '/dashboard' },
   { icon: FileCode2, label: 'ג׳ובים', href: '/jobs' },
   { icon: Wallet, label: 'קופה', href: '/treasury' },

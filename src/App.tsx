@@ -19,6 +19,7 @@ import ApiAccess from "./pages/ApiAccess";
 import AdminSecurity from "./pages/AdminSecurity";
 import AdminApiKeys from "./pages/AdminApiKeys";
 import Intelligence from "./pages/Intelligence";
+import Discovery from "./pages/Discovery";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/settings" element={<Settings />} />
             <Route path="/system" element={<SystemDashboard />} />
             <Route path="/intelligence" element={<Intelligence />} />
+            <Route path="/discovery" element={<Discovery />} />
             <Route path="/admin/security" element={<AdminSecurity />} />
             <Route path="/admin/api-keys" element={<AdminApiKeys />} />
             
