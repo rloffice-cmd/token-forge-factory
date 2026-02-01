@@ -10,22 +10,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface Opportunity {
-  id: string;
-  signal_id_v2: string;
-  offer_id: string;
-  composite_score: number;
-  est_value_usd: number;
-  status: string;
-}
-
-interface Signal {
-  id: string;
-  title: string;
-  url: string;
-  author: string;
-}
-
 interface Offer {
   id: string;
   code: string;
@@ -72,6 +56,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch approved opportunities that haven't been processed
+    // Note: No join with demand_signals - we'll fetch separately
     const { data: opportunities, error: oppError } = await supabase
       .from('opportunities')
       .select(`*, offers(*)`)
@@ -93,8 +78,11 @@ Deno.serve(async (req) => {
     for (const opp of (opportunities || []) as any[]) {
       const offer = opp.offers as Offer;
       
-      // Fetch signal separately (no FK constraint)
-      let signal: Signal | null = null;
+      // Fetch signal data separately (no FK constraint exists)
+      let signalTitle = '';
+      let signalUrl = '';
+      let signalAuthor = '';
+      
       if (opp.signal_id_v2) {
         const { data: signalData } = await supabase
           .from('demand_signals')
@@ -103,12 +91,9 @@ Deno.serve(async (req) => {
           .single();
         
         if (signalData) {
-          signal = {
-            id: signalData.id,
-            title: signalData.query_text || '',
-            url: signalData.source_url || '',
-            author: signalData.payload_json?.author || ''
-          };
+          signalTitle = signalData.query_text || '';
+          signalUrl = signalData.source_url || '';
+          signalAuthor = signalData.payload_json?.author || '';
         }
       }
       
@@ -133,8 +118,8 @@ Deno.serve(async (req) => {
         result: 'pending',
         metadata_json: {
           offer_code: offer.code,
-          signal_title: signal?.title || '',
-          signal_url: signal?.url || '',
+          signal_title: signalTitle,
+          signal_url: signalUrl,
           score: opp.composite_score
         }
       });
@@ -144,7 +129,7 @@ Deno.serve(async (req) => {
       // Queue outreach if enabled (low volume mode)
       if (settings.outreach_enabled && results.outreach_queued < (settings.max_daily_outreach || 10)) {
         // Only queue if we have an author (potential contact)
-        if (signal?.author && signal.author.length > 0) {
+        if (signalAuthor && signalAuthor.length > 0) {
           await supabase.from('outreach_queue').insert({
             lead_id: opp.id, // Using opportunity as lead reference
             channel: 'comment_template',
@@ -166,12 +151,20 @@ Deno.serve(async (req) => {
       results.opportunities_processed++;
     }
 
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      job_id: '00000000-0000-0000-0000-000000000000',
-      action: 'brain-close:completed',
-      metadata: results
-    });
+    // Audit log - use valid job_id
+    const { data: validJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .limit(1)
+      .single();
+    
+    if (validJob) {
+      await supabase.from('audit_logs').insert({
+        job_id: validJob.id,
+        action: 'brain-close:completed',
+        metadata: results
+      });
+    }
 
     return new Response(
       JSON.stringify({ success: true, ...results }),

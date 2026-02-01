@@ -13,11 +13,12 @@ const corsHeaders = {
 interface Signal {
   id: string;
   source_id: string;
-  title: string;
-  raw_text: string;
-  url: string;
-  intent_type: string;
-  confidence: number;
+  query_text: string; // The actual column name in demand_signals
+  source_url: string;
+  payload_json: Record<string, unknown>;
+  urgency_score: number;
+  relevance_score: number;
+  category: string;
   created_at: string;
 }
 
@@ -32,16 +33,18 @@ interface Offer {
 // Score a signal for an offer
 function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): number {
   let score = 0;
-  const text = `${signal.title} ${signal.raw_text}`.toLowerCase();
+  // Use correct field names from demand_signals
+  const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
   
   // Keyword match scoring
   const matchedKeywords = offer.keywords.filter(kw => text.includes(kw.toLowerCase()));
   score += Math.min(0.3, matchedKeywords.length * 0.05);
   
-  // Intent type scoring
-  if (offer.code === 'risk-api' && signal.intent_type === 'risk_scoring') {
+  // Category-based scoring (instead of intent_type)
+  const category = signal.category || '';
+  if (offer.code === 'risk-api' && /risk|security|wallet|fraud/i.test(category)) {
     score += 0.25;
-  } else if (offer.code === 'webhook-monitor' && ['replay_webhook', 'bug_webhook'].includes(signal.intent_type)) {
+  } else if (offer.code === 'webhook-monitor' && /webhook|api|integration/i.test(category)) {
     score += 0.25;
   }
   
@@ -51,7 +54,12 @@ function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): n
     score += 0.15;
   }
   
-  // Urgency boost
+  // Urgency boost - use urgency_score from signal
+  if (signal.urgency_score && signal.urgency_score > 0.5) {
+    score += signal.urgency_score * 0.1;
+  }
+  
+  // "Need" words boost
   const urgencyWords = ['urgent', 'asap', 'immediately', 'critical', 'production', 'live'];
   if (urgencyWords.some(w => text.includes(w))) {
     score += 0.1;
@@ -65,8 +73,8 @@ function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): n
   // Source health boost
   score += sourceHealthScore * 0.1;
   
-  // Base confidence from signal
-  score += signal.confidence * 0.1;
+  // Base relevance from signal
+  score += (signal.relevance_score || 0) * 0.1;
   
   return Math.min(1.0, Math.max(0, score));
 }
@@ -83,16 +91,17 @@ function estimateValue(offer: Offer, score: number): number {
 
 // Match signal to best offer
 function matchOffer(signal: Signal, offers: Offer[]): Offer | null {
-  const text = `${signal.title} ${signal.raw_text}`.toLowerCase();
+  const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
+  const category = signal.category || '';
   
   // Risk API keywords
-  if (signal.intent_type === 'risk_scoring' || 
+  if (/risk|security/i.test(category) || 
       /wallet|contract|scam|malicious|fraud|phishing|audit|security/i.test(text)) {
     return offers.find(o => o.code === 'risk-api') || null;
   }
   
   // Webhook monitor keywords
-  if (['replay_webhook', 'bug_webhook'].includes(signal.intent_type) ||
+  if (/webhook|api|integration/i.test(category) ||
       /webhook|replay|retry|signature|verify|events/i.test(text)) {
     return offers.find(o => o.code === 'webhook-monitor') || null;
   }
@@ -222,12 +231,20 @@ Deno.serve(async (req) => {
       results.signals_processed++;
     }
 
-    // Audit log
-    await supabase.from('audit_logs').insert({
-      job_id: '00000000-0000-0000-0000-000000000000',
-      action: 'brain-score:completed',
-      metadata: results
-    });
+    // Audit log - get a valid job_id
+    const { data: validJob } = await supabase
+      .from('jobs')
+      .select('id')
+      .limit(1)
+      .single();
+    
+    if (validJob) {
+      await supabase.from('audit_logs').insert({
+        job_id: validJob.id,
+        action: 'brain-score:completed',
+        metadata: results
+      });
+    }
 
     return new Response(
       JSON.stringify({ success: true, ...results }),
