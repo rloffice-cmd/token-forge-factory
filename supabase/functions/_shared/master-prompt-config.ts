@@ -141,8 +141,27 @@ export const ACTION_REQUIREMENTS = {
 export const VELOCITY_LIMITS = {
   max_public_replies_per_day: 2,
   max_dm_per_day: 1,
-  max_checkouts_per_day: 5, // If no payments, reduce
+  max_checkouts_per_day: 5, // If no payments, reduce to 1
+  max_checkouts_throttled: 1, // When payment-first throttle kicks in
   cooldown_after_block_hours: 72,
+};
+
+// =====================================================
+// PAYMENT-FIRST THROTTLE (CRITICAL)
+// =====================================================
+export const PAYMENT_THROTTLE = {
+  window_hours: 24,
+  checkout_threshold: 10, // If checkouts > N and payments = 0
+  throttle_action: 'FREE_ONLY', // Force free-only mode
+  auto_reduce_checkouts: true,
+};
+
+// =====================================================
+// TRUST CAP FOR NEW USERS (NO HISTORY)
+// =====================================================
+export const TRUST_CAP = {
+  no_history_max: 70, // Cap trust at 70 if no interaction history
+  min_interactions_for_paid: 2, // Need at least 2 interactions before paid flow
 };
 
 // =====================================================
@@ -382,6 +401,11 @@ export function calculateTrustScore(
   // Timing - panic reduces trust
   if (isPanicking) score -= 10;
   
+  // 🔒 TRUST CAP: If no interaction history, cap at 70 (FREE_ONLY max)
+  if (interactionCount < TRUST_CAP.min_interactions_for_paid) {
+    score = Math.min(score, TRUST_CAP.no_history_max);
+  }
+  
   return Math.max(0, Math.min(100, score));
 }
 
@@ -389,6 +413,28 @@ export function getTrustAction(trustScore: number): 'BLOCK' | 'FREE_ONLY' | 'PAI
   if (trustScore < TRUST_GATES.BLOCK_PAYMENT) return 'BLOCK';
   if (trustScore < TRUST_GATES.PAID_ALLOWED) return 'FREE_ONLY';
   return 'PAID_OK';
+}
+
+/**
+ * Payment-First Throttle: Check if system should throttle checkouts
+ * Returns true if we should block paid flows due to 0 conversions
+ */
+export function shouldThrottleCheckouts(
+  recentCheckouts: number,
+  recentPayments: number
+): boolean {
+  if (recentPayments > 0) return false; // At least one payment = OK
+  return recentCheckouts >= PAYMENT_THROTTLE.checkout_threshold;
+}
+
+/**
+ * Get max checkouts allowed based on payment history
+ */
+export function getMaxCheckoutsAllowed(recentPayments: number): number {
+  if (recentPayments === 0 && PAYMENT_THROTTLE.auto_reduce_checkouts) {
+    return VELOCITY_LIMITS.max_checkouts_throttled;
+  }
+  return VELOCITY_LIMITS.max_checkouts_per_day;
 }
 
 export function canCreateCheckout(painScore: number, hasBuyingSignal: boolean, trustScore: number): boolean {

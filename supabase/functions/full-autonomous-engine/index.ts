@@ -15,12 +15,17 @@ import {
   PLATFORM_CONFIG, 
   AI_PROMPTS,
   EXECUTION_MODE,
+  TRUST_CAP,
+  PAYMENT_THROTTLE,
+  VELOCITY_LIMITS,
   validateContent,
   shouldAutoPublish,
   shouldOutreach,
   getRandomDelay,
   getContentStatus,
-  detectBlockRisk 
+  detectBlockRisk,
+  shouldThrottleCheckouts,
+  getMaxCheckoutsAllowed,
 } from "../_shared/master-prompt-config.ts";
 
 const corsHeaders = {
@@ -192,6 +197,28 @@ serve(async (req) => {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'sent')
       .gte('created_at', `${today}T00:00:00Z`);
+
+    // 🔒 PAYMENT-FIRST THROTTLE: Check recent checkouts vs payments
+    const last24h = new Date(Date.now() - PAYMENT_THROTTLE.window_hours * 60 * 60 * 1000).toISOString();
+    
+    const { count: recentCheckouts } = await supabase
+      .from('closing_attempts')
+      .select('*', { count: 'exact', head: true })
+      .eq('result', 'checkout_created')
+      .gte('created_at', last24h);
+
+    const { count: recentPayments } = await supabase
+      .from('payments')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'confirmed')
+      .gte('confirmed_at', last24h);
+
+    const isThrottled = shouldThrottleCheckouts(recentCheckouts || 0, recentPayments || 0);
+    const maxCheckouts = getMaxCheckoutsAllowed(recentPayments || 0);
+
+    if (isThrottled) {
+      console.log(`🛑 PAYMENT-FIRST THROTTLE ACTIVE: ${recentCheckouts} checkouts, ${recentPayments} payments → FREE_ONLY mode`);
+    }
 
     if ((todayPosts || 0) >= LIMITS.MAX_POSTS_PER_DAY) {
       console.log(`🛑 Daily post limit reached: ${todayPosts}/${LIMITS.MAX_POSTS_PER_DAY}`);
@@ -448,10 +475,16 @@ serve(async (req) => {
           relevance_score: lead.score,
           pain_points: lead.pain_points,
           interests: lead.product_fit,
-          status: 'qualified', // All 80+ leads are qualified - IMMEDIATE ACTION
+          status: isThrottled ? 'free_only' : 'qualified', // Throttle mode = free_only
         }, { onConflict: 'source_url' });
 
         stats.leads_discovered++;
+
+        // 🔒 PAYMENT-FIRST THROTTLE: Skip paid outreach if throttled
+        if (isThrottled) {
+          console.log(`🛑 Throttled: Lead ${lead.url} → FREE_ONLY (no outreach)`);
+          continue;
+        }
 
         // EXECUTION MODE: Immediate outreach for 80+ leads (no waiting, no drafts)
         if (shouldOutreach(lead.score) && lead.suggested_response && stats.outreach_sent < remainingOutreach) {
