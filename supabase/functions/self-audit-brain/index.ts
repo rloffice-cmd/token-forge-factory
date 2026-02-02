@@ -101,11 +101,15 @@ const KILL_GATES = {
 interface KPISnapshot {
   paid_confirmed_24h: number;
   paid_confirmed_7d: number;
+  paid_confirmed_30d: number;
   checkouts_24h: number;
   checkouts_7d: number;
+  checkouts_30d: number;
   throttle_state: string;
   throttle_until: string | null;
+  throttle_activated_at: string | null;
   throttle_count_7d: number;
+  trust_to_payment_ratio_7d: number;
   trust_to_payment_ratio_30d: number;
   free_value_events_24h: number;
   free_value_events_7d: number;
@@ -174,24 +178,35 @@ serve(async (req) => {
       .eq('status', 'confirmed')
       .gte('confirmed_at', last7d);
 
-    // Checkouts
+    const { count: paid30d } = await supabase
+      .from('payments')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'confirmed')
+      .gte('confirmed_at', last30d);
+
+    // Checkouts - FIXED: Clear definition - checkout_url IS NOT NULL
     const { count: checkouts24h } = await supabase
       .from('closing_attempts')
       .select('*', { count: 'exact', head: true })
-      .eq('result', 'checkout_created')
+      .not('checkout_url', 'is', null)
       .gte('created_at', last24h);
 
     const { count: checkouts7d } = await supabase
       .from('closing_attempts')
       .select('*', { count: 'exact', head: true })
-      .eq('result', 'checkout_created')
+      .not('checkout_url', 'is', null)
       .gte('created_at', last7d);
 
-    // Throttle state
+    const { count: checkouts30d } = await supabase
+      .from('closing_attempts')
+      .select('*', { count: 'exact', head: true })
+      .not('checkout_url', 'is', null)
+      .gte('created_at', last30d);
+
+    // Throttle state - FIXED: Remove invalid .eq('id', true), just use .single()
     const { data: settings } = await supabase
       .from('brain_settings')
-      .select('throttle_until, throttle_reason, throttle_count_7d')
-      .eq('id', true)
+      .select('throttle_until, throttle_reason, throttle_count_7d, throttle_activated_at')
       .single();
 
     const throttleState = settings?.throttle_until && new Date(settings.throttle_until) > now ? 'ON' : 'OFF';
@@ -227,20 +242,28 @@ serve(async (req) => {
     const trustCapRate = trustCapCount / totalDecisions;
     const interactionCountAvg = totalInteractionCount / totalDecisions;
 
-    // Trust to payment ratio
-    const trustToPaymentRatio = (checkouts7d || 0) > 0 
+    // FIXED: Trust to payment ratio - calculate both 7d and 30d accurately
+    const trustToPaymentRatio7d = (checkouts7d || 0) > 0 
       ? (paid7d || 0) / (checkouts7d || 1) 
+      : 0;
+
+    const trustToPaymentRatio30d = (checkouts30d || 0) > 0 
+      ? (paid30d || 0) / (checkouts30d || 1) 
       : 0;
 
     const kpiSnapshot: KPISnapshot = {
       paid_confirmed_24h: paid24h || 0,
       paid_confirmed_7d: paid7d || 0,
+      paid_confirmed_30d: paid30d || 0,
       checkouts_24h: checkouts24h || 0,
       checkouts_7d: checkouts7d || 0,
+      checkouts_30d: checkouts30d || 0,
       throttle_state: throttleState,
       throttle_until: settings?.throttle_until || null,
+      throttle_activated_at: settings?.throttle_activated_at || null,
       throttle_count_7d: settings?.throttle_count_7d || 0,
-      trust_to_payment_ratio_30d: trustToPaymentRatio,
+      trust_to_payment_ratio_7d: trustToPaymentRatio7d,
+      trust_to_payment_ratio_30d: trustToPaymentRatio30d,
       free_value_events_24h: freeEvents24h || 0,
       free_value_events_7d: freeEvents7d || 0,
       decision_distribution: decisionDistribution,
@@ -288,10 +311,11 @@ serve(async (req) => {
       });
     }
 
-    // Check: Throttle never releases
-    if (throttleState === 'ON' && settings?.throttle_until) {
-      const throttleStart = new Date(settings.throttle_until).getTime() - 12 * 60 * 60 * 1000;
-      const throttleDuration = now.getTime() - throttleStart;
+    // Check: Throttle never releases - FIXED: Use throttle_activated_at for accurate duration
+    if (throttleState === 'ON' && settings?.throttle_activated_at) {
+      const throttleActivatedAt = new Date(settings.throttle_activated_at).getTime();
+      const throttleDuration = now.getTime() - throttleActivatedAt;
+      
       if (throttleDuration > 48 * 60 * 60 * 1000) {
         anomalies.push({
           bug_id: 'throttle_never_releases',
@@ -299,12 +323,26 @@ serve(async (req) => {
           bug_type: 'logic',
           severity: 9,
           evidence: {
-            throttle_duration_hours: throttleDuration / (60 * 60 * 1000),
+            throttle_duration_hours: Math.round(throttleDuration / (60 * 60 * 1000)),
+            throttle_activated_at: settings.throttle_activated_at,
             throttle_until: settings.throttle_until,
           },
           probable_cause: 'No payments to reset throttle, or throttle_until not clearing',
         });
       }
+    } else if (throttleState === 'ON' && !settings?.throttle_activated_at) {
+      // MISSING: throttle_activated_at not set - can't determine duration accurately
+      anomalies.push({
+        bug_id: 'throttle_missing_activation_time',
+        bug_name: 'Throttle Active Without Activation Timestamp',
+        bug_type: 'data',
+        severity: 5,
+        evidence: {
+          throttle_until: settings?.throttle_until,
+          throttle_activated_at: null,
+        },
+        probable_cause: 'throttle_activated_at not being set when throttle activates',
+      });
     }
 
     // Check: Free-only loop
@@ -351,7 +389,10 @@ serve(async (req) => {
       patch_suggestion: string;
     }> = [];
 
-    for (const anomaly of anomalies.slice(0, 3)) { // Top 3 by severity
+    // FIXED: Sort anomalies by severity DESC before taking top 3
+    const sortedAnomalies = [...anomalies].sort((a, b) => b.severity - a.severity);
+    
+    for (const anomaly of sortedAnomalies.slice(0, 3)) {
       let hypothesis = '';
       let patchSuggestion = '';
       const proofQueries: string[] = [];
@@ -405,6 +446,24 @@ serve(async (req) => {
     const patchProposals = [];
 
     for (const h of hypotheses) {
+      // FIXED: Calculate confidence based on evidence strength, not just severity
+      let confidence = 0.5; // Base confidence
+      
+      // Evidence-based confidence calculation
+      if (h.anomaly.bug_id === 'paid_never_happens' && kpiSnapshot.checkouts_7d > 10) {
+        confidence = 0.95; // Very clear evidence
+      } else if (h.anomaly.bug_id === 'trust_cap_always_applied' && kpiSnapshot.trust_cap_rate > 0.95) {
+        confidence = 0.9; // Clear threshold breach
+      } else if (h.anomaly.bug_id === 'interaction_count_stuck' && kpiSnapshot.interaction_count_avg < 0.05) {
+        confidence = 0.95; // Near-zero avg is definitive
+      } else if (h.anomaly.bug_id === 'throttle_never_releases') {
+        confidence = 0.85; // Can verify from timestamps
+      } else if (h.anomaly.severity >= 8) {
+        confidence = 0.7; // High severity, moderate confidence
+      } else {
+        confidence = 0.6; // Lower severity, hypothesis-level confidence
+      }
+
       const { data: proposal } = await supabase
         .from('patch_proposals')
         .insert({
@@ -414,7 +473,7 @@ serve(async (req) => {
           severity: h.anomaly.severity,
           evidence_queries: h.proof_queries,
           evidence_results: h.anomaly.evidence,
-          confidence: h.anomaly.severity / 10,
+          confidence, // FIXED: Evidence-based confidence
           patch_type: 'config',
           patch_target: h.anomaly.bug_id,
           patch_diff: h.patch_suggestion,
@@ -448,15 +507,20 @@ serve(async (req) => {
     // =====================================================
     // UPDATE AUDIT RUN
     // =====================================================
+    // FIXED: Use sorted anomalies for display
+    const topAnomalies = sortedAnomalies.slice(0, 3);
+    
     const summary = `
-📊 KPI: ${kpiSnapshot.paid_confirmed_24h} payments (24h), ${kpiSnapshot.checkouts_24h} checkouts, ${(kpiSnapshot.trust_to_payment_ratio_30d * 100).toFixed(1)}% conversion
+📊 KPI: ${kpiSnapshot.paid_confirmed_24h} payments (24h), ${kpiSnapshot.checkouts_24h} checkouts
+📈 Conversion: ${(kpiSnapshot.trust_to_payment_ratio_7d * 100).toFixed(1)}% (7d), ${(kpiSnapshot.trust_to_payment_ratio_30d * 100).toFixed(1)}% (30d)
+🎯 Trust Cap Rate: ${(kpiSnapshot.trust_cap_rate * 100).toFixed(1)}%, Avg Interactions: ${kpiSnapshot.interaction_count_avg.toFixed(2)}
 🔍 Anomalies: ${anomalies.length} found
 💡 Hypotheses: ${hypotheses.length} generated
 🔧 Patches: ${patchProposals.length} proposed
 🛡️ Can Deploy: ${canDeployMore ? 'YES' : 'NO (limit reached)'}
 
 Top Issues:
-${anomalies.slice(0, 3).map(a => `- [${a.severity}/10] ${a.bug_name}: ${a.probable_cause}`).join('\n')}
+${topAnomalies.map(a => `- [${a.severity}/10] ${a.bug_name}: ${a.probable_cause}`).join('\n')}
     `.trim();
 
     await supabase
