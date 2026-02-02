@@ -1,6 +1,15 @@
 /**
- * Outreach Sender - Kill Gates + Rate Limit + Telegram Send
- * שליחה אוטומטית עם Kill Gates, Rate Limiter ו-Self-Heal
+ * Outreach Sender - SILENT MODE
+ * 
+ * NOTIFICATION POLICY (STRICT):
+ * ❌ NO Telegram notifications for leads/outreach
+ * ❌ NO Telegram for high-intent signals
+ * ✅ Only LOG to database and console
+ * 
+ * Telegram is reserved ONLY for:
+ * - Confirmed payments (coinbase-webhook)
+ * - Daily summary (daily-autonomous-report)
+ * - CRITICAL/FATAL system errors
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -16,61 +25,6 @@ function mustEnv(name: string): string {
   const v = Deno.env.get(name);
   if (!v) throw new Error(`Missing env: ${name}`);
   return v;
-}
-
-function escapeHtml(s: string): string {
-  return (s || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function buildMessage(job: Record<string, unknown>): string {
-  const lead = (job.lead_payload || {}) as Record<string, unknown>;
-  const threadUrl = (lead.thread_url || lead.url || "") as string;
-  const title = (lead.thread_title || lead.title || "") as string;
-  const author = (lead.author_handle || lead.author || "") as string;
-  const conf = Number(job.confidence || 0);
-
-  const header = 
-    `🎯 <b>HIGH INTENT</b> (${Math.round(conf * 100)}%)\n` +
-    `Topic: <b>${escapeHtml(job.intent_topic as string || "unknown")}</b>\n` +
-    `Source: <b>${escapeHtml(job.source as string || "unknown")}</b>\n`;
-
-  const leadLine = 
-    (title ? `\n🧵 <b>${escapeHtml(title)}</b>\n` : "\n") +
-    (author ? `👤 ${escapeHtml(author)}\n` : "") +
-    (threadUrl ? `🔗 ${escapeHtml(threadUrl)}\n` : "");
-
-  // CTA - auto-generate from Supabase URL if not set
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\./)?.[1] || "";
-  const defaultLanding = projectRef ? `https://${projectRef}.lovable.app/landing` : "";
-  const cta = Deno.env.get("MICRO_LANDING_URL") || defaultLanding;
-  const ctaLine = cta ? `\n👉 <b>Try Micro:</b> ${escapeHtml(cta)}\n` : "";
-
-  const draft = `\n✍️ <b>Auto Draft</b>:\n${escapeHtml((job.revised_text || job.draft_text || "") as string)}\n`;
-
-  return header + leadLine + ctaLine + draft;
-}
-
-async function telegramSend(text: string): Promise<{ ok: boolean; status: number; json: Record<string, unknown> }> {
-  const token = mustEnv("TELEGRAM_BOT_TOKEN");
-  const chatId = mustEnv("TELEGRAM_CHAT_ID");
-
-  const resp = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
-    }),
-  });
-
-  const json = await resp.json().catch(() => ({}));
-  return { ok: resp.ok, status: resp.status, json };
 }
 
 serve(async (req) => {
@@ -191,48 +145,13 @@ serve(async (req) => {
       );
     }
 
-    // ========== SEND ==========
-    await supabase
-      .from("outreach_jobs")
-      .update({
-        status: "sending",
-        attempts: (job.attempts || 0) + 1,
-      })
-      .eq("id", jobId);
+    // ========== SILENT MODE: Log only, NO Telegram ==========
+    // Per notification policy: Telegram reserved for payments, daily report, critical errors only
+    
+    console.log(`📝 Job ${jobId} logged (SILENT MODE - no Telegram)`);
+    console.log(`   Source: ${job.source}, Topic: ${job.intent_topic}, Confidence: ${conf}`);
 
-    const message = buildMessage(job);
-    console.log(`📨 Sending to Telegram: ${message.slice(0, 100)}...`);
-
-    const tg = await telegramSend(message);
-
-    if (!tg.ok) {
-      const retryAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min
-      console.error(`❌ Telegram failed: ${tg.status}`, tg.json);
-
-      // Check if dead (too many attempts)
-      const attempts = (job.attempts || 0) + 1;
-      const newStatus = attempts >= 5 ? "dead" : "failed";
-
-      await supabase
-        .from("outreach_jobs")
-        .update({
-          status: newStatus,
-          provider_response: tg.json || {},
-          gate_fail_reason: `telegram_failed:${tg.status}`,
-          next_retry_at: newStatus === "failed" ? retryAt : null,
-        })
-        .eq("id", jobId);
-
-      return new Response(
-        JSON.stringify({ ok: false, sent: false, error: "telegram_failed", status: tg.status }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const messageId = (tg.json?.result as Record<string, unknown>)?.message_id?.toString() || null;
-    console.log(`✅ Sent! message_id: ${messageId}`);
-
-    // Increment daily limit
+    // Increment daily limit for tracking purposes
     if (lim) {
       await supabase
         .from("outreach_limits")
@@ -244,20 +163,19 @@ serve(async (req) => {
         .insert({ limit_date: today, sent_count: 1, cap_count: capCount });
     }
 
-    // Mark as sent
+    // Mark as processed (not "sent" since we didn't actually send to Telegram)
     await supabase
       .from("outreach_jobs")
       .update({
-        status: "sent",
-        provider_message_id: messageId,
-        provider_response: tg.json || {},
+        status: "processed", // Changed from "sent" - indicates logged but not notified
+        provider_response: { silent_mode: true, reason: "notification_policy" },
         gate_fail_reason: null,
         next_retry_at: null,
       })
       .eq("id", jobId);
 
     return new Response(
-      JSON.stringify({ ok: true, sent: true, message_id: messageId }),
+      JSON.stringify({ ok: true, logged: true, silent_mode: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
