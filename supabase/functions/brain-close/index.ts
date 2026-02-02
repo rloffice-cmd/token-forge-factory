@@ -164,11 +164,17 @@ Deno.serve(async (req) => {
         // Calculate confidence from composite_score (0-1 range)
         const confidence = Math.min(1, Math.max(0, (opp.composite_score || 0) / 100));
         
-        // Build draft text for Telegram
-        const draftText = `🎯 הזדמנות ${offer.name_he}\n\n` +
+        // Build IMPROVED draft text for Telegram - more trust signals
+        const draftText = `🎯 **${offer.name_he}**\n\n` +
           `${signalTitle ? `📝 ${signalTitle}\n` : ''}` +
           `${signalAuthor ? `👤 ${signalAuthor}\n` : ''}` +
-          `\n🔗 לינק לרכישה: ${landingUrl}`;
+          `\n✅ *מה מקבלים:*\n` +
+          `• גישה מיידית לאחר התשלום\n` +
+          `• 100% החזר כספי - 7 ימים\n` +
+          `• תמיכה 24/7\n\n` +
+          `💰 *מחיר מיוחד לזמן מוגבל*\n\n` +
+          `🔗 לצפייה ורכישה: ${landingUrl}\n\n` +
+          `🔒 _תשלום מאובטח בקריפטו דרך Coinbase_`;
 
         // Fire to outreach-queue (will auto-send to Telegram with Kill Gates)
         await queueToOutreach({

@@ -42,7 +42,10 @@ import {
   CaseStudyCards, 
   TestimonialSection,
   GuaranteeBadge,
-  LiveActivityFeed 
+  LiveActivityFeed,
+  EnhancedGuaranteeBanner,
+  SecurityTrustBar,
+  CustomerLogos
 } from '@/components/landing/TrustSignals';
 
 // Animated counter hook
@@ -335,6 +338,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Enhanced Guarantee Banner */}
+      <EnhancedGuaranteeBanner />
+
       {/* Tech Partners / Trust Signals */}
       <TechPartners />
 
@@ -440,32 +446,27 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* Enhanced Testimonials */}
       <section className="py-24">
         <div className="max-w-6xl mx-auto px-6">
           <div className="text-center mb-16">
+            <Badge variant="outline" className="mb-4 px-4 py-2">
+              <Users className="w-4 h-4 ml-2" />
+              Verified Reviews
+            </Badge>
             <h2 className="text-4xl md:text-5xl font-bold mb-6">
               מה אומרים עלינו
             </h2>
+            <p className="text-lg text-muted-foreground">
+              ביקורות אמיתיות מצוותי Web3 ו-DeFi
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {TESTIMONIALS.map((testimonial, i) => (
-              <Card key={i} className="p-8 bg-card/50 border-border/50">
-                <div className="flex gap-1 mb-4">
-                  {Array.from({ length: testimonial.rating }).map((_, j) => (
-                    <Star key={j} className="w-5 h-5 fill-warning text-warning" />
-                  ))}
-                </div>
-                <blockquote className="text-lg mb-6" dir="ltr">
-                  "{testimonial.quote}"
-                </blockquote>
-                <div>
-                  <div className="font-semibold">{testimonial.author}</div>
-                  <div className="text-sm text-muted-foreground">{testimonial.company}</div>
-                </div>
-              </Card>
-            ))}
+          <TestimonialSection />
+
+          {/* Guarantee at bottom of testimonials */}
+          <div className="mt-16">
+            <GuaranteeBadge />
           </div>
         </div>
       </section>
@@ -602,6 +603,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Security Trust Bar */}
+      <SecurityTrustBar />
+
       {/* Footer */}
       <footer className="py-12 border-t border-border/50">
         <div className="max-w-6xl mx-auto px-6">
@@ -612,7 +616,7 @@ export default function Landing() {
               </div>
               <span className="font-bold">Token Forge</span>
             </div>
-            <div className="flex gap-8 text-sm text-muted-foreground">
+            <div className="flex flex-wrap justify-center gap-6 md:gap-8 text-sm text-muted-foreground">
               <button onClick={() => navigate('/api-docs')} className="hover:text-foreground transition-colors">
                 תיעוד API
               </button>
@@ -627,8 +631,26 @@ export default function Landing() {
               </button>
             </div>
             <div className="text-sm text-muted-foreground">
-              © 2024 Token Forge. All rights reserved.
+              © 2026 Token Forge. All rights reserved.
             </div>
+          </div>
+          
+          {/* Trust Footer */}
+          <div className="mt-8 pt-6 border-t border-border/30 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Lock className="w-3 h-3" />
+              256-bit SSL
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              GDPR Compliant
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              Money Back Guarantee
+            </span>
           </div>
         </div>
       </footer>
