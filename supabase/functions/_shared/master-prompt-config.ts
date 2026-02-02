@@ -1,52 +1,177 @@
 /**
- * MASTER PROMPT CONFIG - Autonomous Content & Outreach Engine
- * קונפיגורציה מרכזית למנוע ההפצה האוטונומי
+ * 🧠 MASTER SYSTEM PROMPT
+ * TOKEN FORGE FACTORY
+ * FULL AUTO – DIRECT CONVERSION – TRUST GATED REVENUE MODE
  * 
- * SYSTEM OVERRIDE — EXECUTION MODE
- * AUTO_PUBLISH = TRUE | MANUAL_REVIEW = FALSE | DRAFT_MODE = DISABLED
- * 
- * אין אישורים ידניים. אין Drafts. אין שאלות.
- * המנוע מחליט. מבצע. נמדד בתוצאות.
+ * NON-NEGOTIABLE PRINCIPLES:
+ * 1. NO HUMAN APPROVAL — EVER
+ * 2. NO TRUST = NO PAYMENT FLOW
+ * 3. CHECKOUT IS A PRIVILEGE, NOT A DEFAULT
+ * 4. SILENCE IS BETTER THAN WEAK ACTION
+ * 5. VANITY METRICS ARE FAILURES
+ * 6. REPUTATION > SPEED > VOLUME
  */
 
 // =====================================================
-// EXECUTION MODE - OVERRIDE
+// EXECUTION MODE - FULL AUTO (LOCKED)
 // =====================================================
 export const EXECUTION_MODE = {
-  AUTO_PUBLISH: true,       // Content ≥80 is published IMMEDIATELY
-  MANUAL_REVIEW: false,     // No human approval needed
-  DRAFT_MODE: false,        // DISABLED - content goes directly to published
-  IMMEDIATE_ACTION: true,   // Execute actions without waiting
+  AUTO_PUBLISH: true,
+  MANUAL_REVIEW: false,
+  DRAFT_MODE: false,
+  IMMEDIATE_ACTION: true,
+  HUMAN_IN_LOOP: false, // NEVER
 };
 
 // =====================================================
-// SCORING THRESHOLDS - חד וברור
+// INTENT CLASSIFICATION
 // =====================================================
-export const SCORING = {
-  // ≥80 = פרסום אוטומטי | <80 = גניזה מיידית
-  AUTO_PUBLISH_THRESHOLD: 80,
-  
-  // ≥80 = outreach אוטומטי
-  AUTO_OUTREACH_THRESHOLD: 80,
-  
-  // Minimum to even consider (below = trash)
-  MINIMUM_RELEVANCE: 50,
-  
-  // Scoring weights
-  WEIGHTS: {
-    relevance: 0.25,      // רלוונטיות לתחום
-    pain_intensity: 0.25, // עוצמת כאב / עניין
-    response_likelihood: 0.20, // סבירות לתגובה
-    credibility: 0.15,    // רמת אמינות
-    spam_risk_inverse: 0.15, // סיכון ספאם (הפוך - גבוה = רע)
+export type IntentType = 'NOISE' | 'DISCUSSION' | 'CURIOSITY' | 'ACTIVE_PAIN' | 'BUYING_SIGNAL';
+
+export const INTENT_KEYWORDS: Record<IntentType, string[]> = {
+  NOISE: ['lol', 'haha', 'cool', 'nice', 'wow', 'interesting'],
+  DISCUSSION: ['what do you think', 'opinions on', 'thoughts about', 'anyone else'],
+  CURIOSITY: ['how does', 'what is', 'can someone explain', 'wondering'],
+  ACTIVE_PAIN: [
+    'lost', 'drained', 'hacked', 'scammed', 'stolen', 'rugged',
+    'panic', 'help', 'urgent', 'emergency', 'mistake', 'wrong wallet',
+    'sent to wrong', 'approved malicious', 'suspicious transaction'
+  ],
+  BUYING_SIGNAL: [
+    'any tool', 'how can I check', 'what do you recommend', 'is there a way',
+    'looking for', 'need a solution', 'best way to', 'how to prevent',
+    'want to protect', 'need to verify', 'can someone suggest'
+  ],
+};
+
+// Only proceed with these intents
+export const ACTIONABLE_INTENTS: IntentType[] = ['ACTIVE_PAIN', 'BUYING_SIGNAL'];
+
+// =====================================================
+// PAIN SEVERITY SCORING (0-100)
+// =====================================================
+export const PAIN_WEIGHTS = {
+  money_at_risk: 0.35,      // Money lost or at risk
+  emotional_language: 0.20,  // panic, regret, fear
+  personal_experience: 0.20, // "I", "my wallet", first person
+  pattern_recurrence: 0.15,  // Repeated issue
+  freshness: 0.10,           // How recent
+};
+
+export const PAIN_THRESHOLD = 75; // Hard threshold - below = NO ACTION
+
+export const PAIN_INDICATORS = {
+  money_keywords: ['lost', 'drained', 'stolen', 'scammed', '$', 'eth', 'usd', 'funds'],
+  emotional_keywords: ['panic', 'scared', 'worried', 'regret', 'stupid', 'mistake', 'help', 'please'],
+  personal_keywords: ['i ', 'my ', 'me ', 'mine', "i'm", "i've", 'my wallet', 'my funds'],
+};
+
+// =====================================================
+// TRUST READINESS SCORING (0-100) - CRITICAL GATE
+// =====================================================
+export const TRUST_WEIGHTS = {
+  received_free_value: 0.30,    // Actually got free value
+  interaction_depth: 0.25,       // Deep engagement
+  perceived_risk: -0.25,         // Crypto fear (negative)
+  social_proof_available: 0.20,  // Testimonials, reviews visible
+  timing: 0.10,                  // Calm vs panic state
+};
+
+export const TRUST_GATES = {
+  BLOCK_PAYMENT: 60,  // Trust < 60 = BLOCK ANY PAYMENT FLOW
+  FREE_ONLY: 79,      // Trust 60-79 = FREE/SOFT VALUE ONLY
+  PAID_ALLOWED: 80,   // Trust >= 80 = PAID FLOW ALLOWED
+};
+
+// =====================================================
+// OFFER MATCHING BY TRUST LEVEL
+// =====================================================
+export const OFFER_RULES = {
+  low_trust: {
+    min: 0,
+    max: 59,
+    allowed: [], // NO OFFERS
+    action: 'SILENT',
+  },
+  medium_trust: {
+    min: 60,
+    max: 79,
+    allowed: ['free_scan', 'insight', 'educational'],
+    action: 'FREE_VALUE',
+    forbidden: ['payment', 'checkout', 'pricing'],
+  },
+  high_trust: {
+    min: 80,
+    max: 100,
+    allowed: ['single_paid_offer'],
+    rules: {
+      max_offers: 1,
+      clear_scope: true,
+      clear_outcome: true,
+      no_upsell: true,
+      no_bundles: true,
+      no_premium_tiers: true,
+    },
   },
 };
 
 // =====================================================
-// GUARDRAILS - בלתי ניתנים לעקיפה
+// ACTION DECISION ENGINE
+// =====================================================
+export const ACTION_REQUIREMENTS = {
+  paid_flow: {
+    min_pain: 75,
+    buying_signal: true,
+    min_trust: 80,
+  },
+  free_flow: {
+    min_pain: 50,
+    min_trust: 60,
+  },
+  outreach: {
+    min_pain: 85,
+    min_trust: 85,
+    source_credibility: 'HIGH',
+  },
+};
+
+// =====================================================
+// VELOCITY GUARDS (HARD LIMITS)
+// =====================================================
+export const VELOCITY_LIMITS = {
+  max_public_replies_per_day: 2,
+  max_dm_per_day: 1,
+  max_checkouts_per_day: 5, // If no payments, reduce
+  cooldown_after_block_hours: 72,
+};
+
+// =====================================================
+// KILL SWITCHES (AUTOMATIC)
+// =====================================================
+export const KILL_SWITCHES = {
+  no_engagement_threshold: 3,    // 3 actions with no engagement
+  silent_mode_hours: 24,          // Silence duration
+  negative_feedback_keywords: ['spam', 'bot', 'scam', 'reported', 'blocked', 'banned'],
+  negative_feedback_silence_hours: 72,
+};
+
+// =====================================================
+// PAYMENT FAILURE LEARNING
+// =====================================================
+export const FAILURE_LEARNING = {
+  checkout_no_payment: {
+    mark_as: 'HIGH_FRICTION',
+    reduce_trust_weight: 0.1,
+    block_same_flow: true,
+  },
+  metrics_to_ignore: ['signals', 'checkouts', 'drafts', 'traffic', 'views'],
+  metrics_to_track: ['paid_transactions', 'revenue_usd', 'trust_to_payment_ratio'],
+};
+
+// =====================================================
+// CONTENT GUARDRAILS (LOCKED)
 // =====================================================
 export const GUARDRAILS = {
-  // מילים אסורות בתוכן
   FORBIDDEN_WORDS: [
     // Marketing promises
     'guaranteed', 'risk-free', 'no-brainer', 'game-changer', 'revolutionary',
@@ -56,159 +181,62 @@ export const GUARDRAILS = {
     'exclusive offer', 'special deal', 'hurry',
     // Clickbait
     'you wont believe', 'shocking', 'secret', 'hack', 'trick',
-    // Revealing automation
+    // Automation reveal
     'AI', 'bot', 'automated', 'automation', 'algorithm', 'machine learning',
-    'artificial intelligence', 'generated',
-    // Hebrew equivalents
-    'מבטיח', 'חינם לגמרי', 'הזדמנות אחרונה', 'מהפכני', 'בוט', 'אוטומטי',
+    // Upsell language (NEW)
+    'premium', 'pro version', 'upgrade', 'unlock', 'full access',
+    'unlimited', 'bundle', 'package deal',
   ],
   
-  // Allowed content patterns
-  ALLOWED_PATTERNS: [
-    'experience', 'insight', 'learned', 'found that', 'noticed',
-    'example', 'case study', 'real-world', 'actually',
-    'helpful', 'useful', 'tip', 'approach', 'method',
-    'here is how', 'one way to', 'consider', 'might help',
-  ],
+  FORUM_REPLY_RULES: {
+    identify_with_pain: true,
+    technical_insight: true,
+    clear_solution: true,
+    max_links: 1,
+    no_cta: true,
+    no_marketing: true,
+  },
   
-  // Content must pass these checks
-  CONTENT_RULES: {
-    no_exclamation_spam: true, // Max 1 exclamation mark
-    no_all_caps: true,
-    no_emoji_spam: true, // Max 2 emojis
-    value_first: true, // Must provide value before any mention of product
+  DM_RULES: {
+    single_message: true,
+    no_followup: true,
+    no_pitch: true,
   },
 };
 
 // =====================================================
-// VOLUME & ANTI-SPAM LIMITS
-// =====================================================
-export const LIMITS = {
-  // יומי
-  MAX_POSTS_PER_DAY: 3,
-  MAX_POSTS_PER_PLATFORM_PER_DAY: 1,
-  MAX_OUTREACH_PER_DAY: 10, // Conservative for safety
-  
-  // Deduplication
-  DEDUP_WINDOW_HOURS: 72,
-  
-  // Rate limiting
-  MIN_DELAY_BETWEEN_POSTS_MS: 15 * 60 * 1000, // 15 minutes minimum
-  RANDOM_DELAY_RANGE_MS: [15 * 60 * 1000, 45 * 60 * 1000], // 15-45 min random
-  
-  // Auto-stop triggers
-  BLOCK_RISK_INDICATORS: [
-    'rate limit', 'too many requests', 'blocked', 'banned',
-    'suspicious activity', 'spam detected', 'account suspended',
-  ],
-};
-
-// =====================================================
-// PLATFORM-SPECIFIC BEHAVIOR
-// =====================================================
-// Platform config with consistent delay_range_ms
-interface PlatformConfig {
-  enabled: boolean;
-  auto_publish: boolean;
-  style: string;
-  delay_range_ms: [number, number];
-  max_title_length?: number;
-  no_marketing_in_title?: boolean;
-  adapt_to_subreddit?: boolean;
-  allowed_types?: string[];
-  link_in_first_comment_only?: boolean;
-  answer_only?: boolean;
-}
-
-export const PLATFORM_CONFIG: Record<string, PlatformConfig> = {
-  hackernews: {
-    enabled: true,
-    auto_publish: true,
-    style: 'minimalist_informative',
-    max_title_length: 80,
-    no_marketing_in_title: true,
-    delay_range_ms: [5000, 15000],
-  },
-  
-  reddit: {
-    enabled: true,
-    auto_publish: true,
-    style: 'authentic_user',
-    adapt_to_subreddit: true,
-    delay_range_ms: [15 * 60 * 1000, 45 * 60 * 1000],
-  },
-  
-  linkedin: {
-    enabled: false,
-    auto_publish: false,
-    style: 'professional_insight',
-    allowed_types: ['case_study', 'insight', 'lesson_learned'],
-    link_in_first_comment_only: true,
-    delay_range_ms: [30 * 60 * 1000, 60 * 60 * 1000],
-  },
-  
-  devto: {
-    enabled: true,
-    auto_publish: true,
-    style: 'educational_technical',
-    delay_range_ms: [30 * 60 * 1000, 60 * 60 * 1000],
-  },
-  
-  stackexchange: {
-    enabled: true,
-    auto_publish: true,
-    style: 'helpful_expert',
-    answer_only: true,
-    delay_range_ms: [5 * 60 * 1000, 15 * 60 * 1000],
-  },
-};
-
-// =====================================================
-// OUTREACH RULES
-// =====================================================
-export const OUTREACH = {
-  // Only for leads with score ≥80
-  min_score: 80,
-  
-  // Message constraints
-  max_length: 300,
-  must_be_personal: true,
-  no_sales_pitch: true,
-  
-  // Structure
-  must_include_open_question: true, // שאלה פתוחה אחת בלבד
-  max_questions: 1,
-  
-  // Follow-up
-  no_aggressive_followup: true,
-  max_followups: 1,
-  min_days_between_followups: 7,
-};
-
-// =====================================================
-// SELF-LEARNING CONFIG
-// =====================================================
-export const LEARNING = {
-  // Metrics to track after each publish
-  track_metrics: ['views', 'clicks', 'comments', 'leads', 'conversions'],
-  
-  // Update weights based on performance
-  auto_adjust_weights: true,
-  weight_adjustment_rate: 0.05, // 5% adjustment per learning cycle
-  
-  // Content that fails
-  failure_actions: {
-    low_engagement: 'archive', // Don't try to "fix" - just archive
-    negative_feedback: 'blacklist_pattern',
-    spam_detected: 'stop_and_alert',
-  },
-};
-
-// =====================================================
-// AI PROMPT TEMPLATES
+// AI PROMPT TEMPLATES (UPDATED)
 // =====================================================
 export const AI_PROMPTS = {
-  lead_scorer: `You are a strict lead qualification AI.
+  intent_classifier: `Classify this text into ONE category:
+- NOISE: Casual, no problem
+- DISCUSSION: General talk, no urgency
+- CURIOSITY: Learning, no pain
+- ACTIVE_PAIN: Real problem, emotional, money involved
+- BUYING_SIGNAL: Actively seeking solution
+
+Return ONLY the category name.`,
+
+  pain_scorer: `Score the pain severity (0-100):
+- Money at risk/lost: 35%
+- Emotional language (panic/regret): 20%
+- Personal experience ("I/my"): 20%
+- Pattern/recurring issue: 15%
+- Freshness: 10%
+
+Return JSON: { "score": number, "factors": string[] }`,
+
+  trust_scorer: `Score trust readiness (0-100):
+- Received free value: 30%
+- Interaction depth: 25%
+- Crypto fear/skepticism: -25%
+- Social proof seen: 20%
+- Timing (calm vs panic): 10%
+
+Return JSON: { "score": number, "recommendation": "BLOCK" | "FREE_ONLY" | "PAID_OK" }`,
+
+  // Legacy prompts for backward compatibility
+  lead_scorer: `You are a strict lead qualification AI for Trust-Gated Revenue Engine.
 
 SCORING CRITERIA (0-100):
 - Relevance to crypto/Web3 security: 25%
@@ -238,7 +266,7 @@ REQUIRED in suggested_response:
 - Shares insight/experience
 - Ends with one open question (if appropriate)`,
 
-  content_generator: `You are generating VALUE-FIRST content.
+  content_generator: `You are generating VALUE-FIRST content for Trust-Gated Revenue Engine.
 
 ABSOLUTE RULES:
 ❌ NO marketing promises
@@ -246,6 +274,7 @@ ABSOLUTE RULES:
 ❌ NO clickbait
 ❌ NO mentions of "AI", "bot", "automated"
 ❌ NO promotional language
+❌ NO upsells, bundles, or premium tier mentions
 
 ✅ Share real experience
 ✅ Provide genuine insight
@@ -256,32 +285,130 @@ ABSOLUTE RULES:
 If you cannot create content following these rules, return empty.
 Quality over quantity - it's better to produce nothing than spam.`,
 
-  content_validator: `You are a strict content validator.
+  response_generator: `Generate a response following these rules:
+1. Identify with the pain briefly
+2. Provide real technical insight
+3. Offer clear solution
+4. ONE link maximum
+5. NO CTA, NO marketing language
+6. NO mentions of AI/bot/automation
+7. Keep it helpful and human
 
-CHECK EACH PIECE AGAINST:
-1. Contains forbidden words? → REJECT
-2. Looks like marketing? → REJECT
-3. Has direct sales CTA? → REJECT
-4. More than 2 emojis? → REJECT
-5. ALL CAPS words? → REJECT
-6. Provides real value? → If no, REJECT
-
-SCORING:
-- 80-100: APPROVE for auto-publish
-- 0-79: REJECT immediately
-
-Be STRICT. When in doubt, REJECT.
-Better to publish nothing than spam.`,
+If you cannot help genuinely, return empty.`,
 };
 
 // =====================================================
-// VALIDATION FUNCTIONS
+// HELPER FUNCTIONS
 // =====================================================
+
+export function classifyIntent(text: string): IntentType {
+  const lower = text.toLowerCase();
+  
+  // Check buying signal first (highest priority)
+  if (INTENT_KEYWORDS.BUYING_SIGNAL.some(kw => lower.includes(kw))) {
+    return 'BUYING_SIGNAL';
+  }
+  
+  // Check active pain
+  if (INTENT_KEYWORDS.ACTIVE_PAIN.some(kw => lower.includes(kw))) {
+    return 'ACTIVE_PAIN';
+  }
+  
+  // Check curiosity
+  if (INTENT_KEYWORDS.CURIOSITY.some(kw => lower.includes(kw))) {
+    return 'CURIOSITY';
+  }
+  
+  // Check discussion
+  if (INTENT_KEYWORDS.DISCUSSION.some(kw => lower.includes(kw))) {
+    return 'DISCUSSION';
+  }
+  
+  return 'NOISE';
+}
+
+export function isActionableIntent(intent: IntentType): boolean {
+  return ACTIONABLE_INTENTS.includes(intent);
+}
+
+export function calculatePainScore(text: string): number {
+  const lower = text.toLowerCase();
+  let score = 0;
+  
+  // Money at risk (35%)
+  const moneyMatches = PAIN_INDICATORS.money_keywords.filter(kw => lower.includes(kw)).length;
+  score += Math.min(35, moneyMatches * 10);
+  
+  // Emotional language (20%)
+  const emotionalMatches = PAIN_INDICATORS.emotional_keywords.filter(kw => lower.includes(kw)).length;
+  score += Math.min(20, emotionalMatches * 7);
+  
+  // Personal experience (20%)
+  const personalMatches = PAIN_INDICATORS.personal_keywords.filter(kw => lower.includes(kw)).length;
+  score += Math.min(20, personalMatches * 5);
+  
+  // Pattern/freshness approximation (25%)
+  if (lower.includes('again') || lower.includes('always') || lower.includes('every time')) {
+    score += 15;
+  }
+  if (lower.includes('just') || lower.includes('now') || lower.includes('today')) {
+    score += 10;
+  }
+  
+  return Math.min(100, score);
+}
+
+export function calculateTrustScore(
+  receivedFreeValue: boolean,
+  interactionCount: number,
+  hasNegativeSentiment: boolean,
+  socialProofVisible: boolean,
+  isPanicking: boolean
+): number {
+  let score = 50; // Base score
+  
+  // Received free value (+30)
+  if (receivedFreeValue) score += 30;
+  
+  // Interaction depth (+25 max)
+  score += Math.min(25, interactionCount * 5);
+  
+  // Crypto fear/skepticism (-25)
+  if (hasNegativeSentiment) score -= 25;
+  
+  // Social proof (+20)
+  if (socialProofVisible) score += 20;
+  
+  // Timing - panic reduces trust
+  if (isPanicking) score -= 10;
+  
+  return Math.max(0, Math.min(100, score));
+}
+
+export function getTrustAction(trustScore: number): 'BLOCK' | 'FREE_ONLY' | 'PAID_OK' {
+  if (trustScore < TRUST_GATES.BLOCK_PAYMENT) return 'BLOCK';
+  if (trustScore < TRUST_GATES.PAID_ALLOWED) return 'FREE_ONLY';
+  return 'PAID_OK';
+}
+
+export function canCreateCheckout(painScore: number, hasBuyingSignal: boolean, trustScore: number): boolean {
+  return (
+    painScore >= ACTION_REQUIREMENTS.paid_flow.min_pain &&
+    hasBuyingSignal === ACTION_REQUIREMENTS.paid_flow.buying_signal &&
+    trustScore >= ACTION_REQUIREMENTS.paid_flow.min_trust
+  );
+}
+
+export function canSendOutreach(painScore: number, trustScore: number): boolean {
+  return (
+    painScore >= ACTION_REQUIREMENTS.outreach.min_pain &&
+    trustScore >= ACTION_REQUIREMENTS.outreach.min_trust
+  );
+}
 
 export function validateContent(content: string): { valid: boolean; reason?: string } {
   const lower = content.toLowerCase();
   
-  // Check forbidden words
   for (const word of GUARDRAILS.FORBIDDEN_WORDS) {
     if (lower.includes(word.toLowerCase())) {
       return { valid: false, reason: `Contains forbidden word: ${word}` };
@@ -294,49 +421,103 @@ export function validateContent(content: string): { valid: boolean; reason?: str
     return { valid: false, reason: 'Too many exclamation marks' };
   }
   
-  // Check emoji spam
-  const emojiRegex = /[\u{1F300}-\u{1F9FF}]/gu;
-  const emojiCount = (content.match(emojiRegex) || []).length;
-  if (emojiCount > 2) {
-    return { valid: false, reason: 'Too many emojis' };
-  }
-  
-  // Check all caps words
-  const words = content.split(/\s+/);
-  const allCapsWords = words.filter(w => w.length > 3 && w === w.toUpperCase() && /[A-Z]/.test(w));
-  if (allCapsWords.length > 1) {
-    return { valid: false, reason: 'Too many ALL CAPS words' };
-  }
-  
   return { valid: true };
 }
 
-// OVERRIDE: If score >= 80, MUST publish immediately. No drafts.
+// KPI: Only these matter
+export function isVanityMetric(metricName: string): boolean {
+  return FAILURE_LEARNING.metrics_to_ignore.includes(metricName.toLowerCase());
+}
+
+export function isRevenueMetric(metricName: string): boolean {
+  return FAILURE_LEARNING.metrics_to_track.includes(metricName.toLowerCase());
+}
+
+// =====================================================
+// BACKWARD COMPATIBILITY - Legacy exports
+// =====================================================
+
+// Legacy SCORING object for backward compatibility
+export const SCORING = {
+  AUTO_PUBLISH_THRESHOLD: 80,
+  AUTO_OUTREACH_THRESHOLD: 80,
+  MINIMUM_RELEVANCE: 50,
+  WEIGHTS: {
+    relevance: 0.25,
+    pain_intensity: 0.25,
+    response_likelihood: 0.20,
+    credibility: 0.15,
+    spam_risk_inverse: 0.15,
+  },
+};
+
+// Legacy LIMITS object
+export const LIMITS = {
+  MAX_POSTS_PER_DAY: 2,
+  MAX_POSTS_PER_PLATFORM_PER_DAY: 1,
+  MAX_OUTREACH_PER_DAY: VELOCITY_LIMITS.max_dm_per_day,
+  DEDUP_WINDOW_HOURS: 72,
+  MIN_DELAY_BETWEEN_POSTS_MS: 15 * 60 * 1000,
+  RANDOM_DELAY_RANGE_MS: [15 * 60 * 1000, 45 * 60 * 1000] as [number, number],
+  BLOCK_RISK_INDICATORS: [
+    'rate limit', 'too many requests', 'blocked', 'banned',
+    'suspicious activity', 'spam detected', 'account suspended',
+  ],
+};
+
+// Legacy PLATFORM_CONFIG
+export const PLATFORM_CONFIG: Record<string, {
+  enabled: boolean;
+  auto_publish: boolean;
+  style: string;
+  delay_range_ms: [number, number];
+}> = {
+  hackernews: {
+    enabled: true,
+    auto_publish: true,
+    style: 'minimalist_informative',
+    delay_range_ms: [5000, 15000],
+  },
+  reddit: {
+    enabled: true,
+    auto_publish: true,
+    style: 'authentic_user',
+    delay_range_ms: [15 * 60 * 1000, 45 * 60 * 1000],
+  },
+  twitter: {
+    enabled: true,
+    auto_publish: true,
+    style: 'casual_helpful',
+    delay_range_ms: [5 * 60 * 1000, 15 * 60 * 1000],
+  },
+  devto: {
+    enabled: true,
+    auto_publish: true,
+    style: 'educational_technical',
+    delay_range_ms: [30 * 60 * 1000, 60 * 60 * 1000],
+  },
+};
+
+// Legacy helper functions
 export function shouldAutoPublish(score: number): boolean {
-  if (!EXECUTION_MODE.AUTO_PUBLISH) return false;
-  return score >= SCORING.AUTO_PUBLISH_THRESHOLD;
+  return EXECUTION_MODE.AUTO_PUBLISH && score >= SCORING.AUTO_PUBLISH_THRESHOLD;
 }
 
-// OVERRIDE: Immediate execution for qualified leads
 export function shouldOutreach(score: number): boolean {
-  if (!EXECUTION_MODE.IMMEDIATE_ACTION) return false;
-  return score >= SCORING.AUTO_OUTREACH_THRESHOLD;
+  return EXECUTION_MODE.IMMEDIATE_ACTION && score >= SCORING.AUTO_OUTREACH_THRESHOLD;
 }
 
-// Get content status - NEVER return 'draft' when DRAFT_MODE is disabled
 export function getContentStatus(score: number): 'published' | 'archived' {
   if (!EXECUTION_MODE.DRAFT_MODE && score >= SCORING.AUTO_PUBLISH_THRESHOLD) {
-    return 'published'; // Direct to published, skip draft/ready states
+    return 'published';
   }
   return 'archived';
 }
 
 export function getRandomDelay(platform: string): number {
-  // IMMEDIATE_ACTION mode uses minimal delays
   if (EXECUTION_MODE.IMMEDIATE_ACTION) {
     return Math.floor(Math.random() * 5 * 60 * 1000); // 0-5 min
   }
-  
   const config = PLATFORM_CONFIG[platform];
   if (!config) {
     return LIMITS.RANDOM_DELAY_RANGE_MS[0];

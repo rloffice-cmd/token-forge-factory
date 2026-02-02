@@ -1,9 +1,17 @@
 /**
- * Brain Score - Signal Scoring & Opportunity Creation
- * Analyzes signals and creates opportunities with scores
+ * Brain Score - Trust-Gated Signal Scoring
+ * Implements the MASTER PROMPT trust gates and pain scoring
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  classifyIntent,
+  isActionableIntent,
+  calculatePainScore,
+  PAIN_THRESHOLD,
+  TRUST_GATES,
+  canCreateCheckout,
+} from '../_shared/master-prompt-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,7 +21,7 @@ const corsHeaders = {
 interface Signal {
   id: string;
   source_id: string;
-  query_text: string; // The actual column name in demand_signals
+  query_text: string;
   source_url: string;
   payload_json: Record<string, unknown>;
   urgency_score: number;
@@ -30,106 +38,122 @@ interface Offer {
   pricing_model: Record<string, { price: number }>;
 }
 
-// Score a signal for an offer
-function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): number {
-  let score = 0;
-  // Use correct field names from demand_signals
+// Score signal using Trust-Gated logic
+function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): {
+  score: number;
+  painScore: number;
+  trustAction: string;
+  canCheckout: boolean;
+} {
   const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
   
-  // Keyword match scoring
+  // 1. Intent Classification
+  const intent = classifyIntent(text);
+  const isActionable = isActionableIntent(intent);
+  
+  if (!isActionable) {
+    return { score: 0, painScore: 0, trustAction: 'BLOCK', canCheckout: false };
+  }
+  
+  // 2. Pain Score
+  const painScore = calculatePainScore(text);
+  
+  if (painScore < PAIN_THRESHOLD) {
+    return { score: painScore / 100, painScore, trustAction: 'SILENT', canCheckout: false };
+  }
+  
+  // 3. Buying Signal Detection
+  const buyingSignalKeywords = ['any tool', 'recommend', 'how can i', 'is there a way', 'looking for', 'need'];
+  const hasBuyingSignal = buyingSignalKeywords.some(kw => text.includes(kw));
+  
+  // 4. Trust Estimation (simplified - real trust needs interaction history)
+  // For new signals, start with medium trust
+  let estimatedTrust = 50;
+  
+  // Boost trust if source is healthy
+  estimatedTrust += sourceHealthScore * 20;
+  
+  // Reduce trust if panic language detected
+  const panicWords = ['urgent', 'help', 'please', 'asap', 'now'];
+  if (panicWords.some(w => text.includes(w))) {
+    estimatedTrust -= 10;
+  }
+  
+  // Determine trust action
+  let trustAction: 'BLOCK' | 'FREE_ONLY' | 'PAID_OK';
+  if (estimatedTrust < TRUST_GATES.BLOCK_PAYMENT) {
+    trustAction = 'BLOCK';
+  } else if (estimatedTrust < TRUST_GATES.PAID_ALLOWED) {
+    trustAction = 'FREE_ONLY';
+  } else {
+    trustAction = 'PAID_OK';
+  }
+  
+  // 5. Can Create Checkout?
+  const canCheckout = canCreateCheckout(painScore, hasBuyingSignal, estimatedTrust);
+  
+  // 6. Calculate composite score
+  let compositeScore = 0;
+  
+  // Base pain contribution (40%)
+  compositeScore += (painScore / 100) * 0.4;
+  
+  // Buying signal (20%)
+  if (hasBuyingSignal) compositeScore += 0.2;
+  
+  // Trust level (20%)
+  compositeScore += (estimatedTrust / 100) * 0.2;
+  
+  // Source health (10%)
+  compositeScore += sourceHealthScore * 0.1;
+  
+  // Keyword match (10%)
   const matchedKeywords = offer.keywords.filter(kw => text.includes(kw.toLowerCase()));
-  score += Math.min(0.3, matchedKeywords.length * 0.05);
+  compositeScore += Math.min(0.1, matchedKeywords.length * 0.02);
   
-  // Category-based scoring (instead of intent_type)
-  const category = signal.category || '';
-  if (offer.code === 'risk-api' && /risk|security|wallet|fraud/i.test(category)) {
-    score += 0.25;
-  } else if (offer.code === 'webhook-monitor' && /webhook|api|integration/i.test(category)) {
-    score += 0.25;
-  }
-  
-  // "Need" verbs boost
-  const needVerbs = ['looking for', 'need', 'searching', 'any tool', 'recommend', 'help'];
-  if (needVerbs.some(v => text.includes(v))) {
-    score += 0.15;
-  }
-  
-  // Urgency boost - use urgency_score from signal
-  if (signal.urgency_score && signal.urgency_score > 0.5) {
-    score += signal.urgency_score * 0.1;
-  }
-  
-  // "Need" words boost
-  const urgencyWords = ['urgent', 'asap', 'immediately', 'critical', 'production', 'live'];
-  if (urgencyWords.some(w => text.includes(w))) {
-    score += 0.1;
-  }
-  
-  // Recency boost (newer = higher)
-  const ageHours = (Date.now() - new Date(signal.created_at).getTime()) / (1000 * 60 * 60);
-  if (ageHours < 6) score += 0.1;
-  else if (ageHours < 24) score += 0.05;
-  
-  // Source health boost
-  score += sourceHealthScore * 0.1;
-  
-  // Base relevance from signal
-  score += (signal.relevance_score || 0) * 0.1;
-  
-  return Math.min(1.0, Math.max(0, score));
+  return {
+    score: Math.min(1.0, Math.max(0, compositeScore)),
+    painScore,
+    trustAction,
+    canCheckout,
+  };
 }
 
-// Estimate value based on offer and score
-function estimateValue(offer: Offer, score: number): number {
-  // Use starter price as baseline
-  const pricing = offer.pricing_model;
-  const starterPrice = pricing?.starter?.price || pricing?.micro?.price || offer.min_value_usd;
-  
-  // Higher score = higher estimated value
-  return starterPrice * (0.5 + score);
-}
-
-// Match signal to best offer - improved matching
+// Match signal to best offer
 function matchOffer(signal: Signal, offers: Offer[]): Offer | null {
   const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
   const category = (signal.category || '').toLowerCase();
   
-  // Score each offer based on keyword matches
   let bestOffer: Offer | null = null;
   let bestScore = 0;
   
   for (const offer of offers) {
     let score = 0;
     
-    // Check each keyword from the offer
     for (const keyword of offer.keywords) {
       if (text.includes(keyword.toLowerCase())) {
         score += 1;
       }
     }
     
-    // Boost for category match
     if (category && offer.keywords.some(kw => category.includes(kw.toLowerCase()))) {
       score += 2;
     }
     
-    // Additional matching patterns for risk-api
+    // Risk-related matching
     if (offer.code === 'risk-api') {
-      if (/risk\s*assess|vulnerab|threat|attack|exploit|hack|phish|fraud|scam|malicious|drainer|honeypot/i.test(text)) {
+      if (/risk|vulnerab|threat|attack|exploit|hack|phish|fraud|scam|malicious|drainer|honeypot/i.test(text)) {
         score += 3;
       }
-      if (/crypto|blockchain|web3|defi|nft|token|smart\s*contract|on-?chain/i.test(text)) {
+      if (/crypto|blockchain|web3|defi|nft|token|smart\s*contract|wallet/i.test(text)) {
         score += 1;
       }
     }
     
-    // Additional matching patterns for webhook-monitor
+    // Webhook-related matching
     if (offer.code === 'webhook-monitor') {
-      if (/webhook|web\s*hook|callback|endpoint|integration|debug.*api|api.*debug/i.test(text)) {
+      if (/webhook|callback|endpoint|integration|debug.*api|api.*debug/i.test(text)) {
         score += 3;
-      }
-      if (/stripe|shopify|payment|notification|event.*driven|real-?time/i.test(text)) {
-        score += 1;
       }
     }
     
@@ -139,7 +163,6 @@ function matchOffer(signal: Signal, offers: Offer[]): Offer | null {
     }
   }
   
-  // Minimum threshold to match
   return bestScore >= 2 ? bestOffer : null;
 }
 
@@ -161,12 +184,6 @@ Deno.serve(async (req) => {
       .single();
     
     if (!settings?.brain_enabled) {
-      await supabase.from('audit_logs').insert({
-        job_id: '00000000-0000-0000-0000-000000000000',
-        action: 'brain-score:skipped',
-        metadata: { reason: 'brain_enabled is false' }
-      });
-      
       return new Response(
         JSON.stringify({ success: false, reason: 'Brain disabled' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -196,14 +213,15 @@ Deno.serve(async (req) => {
     const results = {
       signals_processed: 0,
       opportunities_created: 0,
-      auto_approved: 0
+      auto_approved: 0,
+      blocked_low_trust: 0,
+      blocked_low_pain: 0,
     };
 
     for (const signal of signals || []) {
       const offer = matchOffer(signal as Signal, offers as Offer[]);
       
       if (!offer) {
-        // Mark as processed but no opportunity
         await supabase
           .from('demand_signals')
           .update({ status: 'rejected', rejection_reason: 'no_matching_offer' })
@@ -212,7 +230,7 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Check if opportunity already exists
+      // Check for existing opportunity
       const { data: existing } = await supabase
         .from('opportunities')
         .select('id')
@@ -229,26 +247,62 @@ Deno.serve(async (req) => {
       }
 
       const sourceHealthScore = signal.offer_sources?.health_score || 0.5;
-      const score = scoreSignal(signal as Signal, offer as Offer, sourceHealthScore);
-      const estValue = estimateValue(offer as Offer, score);
+      const { score, painScore, trustAction, canCheckout } = scoreSignal(
+        signal as Signal, 
+        offer as Offer, 
+        sourceHealthScore
+      );
       
-      // Auto-approve if meets threshold
-      const autoApprove = score >= (settings.auto_approve_threshold || 0.8) && 
+      // Apply trust gates
+      if (trustAction === 'BLOCK') {
+        await supabase
+          .from('demand_signals')
+          .update({ status: 'rejected', rejection_reason: 'trust_too_low' })
+          .eq('id', signal.id);
+        results.blocked_low_trust++;
+        results.signals_processed++;
+        continue;
+      }
+      
+      if (painScore < PAIN_THRESHOLD) {
+        await supabase
+          .from('demand_signals')
+          .update({ status: 'rejected', rejection_reason: 'pain_below_threshold' })
+          .eq('id', signal.id);
+        results.blocked_low_pain++;
+        results.signals_processed++;
+        continue;
+      }
+      
+      // Estimate value
+      const pricing = offer.pricing_model;
+      const starterPrice = pricing?.starter?.price || pricing?.micro?.price || offer.min_value_usd;
+      const estValue = starterPrice * (0.5 + score);
+      
+      // Only auto-approve if checkout is allowed
+      const autoApprove = canCheckout && 
+                          score >= (settings.auto_approve_threshold || 0.8) && 
                           estValue >= (settings.min_opportunity_value_usd || 20);
       
-      // Create opportunity
+      // Create opportunity with trust metadata
       const { error: insertError } = await supabase
         .from('opportunities')
         .insert({
           signal_id_v2: signal.id,
-          signal_id: signal.id, // Also set legacy field
+          signal_id: signal.id,
           offer_id: offer.id,
           composite_score: score,
           est_value_usd: estValue,
           expected_value_usd: estValue,
-          status: autoApprove ? 'approved' : 'pending',
+          status: autoApprove ? 'approved' : (trustAction === 'FREE_ONLY' ? 'free_value' : 'pending'),
           auto_approved: autoApprove,
-          approved_at: autoApprove ? new Date().toISOString() : null
+          approved_at: autoApprove ? new Date().toISOString() : null,
+          metadata: {
+            pain_score: painScore,
+            trust_action: trustAction,
+            can_checkout: canCheckout,
+            scoring_version: 'trust_gated_v1',
+          },
         });
       
       if (!insertError) {
@@ -256,7 +310,6 @@ Deno.serve(async (req) => {
         if (autoApprove) results.auto_approved++;
       }
 
-      // Mark signal as processed
       await supabase
         .from('demand_signals')
         .update({ status: 'processed' })
@@ -265,7 +318,7 @@ Deno.serve(async (req) => {
       results.signals_processed++;
     }
 
-    // Audit log - get a valid job_id
+    // Audit log
     const { data: validJob } = await supabase
       .from('jobs')
       .select('id')
@@ -275,7 +328,7 @@ Deno.serve(async (req) => {
     if (validJob) {
       await supabase.from('audit_logs').insert({
         job_id: validJob.id,
-        action: 'brain-score:completed',
+        action: 'brain-score:trust-gated',
         metadata: results
       });
     }
