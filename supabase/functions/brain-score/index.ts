@@ -10,7 +10,9 @@ import {
   calculatePainScore,
   PAIN_THRESHOLD,
   TRUST_GATES,
+  TRUST_CAP,
   canCreateCheckout,
+  FREE_VALUE_EVENTS,
 } from '../_shared/master-prompt-config.ts';
 
 const corsHeaders = {
@@ -79,6 +81,13 @@ function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): {
     estimatedTrust -= 10;
   }
   
+  // 🔒 TRUST CAP: Cap at no_history_max for new signals (no interaction history)
+  // interactionCount = 0 for new signals from external sources
+  const interactionCount = 0; // New signal = no history
+  if (interactionCount < TRUST_CAP.min_interactions_for_paid) {
+    estimatedTrust = Math.min(estimatedTrust, TRUST_CAP.no_history_max);
+  }
+  
   // Determine trust action
   let trustAction: 'BLOCK' | 'FREE_ONLY' | 'PAID_OK';
   if (estimatedTrust < TRUST_GATES.BLOCK_PAYMENT) {
@@ -89,8 +98,8 @@ function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): {
     trustAction = 'PAID_OK';
   }
   
-  // 5. Can Create Checkout?
-  const canCheckout = canCreateCheckout(painScore, hasBuyingSignal, estimatedTrust);
+  // 5. Can Create Checkout? (now includes interactionCount check)
+  const canCheckout = canCreateCheckout(painScore, hasBuyingSignal, estimatedTrust, interactionCount);
   
   // 6. Calculate composite score
   let compositeScore = 0;

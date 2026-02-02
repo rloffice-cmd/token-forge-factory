@@ -154,6 +154,7 @@ export const PAYMENT_THROTTLE = {
   checkout_threshold: 10, // If checkouts > N and payments = 0
   throttle_action: 'FREE_ONLY', // Force free-only mode
   auto_reduce_checkouts: true,
+  sticky_duration_hours: 12, // Throttle stays locked for minimum 12h
 };
 
 // =====================================================
@@ -162,6 +163,21 @@ export const PAYMENT_THROTTLE = {
 export const TRUST_CAP = {
   no_history_max: 70, // Cap trust at 70 if no interaction history
   min_interactions_for_paid: 2, // Need at least 2 interactions before paid flow
+};
+
+// =====================================================
+// FREE VALUE EVENTS (What counts as real value)
+// =====================================================
+export const FREE_VALUE_EVENTS = {
+  valid_event_types: [
+    'scan_started',
+    'results_viewed', 
+    'time_on_page_30s',
+    'report_downloaded',
+    'risk_item_copied',
+    'revoke_guide_opened',
+  ],
+  min_events_for_trust_boost: 1, // At least 1 real event to count as "received free value"
 };
 
 // =====================================================
@@ -428,6 +444,23 @@ export function shouldThrottleCheckouts(
 }
 
 /**
+ * Check if throttle is currently active (Sticky Throttle)
+ * Returns true if throttle_until hasn't expired yet
+ */
+export function isThrottleActive(throttleUntil: string | null): boolean {
+  if (!throttleUntil) return false;
+  return new Date(throttleUntil) > new Date();
+}
+
+/**
+ * Calculate when throttle should expire (Sticky duration)
+ */
+export function getThrottleExpiry(): string {
+  const expiryMs = Date.now() + (PAYMENT_THROTTLE.sticky_duration_hours * 60 * 60 * 1000);
+  return new Date(expiryMs).toISOString();
+}
+
+/**
  * Get max checkouts allowed based on payment history
  */
 export function getMaxCheckoutsAllowed(recentPayments: number): number {
@@ -437,7 +470,28 @@ export function getMaxCheckoutsAllowed(recentPayments: number): number {
   return VELOCITY_LIMITS.max_checkouts_per_day;
 }
 
-export function canCreateCheckout(painScore: number, hasBuyingSignal: boolean, trustScore: number): boolean {
+/**
+ * Check if a free value event is valid (not just forum reply)
+ */
+export function isValidFreeValueEvent(eventType: string): boolean {
+  return FREE_VALUE_EVENTS.valid_event_types.includes(eventType);
+}
+
+/**
+ * HARD BLOCK: Check if paid flow is allowed
+ * Enforces min_interactions REGARDLESS of trust score
+ */
+export function canCreateCheckout(
+  painScore: number, 
+  hasBuyingSignal: boolean, 
+  trustScore: number,
+  interactionCount: number
+): boolean {
+  // 🔒 HARD BLOCK: Must have minimum interactions
+  if (interactionCount < TRUST_CAP.min_interactions_for_paid) {
+    return false;
+  }
+  
   return (
     painScore >= ACTION_REQUIREMENTS.paid_flow.min_pain &&
     hasBuyingSignal === ACTION_REQUIREMENTS.paid_flow.buying_signal &&
