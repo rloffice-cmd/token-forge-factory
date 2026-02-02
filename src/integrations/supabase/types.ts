@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      actor_lead_links: {
+        Row: {
+          actor_fingerprint: string
+          confidence: number
+          created_at: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          lead_key: string
+        }
+        Insert: {
+          actor_fingerprint: string
+          confidence?: number
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          lead_key: string
+        }
+        Update: {
+          actor_fingerprint?: string
+          confidence?: number
+          created_at?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          lead_key?: string
+        }
+        Relationships: []
+      }
       actor_profiles: {
         Row: {
           author: string | null
@@ -1246,6 +1276,7 @@ export type Database = {
           id: string
           intent: string | null
           interaction_count: number | null
+          lead_key: string | null
           offer_id: string | null
           pain_score: number | null
           platform: string | null
@@ -1267,6 +1298,7 @@ export type Database = {
           id?: string
           intent?: string | null
           interaction_count?: number | null
+          lead_key?: string | null
           offer_id?: string | null
           pain_score?: number | null
           platform?: string | null
@@ -1288,6 +1320,7 @@ export type Database = {
           id?: string
           intent?: string | null
           interaction_count?: number | null
+          lead_key?: string | null
           offer_id?: string | null
           pain_score?: number | null
           platform?: string | null
@@ -1599,32 +1632,50 @@ export type Database = {
       }
       free_value_events: {
         Row: {
+          actor_fingerprint: string | null
           created_at: string
           customer_id: string | null
+          dedup_key: string | null
           event_data: Json | null
           event_type: string
           id: string
+          ip_hash: string | null
+          is_trusted: boolean | null
           lead_id: string | null
+          lead_key: string | null
+          page_path: string | null
           session_id: string | null
           source_url: string | null
         }
         Insert: {
+          actor_fingerprint?: string | null
           created_at?: string
           customer_id?: string | null
+          dedup_key?: string | null
           event_data?: Json | null
           event_type: string
           id?: string
+          ip_hash?: string | null
+          is_trusted?: boolean | null
           lead_id?: string | null
+          lead_key?: string | null
+          page_path?: string | null
           session_id?: string | null
           source_url?: string | null
         }
         Update: {
+          actor_fingerprint?: string | null
           created_at?: string
           customer_id?: string | null
+          dedup_key?: string | null
           event_data?: Json | null
           event_type?: string
           id?: string
+          ip_hash?: string | null
+          is_trusted?: boolean | null
           lead_id?: string | null
+          lead_key?: string | null
+          page_path?: string | null
           session_id?: string | null
           source_url?: string | null
         }
@@ -3370,6 +3421,164 @@ export type Database = {
           started_at?: string
           status?: string | null
           summary?: string | null
+        }
+        Relationships: []
+      }
+      self_heal_flags: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          flag_name: string
+          rollout_percent: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          flag_name: string
+          rollout_percent?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          flag_name?: string
+          rollout_percent?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      self_heal_patches: {
+        Row: {
+          canary_percent: number
+          created_at: string
+          deployed_at: string
+          id: string
+          kpi_after: Json | null
+          kpi_before: Json
+          patch_proposal_id: string | null
+          prior_config: Json | null
+          rollback_reason: string | null
+          status: string
+          verification_due_at: string | null
+          verified_at: string | null
+          verify_window_hours: number
+        }
+        Insert: {
+          canary_percent?: number
+          created_at?: string
+          deployed_at?: string
+          id?: string
+          kpi_after?: Json | null
+          kpi_before?: Json
+          patch_proposal_id?: string | null
+          prior_config?: Json | null
+          rollback_reason?: string | null
+          status?: string
+          verification_due_at?: string | null
+          verified_at?: string | null
+          verify_window_hours?: number
+        }
+        Update: {
+          canary_percent?: number
+          created_at?: string
+          deployed_at?: string
+          id?: string
+          kpi_after?: Json | null
+          kpi_before?: Json
+          patch_proposal_id?: string | null
+          prior_config?: Json | null
+          rollback_reason?: string | null
+          status?: string
+          verification_due_at?: string | null
+          verified_at?: string | null
+          verify_window_hours?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "self_heal_patches_patch_proposal_id_fkey"
+            columns: ["patch_proposal_id"]
+            isOneToOne: false
+            referencedRelation: "patch_proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      self_heal_policies: {
+        Row: {
+          abuse_policy: Json
+          created_at: string
+          event_semantics: Json
+          id: boolean
+          identity_canon: Json
+          policy_version: string
+          updated_at: string
+          url_canon: Json
+        }
+        Insert: {
+          abuse_policy?: Json
+          created_at?: string
+          event_semantics?: Json
+          id?: boolean
+          identity_canon?: Json
+          policy_version?: string
+          updated_at?: string
+          url_canon?: Json
+        }
+        Update: {
+          abuse_policy?: Json
+          created_at?: string
+          event_semantics?: Json
+          id?: boolean
+          identity_canon?: Json
+          policy_version?: string
+          updated_at?: string
+          url_canon?: Json
+        }
+        Relationships: []
+      }
+      self_heal_runs: {
+        Row: {
+          anomalies_detected: Json
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          kpi_snapshot: Json
+          patches_deployed: number
+          patches_proposed: number
+          patches_rolled_back: number
+          run_type: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          anomalies_detected?: Json
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          kpi_snapshot?: Json
+          patches_deployed?: number
+          patches_proposed?: number
+          patches_rolled_back?: number
+          run_type?: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          anomalies_detected?: Json
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          kpi_snapshot?: Json
+          patches_deployed?: number
+          patches_proposed?: number
+          patches_rolled_back?: number
+          run_type?: string
+          started_at?: string
+          status?: string
         }
         Relationships: []
       }

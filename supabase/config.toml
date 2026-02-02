@@ -158,3 +158,12 @@ verify_jwt = false
 
 [functions.dynamic-pricing-engine]
 verify_jwt = false
+
+[functions.free-value-event]
+verify_jwt = false
+
+[functions.self-healing-brain]
+verify_jwt = false
+
+[functions.self-healing-verifier]
+verify_jwt = false
