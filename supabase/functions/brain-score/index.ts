@@ -20,6 +20,7 @@ import {
   FREE_VALUE_EVENTS,
   isThrottleActive,
   computeLeadKey,
+  computeActorFingerprint,
   extractAuthorFromPayload,
   extractPlatformFromPayload,
 } from '../_shared/master-prompt-config.ts';
@@ -328,12 +329,17 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // 🔑 Actor Fingerprinting - get or create actor profile using stable lead_key
+      // 🔑 Actor Fingerprinting v2 - STABLE IDENTITY (platform::author only, NO URL hash)
       const platform = extractPlatformFromPayload(signal.payload_json || {}, signal.category);
       const author = extractAuthorFromPayload(signal.payload_json || {});
-      const fingerprint = computeLeadKey(platform, author, signal.source_url);
       
-      // Lookup actor profile
+      // Use computeActorFingerprint for STABLE identity (no URL hash)
+      const fingerprint = computeActorFingerprint(platform, author);
+      
+      // Also compute lead_key for decision trace (includes URL context)
+      const leadKey = computeLeadKey(platform, author, signal.source_url);
+      
+      // Lookup actor profile by STABLE fingerprint
       let actorProfile: ActorProfile | null = null;
       const { data: existingActor } = await supabase
         .from('actor_profiles')
@@ -343,18 +349,40 @@ Deno.serve(async (req) => {
       
       if (existingActor) {
         actorProfile = existingActor as ActorProfile;
-        // Update last_seen
+        // Update last_seen and increment interaction_count (this IS a real interaction - signal processed)
         await supabase.from('actor_profiles')
-          .update({ last_seen_at: new Date().toISOString(), interaction_count_30d: (existingActor.interaction_count_30d || 0) + 1 })
+          .update({ 
+            last_seen_at: new Date().toISOString(), 
+            interaction_count_30d: (existingActor.interaction_count_30d || 0) + 1 
+          })
           .eq('id', existingActor.id);
       } else {
-        // Create new actor profile
+        // Create new actor profile with STABLE fingerprint
         const { data: newActor } = await supabase
           .from('actor_profiles')
-          .insert({ fingerprint, platform, author, interaction_count_30d: 1 })
+          .insert({ 
+            fingerprint, 
+            platform, 
+            author, 
+            interaction_count_30d: 1 
+          })
           .select()
           .single();
         actorProfile = newActor as ActorProfile;
+      }
+      
+      // Link actor to lead_key if confidence is high
+      if (actorProfile) {
+        await supabase
+          .from('actor_lead_links')
+          .upsert({
+            actor_fingerprint: fingerprint,
+            lead_key: leadKey,
+            confidence: 0.9, // Signal processing = high confidence link
+            last_seen_at: new Date().toISOString(),
+          }, {
+            onConflict: 'actor_fingerprint,lead_key',
+          });
       }
 
       const sourceHealthScore = signal.offer_sources?.health_score || 0.5;
@@ -367,7 +395,7 @@ Deno.serve(async (req) => {
       
       const { score, painScore, trustScore, trustAction, canCheckout, intent, interactionCount, freeValueEventsCount, trustCapApplied, reasonCodes } = scoringResult;
 
-      // 📝 Write Decision Trace (FORENSIC LOGGING)
+      // 📝 Write Decision Trace (FORENSIC LOGGING) - Now with lead_key
       await supabase.from('decision_traces').insert({
         entity_type: 'signal',
         entity_id: signal.id,
@@ -385,6 +413,7 @@ Deno.serve(async (req) => {
         offer_id: offer.id,
         platform,
         actor_fingerprint: fingerprint,
+        lead_key: leadKey, // v2: separate lead_key for context tracking
       });
       
       // Apply trust gates
