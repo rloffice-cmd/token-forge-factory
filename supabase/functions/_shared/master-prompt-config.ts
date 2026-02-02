@@ -630,3 +630,92 @@ export function detectBlockRisk(errorMessage: string): boolean {
   const lower = errorMessage.toLowerCase();
   return LIMITS.BLOCK_RISK_INDICATORS.some(indicator => lower.includes(indicator));
 }
+
+// =====================================================
+// LEAD FINGERPRINTING (Stable Identity)
+// =====================================================
+
+/**
+ * Normalize a URL for stable fingerprinting
+ * - Remove query params, fragments, trailing slashes
+ * - Lowercase host
+ */
+export function normalizeUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const parsed = new URL(url);
+    // Keep only protocol + host + pathname
+    let normalized = `${parsed.protocol}//${parsed.host.toLowerCase()}${parsed.pathname}`;
+    // Remove trailing slash (except for root)
+    if (normalized.length > 1 && normalized.endsWith('/')) {
+      normalized = normalized.slice(0, -1);
+    }
+    return normalized;
+  } catch {
+    // If URL parsing fails, do basic normalization
+    return url.toLowerCase().split('?')[0].split('#')[0].replace(/\/$/, '');
+  }
+}
+
+/**
+ * Compute a stable lead_key for fingerprinting
+ * Format: platform::author::normalized_url_hash
+ * This ensures the same person on the same thread = same identity
+ */
+export function computeLeadKey(
+  platform: string, 
+  author: string | null, 
+  sourceUrl: string | null
+): string {
+  const normalizedPlatform = (platform || 'unknown').toLowerCase().trim();
+  const normalizedAuthor = (author || 'anonymous').toLowerCase().trim();
+  const normalizedUrl = normalizeUrl(sourceUrl || '');
+  
+  // Create a shorter hash of the URL for the key
+  const urlHash = normalizedUrl ? hashString(normalizedUrl).slice(0, 12) : 'no-url';
+  
+  return `${normalizedPlatform}::${normalizedAuthor}::${urlHash}`;
+}
+
+/**
+ * Simple string hash for URL fingerprinting
+ * Returns hex string
+ */
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  // Convert to positive hex string
+  return Math.abs(hash).toString(16).padStart(8, '0');
+}
+
+/**
+ * Extract author from signal payload based on platform conventions
+ */
+export function extractAuthorFromPayload(payload: Record<string, unknown>): string | null {
+  // Try common author field names in order of preference
+  return (
+    (payload.author as string) ||
+    (payload.username as string) ||
+    (payload.user as string) ||
+    (payload.by as string) || // HN style
+    (payload.reddit_user as string) ||
+    (payload.twitter_handle as string) ||
+    null
+  );
+}
+
+/**
+ * Extract platform from signal payload
+ */
+export function extractPlatformFromPayload(payload: Record<string, unknown>, fallbackCategory?: string): string {
+  return (
+    (payload.platform as string) ||
+    (payload.source as string) ||
+    fallbackCategory ||
+    'unknown'
+  );
+}
