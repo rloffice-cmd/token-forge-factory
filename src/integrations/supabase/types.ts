@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      actor_profiles: {
+        Row: {
+          author: string | null
+          fingerprint: string
+          first_payment_at: string | null
+          first_seen_at: string
+          free_value_events_count: number | null
+          has_paid: boolean | null
+          highest_trust_score: number | null
+          id: string
+          interaction_count_30d: number | null
+          last_seen_at: string
+          outreach_received_count: number | null
+          platform: string
+          total_paid_usd: number | null
+          updated_at: string
+        }
+        Insert: {
+          author?: string | null
+          fingerprint: string
+          first_payment_at?: string | null
+          first_seen_at?: string
+          free_value_events_count?: number | null
+          has_paid?: boolean | null
+          highest_trust_score?: number | null
+          id?: string
+          interaction_count_30d?: number | null
+          last_seen_at?: string
+          outreach_received_count?: number | null
+          platform: string
+          total_paid_usd?: number | null
+          updated_at?: string
+        }
+        Update: {
+          author?: string | null
+          fingerprint?: string
+          first_payment_at?: string | null
+          first_seen_at?: string
+          free_value_events_count?: number | null
+          has_paid?: boolean | null
+          highest_trust_score?: number | null
+          id?: string
+          interaction_count_30d?: number | null
+          last_seen_at?: string
+          outreach_received_count?: number | null
+          platform?: string
+          total_paid_usd?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       affiliate_clicks: {
         Row: {
           clicked_at: string
@@ -727,6 +778,7 @@ export type Database = {
           fulfillment_enabled: boolean
           id: boolean
           last_sweep_at: string | null
+          last_throttle_reset_at: string | null
           max_daily_outreach: number
           max_daily_txs: number
           max_daily_value_usd: number
@@ -738,6 +790,7 @@ export type Database = {
           session_rotate_if_hours_left: number
           session_rotation_enabled: boolean
           session_ttl_hours: number
+          throttle_count_7d: number | null
           throttle_reason: string | null
           throttle_until: string | null
           treasury_target_asset: string
@@ -757,6 +810,7 @@ export type Database = {
           fulfillment_enabled?: boolean
           id?: boolean
           last_sweep_at?: string | null
+          last_throttle_reset_at?: string | null
           max_daily_outreach?: number
           max_daily_txs?: number
           max_daily_value_usd?: number
@@ -768,6 +822,7 @@ export type Database = {
           session_rotate_if_hours_left?: number
           session_rotation_enabled?: boolean
           session_ttl_hours?: number
+          throttle_count_7d?: number | null
           throttle_reason?: string | null
           throttle_until?: string | null
           treasury_target_asset?: string
@@ -787,6 +842,7 @@ export type Database = {
           fulfillment_enabled?: boolean
           id?: boolean
           last_sweep_at?: string | null
+          last_throttle_reset_at?: string | null
           max_daily_outreach?: number
           max_daily_txs?: number
           max_daily_value_usd?: number
@@ -798,6 +854,7 @@ export type Database = {
           session_rotate_if_hours_left?: number
           session_rotation_enabled?: boolean
           session_ttl_hours?: number
+          throttle_count_7d?: number | null
           throttle_reason?: string | null
           throttle_until?: string | null
           treasury_target_asset?: string
@@ -1173,6 +1230,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      decision_traces: {
+        Row: {
+          actor_fingerprint: string | null
+          created_at: string
+          decision: string
+          entity_id: string | null
+          entity_type: string
+          free_value_events_count_24h: number | null
+          free_value_events_count_30d: number | null
+          id: string
+          intent: string | null
+          interaction_count: number | null
+          offer_id: string | null
+          pain_score: number | null
+          platform: string | null
+          reason_codes: string[] | null
+          source_url: string | null
+          throttle_state: string | null
+          throttle_until: string | null
+          trust_cap_applied: boolean | null
+          trust_score: number | null
+        }
+        Insert: {
+          actor_fingerprint?: string | null
+          created_at?: string
+          decision: string
+          entity_id?: string | null
+          entity_type: string
+          free_value_events_count_24h?: number | null
+          free_value_events_count_30d?: number | null
+          id?: string
+          intent?: string | null
+          interaction_count?: number | null
+          offer_id?: string | null
+          pain_score?: number | null
+          platform?: string | null
+          reason_codes?: string[] | null
+          source_url?: string | null
+          throttle_state?: string | null
+          throttle_until?: string | null
+          trust_cap_applied?: boolean | null
+          trust_score?: number | null
+        }
+        Update: {
+          actor_fingerprint?: string | null
+          created_at?: string
+          decision?: string
+          entity_id?: string | null
+          entity_type?: string
+          free_value_events_count_24h?: number | null
+          free_value_events_count_30d?: number | null
+          id?: string
+          intent?: string | null
+          interaction_count?: number | null
+          offer_id?: string | null
+          pain_score?: number | null
+          platform?: string | null
+          reason_codes?: string[] | null
+          source_url?: string | null
+          throttle_state?: string | null
+          throttle_until?: string | null
+          trust_cap_applied?: boolean | null
+          trust_score?: number | null
+        }
+        Relationships: []
       }
       demand_signals: {
         Row: {
@@ -2905,6 +3028,86 @@ export type Database = {
           },
         ]
       }
+      patch_proposals: {
+        Row: {
+          actual_impact: Json | null
+          approved_at: string | null
+          audit_run_id: string | null
+          bug_type: string
+          confidence: number | null
+          created_at: string
+          deployed_at: string | null
+          evidence_queries: string[] | null
+          evidence_results: Json | null
+          expected_impact: Json | null
+          expected_risk: string | null
+          hypothesis: string
+          id: string
+          patch_diff: string | null
+          patch_target: string | null
+          patch_type: string | null
+          rollback_plan: string | null
+          severity: number | null
+          status: string | null
+          verification_result: string | null
+          verified_at: string | null
+        }
+        Insert: {
+          actual_impact?: Json | null
+          approved_at?: string | null
+          audit_run_id?: string | null
+          bug_type: string
+          confidence?: number | null
+          created_at?: string
+          deployed_at?: string | null
+          evidence_queries?: string[] | null
+          evidence_results?: Json | null
+          expected_impact?: Json | null
+          expected_risk?: string | null
+          hypothesis: string
+          id?: string
+          patch_diff?: string | null
+          patch_target?: string | null
+          patch_type?: string | null
+          rollback_plan?: string | null
+          severity?: number | null
+          status?: string | null
+          verification_result?: string | null
+          verified_at?: string | null
+        }
+        Update: {
+          actual_impact?: Json | null
+          approved_at?: string | null
+          audit_run_id?: string | null
+          bug_type?: string
+          confidence?: number | null
+          created_at?: string
+          deployed_at?: string | null
+          evidence_queries?: string[] | null
+          evidence_results?: Json | null
+          expected_impact?: Json | null
+          expected_risk?: string | null
+          hypothesis?: string
+          id?: string
+          patch_diff?: string | null
+          patch_target?: string | null
+          patch_type?: string | null
+          rollback_plan?: string | null
+          severity?: number | null
+          status?: string | null
+          verification_result?: string | null
+          verified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patch_proposals_audit_run_id_fkey"
+            columns: ["audit_run_id"]
+            isOneToOne: false
+            referencedRelation: "self_audit_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_eth: number | null
@@ -3116,6 +3319,54 @@ export type Database = {
           rule_name?: string
           trigger_condition?: string
           trigger_count?: number | null
+        }
+        Relationships: []
+      }
+      self_audit_runs: {
+        Row: {
+          anomalies_found: number | null
+          completed_at: string | null
+          created_at: string
+          hypotheses: Json | null
+          id: string
+          kpi_snapshot: Json | null
+          patches_approved: number | null
+          patches_deployed: number | null
+          patches_proposed: number | null
+          run_type: string
+          started_at: string
+          status: string | null
+          summary: string | null
+        }
+        Insert: {
+          anomalies_found?: number | null
+          completed_at?: string | null
+          created_at?: string
+          hypotheses?: Json | null
+          id?: string
+          kpi_snapshot?: Json | null
+          patches_approved?: number | null
+          patches_deployed?: number | null
+          patches_proposed?: number | null
+          run_type: string
+          started_at?: string
+          status?: string | null
+          summary?: string | null
+        }
+        Update: {
+          anomalies_found?: number | null
+          completed_at?: string | null
+          created_at?: string
+          hypotheses?: Json | null
+          id?: string
+          kpi_snapshot?: Json | null
+          patches_approved?: number | null
+          patches_deployed?: number | null
+          patches_proposed?: number | null
+          run_type?: string
+          started_at?: string
+          status?: string | null
+          summary?: string | null
         }
         Relationships: []
       }

@@ -1,6 +1,8 @@
 /**
  * Brain Score - Trust-Gated Signal Scoring
  * Implements the MASTER PROMPT trust gates and pain scoring
+ * 
+ * NOW WITH: Actor Fingerprinting + Decision Trace Logging
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -13,6 +15,7 @@ import {
   TRUST_CAP,
   canCreateCheckout,
   FREE_VALUE_EVENTS,
+  isThrottleActive,
 } from '../_shared/master-prompt-config.ts';
 
 const corsHeaders = {
@@ -40,37 +43,126 @@ interface Offer {
   pricing_model: Record<string, { price: number }>;
 }
 
-// Score signal using Trust-Gated logic
-function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): {
+interface ActorProfile {
+  id: string;
+  fingerprint: string;
+  interaction_count_30d: number;
+  free_value_events_count: number;
+  has_paid: boolean;
+  highest_trust_score: number;
+}
+
+/**
+ * Generate actor fingerprint from platform + author
+ * This provides consistent identity tracking across signals
+ */
+function generateFingerprint(platform: string, author: string | null): string {
+  const normalizedPlatform = (platform || 'unknown').toLowerCase().trim();
+  const normalizedAuthor = (author || 'anonymous').toLowerCase().trim();
+  return `${normalizedPlatform}::${normalizedAuthor}`;
+}
+
+/**
+ * Extract author from signal payload based on platform
+ */
+function extractAuthor(signal: Signal): string | null {
+  const payload = signal.payload_json || {};
+  // Try common author field names
+  return (
+    (payload as Record<string, unknown>).author as string ||
+    (payload as Record<string, unknown>).username as string ||
+    (payload as Record<string, unknown>).user as string ||
+    (payload as Record<string, unknown>).by as string || // HN style
+    null
+  );
+}
+
+/**
+ * Extract platform from signal
+ */
+function extractPlatform(signal: Signal): string {
+  const payload = signal.payload_json || {};
+  return (
+    (payload as Record<string, unknown>).platform as string ||
+    (payload as Record<string, unknown>).source as string ||
+    signal.category ||
+    'unknown'
+  );
+}
+
+// Score signal using Trust-Gated logic with actor history
+function scoreSignalWithActor(
+  signal: Signal, 
+  offer: Offer, 
+  sourceHealthScore: number,
+  actorProfile: ActorProfile | null
+): {
   score: number;
   painScore: number;
+  trustScore: number;
   trustAction: string;
   canCheckout: boolean;
+  intent: string;
+  interactionCount: number;
+  freeValueEventsCount: number;
+  trustCapApplied: boolean;
+  reasonCodes: string[];
 } {
   const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
+  const reasonCodes: string[] = [];
   
   // 1. Intent Classification
   const intent = classifyIntent(text);
   const isActionable = isActionableIntent(intent);
   
   if (!isActionable) {
-    return { score: 0, painScore: 0, trustAction: 'BLOCK', canCheckout: false };
+    return { 
+      score: 0, painScore: 0, trustScore: 0, trustAction: 'BLOCK', 
+      canCheckout: false, intent, interactionCount: 0, freeValueEventsCount: 0,
+      trustCapApplied: false, reasonCodes: ['intent_not_actionable']
+    };
   }
   
   // 2. Pain Score
   const painScore = calculatePainScore(text);
   
   if (painScore < PAIN_THRESHOLD) {
-    return { score: painScore / 100, painScore, trustAction: 'SILENT', canCheckout: false };
+    return { 
+      score: painScore / 100, painScore, trustScore: 0, trustAction: 'SILENT', 
+      canCheckout: false, intent, interactionCount: 0, freeValueEventsCount: 0,
+      trustCapApplied: false, reasonCodes: ['pain_below_threshold']
+    };
   }
+  reasonCodes.push('pain_threshold_met');
   
   // 3. Buying Signal Detection
   const buyingSignalKeywords = ['any tool', 'recommend', 'how can i', 'is there a way', 'looking for', 'need'];
   const hasBuyingSignal = buyingSignalKeywords.some(kw => text.includes(kw));
+  if (hasBuyingSignal) reasonCodes.push('buying_signal_detected');
   
-  // 4. Trust Estimation (simplified - real trust needs interaction history)
-  // For new signals, start with medium trust
+  // 4. Trust Estimation WITH ACTOR HISTORY
   let estimatedTrust = 50;
+  
+  // Get interaction data from actor profile
+  const interactionCount = actorProfile?.interaction_count_30d || 0;
+  const freeValueEventsCount = actorProfile?.free_value_events_count || 0;
+  const hasPaid = actorProfile?.has_paid || false;
+  
+  // Boost trust based on actor history
+  if (interactionCount > 0) {
+    estimatedTrust += Math.min(25, interactionCount * 5);
+    reasonCodes.push(`interaction_history:${interactionCount}`);
+  }
+  
+  if (freeValueEventsCount > 0) {
+    estimatedTrust += 30; // Received free value boost
+    reasonCodes.push(`free_value_received:${freeValueEventsCount}`);
+  }
+  
+  if (hasPaid) {
+    estimatedTrust += 20; // Previous payment = high trust
+    reasonCodes.push('previous_payment');
+  }
   
   // Boost trust if source is healthy
   estimatedTrust += sourceHealthScore * 20;
@@ -79,52 +171,62 @@ function scoreSignal(signal: Signal, offer: Offer, sourceHealthScore: number): {
   const panicWords = ['urgent', 'help', 'please', 'asap', 'now'];
   if (panicWords.some(w => text.includes(w))) {
     estimatedTrust -= 10;
+    reasonCodes.push('panic_language_detected');
   }
   
-  // 🔒 TRUST CAP: Cap at no_history_max for new signals (no interaction history)
-  // interactionCount = 0 for new signals from external sources
-  const interactionCount = 0; // New signal = no history
+  // 🔒 TRUST CAP: Apply if insufficient interaction history
+  let trustCapApplied = false;
   if (interactionCount < TRUST_CAP.min_interactions_for_paid) {
+    const originalTrust = estimatedTrust;
     estimatedTrust = Math.min(estimatedTrust, TRUST_CAP.no_history_max);
+    if (originalTrust > TRUST_CAP.no_history_max) {
+      trustCapApplied = true;
+      reasonCodes.push(`trust_capped:${originalTrust}->${estimatedTrust}`);
+    }
   }
+  
+  estimatedTrust = Math.max(0, Math.min(100, estimatedTrust));
   
   // Determine trust action
   let trustAction: 'BLOCK' | 'FREE_ONLY' | 'PAID_OK';
   if (estimatedTrust < TRUST_GATES.BLOCK_PAYMENT) {
     trustAction = 'BLOCK';
+    reasonCodes.push('trust_blocked');
   } else if (estimatedTrust < TRUST_GATES.PAID_ALLOWED) {
     trustAction = 'FREE_ONLY';
+    reasonCodes.push('trust_free_only');
   } else {
     trustAction = 'PAID_OK';
+    reasonCodes.push('trust_paid_ok');
   }
   
-  // 5. Can Create Checkout? (now includes interactionCount check)
+  // 5. Can Create Checkout? (with real interactionCount)
   const canCheckout = canCreateCheckout(painScore, hasBuyingSignal, estimatedTrust, interactionCount);
+  if (!canCheckout && trustAction === 'PAID_OK') {
+    reasonCodes.push('checkout_blocked_by_requirements');
+  }
   
   // 6. Calculate composite score
   let compositeScore = 0;
-  
-  // Base pain contribution (40%)
   compositeScore += (painScore / 100) * 0.4;
-  
-  // Buying signal (20%)
   if (hasBuyingSignal) compositeScore += 0.2;
-  
-  // Trust level (20%)
   compositeScore += (estimatedTrust / 100) * 0.2;
-  
-  // Source health (10%)
   compositeScore += sourceHealthScore * 0.1;
   
-  // Keyword match (10%)
   const matchedKeywords = offer.keywords.filter(kw => text.includes(kw.toLowerCase()));
   compositeScore += Math.min(0.1, matchedKeywords.length * 0.02);
   
   return {
     score: Math.min(1.0, Math.max(0, compositeScore)),
     painScore,
+    trustScore: estimatedTrust,
     trustAction,
     canCheckout,
+    intent,
+    interactionCount,
+    freeValueEventsCount,
+    trustCapApplied,
+    reasonCodes,
   };
 }
 
@@ -186,10 +288,10 @@ Deno.serve(async (req) => {
   );
 
   try {
-    // Check brain_enabled
+    // Check brain_enabled and throttle state
     const { data: settings } = await supabase
       .from('brain_settings')
-      .select('brain_enabled, auto_approve_threshold, min_opportunity_value_usd')
+      .select('brain_enabled, auto_approve_threshold, min_opportunity_value_usd, throttle_until')
       .single();
     
     if (!settings?.brain_enabled) {
@@ -198,6 +300,9 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Determine throttle state
+    const throttleState = isThrottleActive(settings?.throttle_until) ? 'ON' : 'OFF';
 
     // Fetch unprocessed signals from last 24h
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -255,12 +360,64 @@ Deno.serve(async (req) => {
         continue;
       }
 
+      // 🔑 Actor Fingerprinting - get or create actor profile
+      const platform = extractPlatform(signal as Signal);
+      const author = extractAuthor(signal as Signal);
+      const fingerprint = generateFingerprint(platform, author);
+      
+      // Lookup actor profile
+      let actorProfile: ActorProfile | null = null;
+      const { data: existingActor } = await supabase
+        .from('actor_profiles')
+        .select('*')
+        .eq('fingerprint', fingerprint)
+        .maybeSingle();
+      
+      if (existingActor) {
+        actorProfile = existingActor as ActorProfile;
+        // Update last_seen
+        await supabase.from('actor_profiles')
+          .update({ last_seen_at: new Date().toISOString(), interaction_count_30d: (existingActor.interaction_count_30d || 0) + 1 })
+          .eq('id', existingActor.id);
+      } else {
+        // Create new actor profile
+        const { data: newActor } = await supabase
+          .from('actor_profiles')
+          .insert({ fingerprint, platform, author, interaction_count_30d: 1 })
+          .select()
+          .single();
+        actorProfile = newActor as ActorProfile;
+      }
+
       const sourceHealthScore = signal.offer_sources?.health_score || 0.5;
-      const { score, painScore, trustAction, canCheckout } = scoreSignal(
+      const scoringResult = scoreSignalWithActor(
         signal as Signal, 
         offer as Offer, 
-        sourceHealthScore
+        sourceHealthScore,
+        actorProfile
       );
+      
+      const { score, painScore, trustScore, trustAction, canCheckout, intent, interactionCount, freeValueEventsCount, trustCapApplied, reasonCodes } = scoringResult;
+
+      // 📝 Write Decision Trace (FORENSIC LOGGING)
+      await supabase.from('decision_traces').insert({
+        entity_type: 'signal',
+        entity_id: signal.id,
+        source_url: signal.source_url,
+        intent,
+        pain_score: painScore,
+        trust_score: trustScore,
+        trust_cap_applied: trustCapApplied,
+        interaction_count: interactionCount,
+        free_value_events_count_24h: freeValueEventsCount,
+        throttle_state: throttleState,
+        throttle_until: settings?.throttle_until,
+        decision: trustAction,
+        reason_codes: reasonCodes,
+        offer_id: offer.id,
+        platform,
+        actor_fingerprint: fingerprint,
+      });
       
       // Apply trust gates
       if (trustAction === 'BLOCK') {
@@ -308,9 +465,14 @@ Deno.serve(async (req) => {
           approved_at: autoApprove ? new Date().toISOString() : null,
           metadata: {
             pain_score: painScore,
+            trust_score: trustScore,
             trust_action: trustAction,
             can_checkout: canCheckout,
-            scoring_version: 'trust_gated_v1',
+            trust_cap_applied: trustCapApplied,
+            interaction_count: interactionCount,
+            reason_codes: reasonCodes,
+            actor_fingerprint: fingerprint,
+            scoring_version: 'trust_gated_v2_with_actor',
           },
         });
       
