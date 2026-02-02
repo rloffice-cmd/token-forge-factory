@@ -790,6 +790,7 @@ export type Database = {
           session_rotate_if_hours_left: number
           session_rotation_enabled: boolean
           session_ttl_hours: number
+          throttle_activated_at: string | null
           throttle_count_7d: number | null
           throttle_reason: string | null
           throttle_until: string | null
@@ -822,6 +823,7 @@ export type Database = {
           session_rotate_if_hours_left?: number
           session_rotation_enabled?: boolean
           session_ttl_hours?: number
+          throttle_activated_at?: string | null
           throttle_count_7d?: number | null
           throttle_reason?: string | null
           throttle_until?: string | null
@@ -854,6 +856,7 @@ export type Database = {
           session_rotate_if_hours_left?: number
           session_rotation_enabled?: boolean
           session_ttl_hours?: number
+          throttle_activated_at?: string | null
           throttle_count_7d?: number | null
           throttle_reason?: string | null
           throttle_until?: string | null

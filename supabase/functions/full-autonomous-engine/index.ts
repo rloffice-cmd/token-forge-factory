@@ -229,17 +229,19 @@ serve(async (req) => {
     let isThrottled = stickyThrottleActive;
     
     if (shouldActivateThrottle && !stickyThrottleActive) {
-      // NEW throttle activation - set sticky duration
+      // NEW throttle activation - set sticky duration + activation timestamp
       const throttleExpiry = getThrottleExpiry();
+      const throttleActivatedAt = new Date().toISOString();
       await supabase
         .from('brain_settings')
         .update({ 
           throttle_until: throttleExpiry,
+          throttle_activated_at: throttleActivatedAt, // NEW: Track when throttle was activated
           throttle_reason: `Checkouts=${recentCheckouts}, Payments=${recentPayments} in 24h`
         })
         .eq('id', true);
       isThrottled = true;
-      console.log(`🔒 STICKY THROTTLE ACTIVATED: Locked until ${throttleExpiry}`);
+      console.log(`🔒 STICKY THROTTLE ACTIVATED: Locked until ${throttleExpiry} (activated at ${throttleActivatedAt})`);
     }
 
     const maxCheckouts = getMaxCheckoutsAllowed(recentPayments || 0);
