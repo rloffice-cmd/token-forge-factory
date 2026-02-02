@@ -2,9 +2,22 @@
  * MASTER PROMPT CONFIG - Autonomous Content & Outreach Engine
  * קונפיגורציה מרכזית למנוע ההפצה האוטונומי
  * 
+ * SYSTEM OVERRIDE — EXECUTION MODE
+ * AUTO_PUBLISH = TRUE | MANUAL_REVIEW = FALSE | DRAFT_MODE = DISABLED
+ * 
  * אין אישורים ידניים. אין Drafts. אין שאלות.
  * המנוע מחליט. מבצע. נמדד בתוצאות.
  */
+
+// =====================================================
+// EXECUTION MODE - OVERRIDE
+// =====================================================
+export const EXECUTION_MODE = {
+  AUTO_PUBLISH: true,       // Content ≥80 is published IMMEDIATELY
+  MANUAL_REVIEW: false,     // No human approval needed
+  DRAFT_MODE: false,        // DISABLED - content goes directly to published
+  IMMEDIATE_ACTION: true,   // Execute actions without waiting
+};
 
 // =====================================================
 // SCORING THRESHOLDS - חד וברור
@@ -298,15 +311,32 @@ export function validateContent(content: string): { valid: boolean; reason?: str
   return { valid: true };
 }
 
+// OVERRIDE: If score >= 80, MUST publish immediately. No drafts.
 export function shouldAutoPublish(score: number): boolean {
+  if (!EXECUTION_MODE.AUTO_PUBLISH) return false;
   return score >= SCORING.AUTO_PUBLISH_THRESHOLD;
 }
 
+// OVERRIDE: Immediate execution for qualified leads
 export function shouldOutreach(score: number): boolean {
+  if (!EXECUTION_MODE.IMMEDIATE_ACTION) return false;
   return score >= SCORING.AUTO_OUTREACH_THRESHOLD;
 }
 
+// Get content status - NEVER return 'draft' when DRAFT_MODE is disabled
+export function getContentStatus(score: number): 'published' | 'archived' {
+  if (!EXECUTION_MODE.DRAFT_MODE && score >= SCORING.AUTO_PUBLISH_THRESHOLD) {
+    return 'published'; // Direct to published, skip draft/ready states
+  }
+  return 'archived';
+}
+
 export function getRandomDelay(platform: string): number {
+  // IMMEDIATE_ACTION mode uses minimal delays
+  if (EXECUTION_MODE.IMMEDIATE_ACTION) {
+    return Math.floor(Math.random() * 5 * 60 * 1000); // 0-5 min
+  }
+  
   const config = PLATFORM_CONFIG[platform];
   if (!config) {
     return LIMITS.RANDOM_DELAY_RANGE_MS[0];
