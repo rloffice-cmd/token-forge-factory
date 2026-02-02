@@ -1,10 +1,15 @@
 /**
- * Outreach Sender - SILENT MODE
+ * Outreach Sender - SILENT MODE + THROTTLE AWARE
  * 
  * NOTIFICATION POLICY (STRICT):
  * ❌ NO Telegram notifications for leads/outreach
  * ❌ NO Telegram for high-intent signals
  * ✅ Only LOG to database and console
+ * 
+ * THROTTLE POLICY (CRITICAL):
+ * ✅ Check throttle_until BEFORE sending
+ * ✅ Mark jobs as "deferred" if throttle active
+ * ✅ Set next_retry_at to after throttle expires
  * 
  * Telegram is reserved ONLY for:
  * - Confirmed payments (coinbase-webhook)
@@ -14,6 +19,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { isThrottleActive } from "../_shared/master-prompt-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,6 +54,24 @@ serve(async (req) => {
       mustEnv("SUPABASE_SERVICE_ROLE_KEY")
     );
 
+    // ========== THROTTLE CHECK (BEFORE ANYTHING ELSE) ==========
+    const { data: settings } = await supabase
+      .from("brain_settings")
+      .select("throttle_until, throttle_reason, outreach_enabled")
+      .single();
+
+    const throttleUntil = settings?.throttle_until;
+    const throttleActive = isThrottleActive(throttleUntil);
+    
+    // If outreach is disabled globally, reject immediately
+    if (settings && !settings.outreach_enabled) {
+      console.log("🚫 Outreach disabled globally");
+      return new Response(
+        JSON.stringify({ ok: false, blocked: true, reason: "outreach_disabled" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const body = await req.json();
     const jobId = body.job_id;
 
@@ -55,6 +79,33 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "job_id required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // If throttle is active, defer ALL jobs without processing
+    if (throttleActive) {
+      const deferUntil = new Date(new Date(throttleUntil!).getTime() + 60 * 60 * 1000).toISOString(); // 1h after throttle expires
+      
+      console.log(`🚫 Throttle active until ${throttleUntil}, deferring job ${jobId}`);
+      
+      await supabase
+        .from("outreach_jobs")
+        .update({
+          status: "deferred",
+          gate_fail_reason: `throttle_active:${settings?.throttle_reason || 'payment_throttle'}`,
+          next_retry_at: deferUntil,
+        })
+        .eq("id", jobId);
+
+      return new Response(
+        JSON.stringify({ 
+          ok: false, 
+          deferred: true, 
+          reason: "throttle_active",
+          throttle_until: throttleUntil,
+          next_retry_at: deferUntil
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

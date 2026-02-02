@@ -2,7 +2,10 @@
  * Brain Score - Trust-Gated Signal Scoring
  * Implements the MASTER PROMPT trust gates and pain scoring
  * 
- * NOW WITH: Actor Fingerprinting + Decision Trace Logging
+ * NOW WITH: 
+ * - Actor Fingerprinting (stable lead_key)
+ * - Decision Trace Logging
+ * - Proper interactionCount from actor_profiles
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -16,6 +19,9 @@ import {
   canCreateCheckout,
   FREE_VALUE_EVENTS,
   isThrottleActive,
+  computeLeadKey,
+  extractAuthorFromPayload,
+  extractPlatformFromPayload,
 } from '../_shared/master-prompt-config.ts';
 
 const corsHeaders = {
@@ -50,44 +56,6 @@ interface ActorProfile {
   free_value_events_count: number;
   has_paid: boolean;
   highest_trust_score: number;
-}
-
-/**
- * Generate actor fingerprint from platform + author
- * This provides consistent identity tracking across signals
- */
-function generateFingerprint(platform: string, author: string | null): string {
-  const normalizedPlatform = (platform || 'unknown').toLowerCase().trim();
-  const normalizedAuthor = (author || 'anonymous').toLowerCase().trim();
-  return `${normalizedPlatform}::${normalizedAuthor}`;
-}
-
-/**
- * Extract author from signal payload based on platform
- */
-function extractAuthor(signal: Signal): string | null {
-  const payload = signal.payload_json || {};
-  // Try common author field names
-  return (
-    (payload as Record<string, unknown>).author as string ||
-    (payload as Record<string, unknown>).username as string ||
-    (payload as Record<string, unknown>).user as string ||
-    (payload as Record<string, unknown>).by as string || // HN style
-    null
-  );
-}
-
-/**
- * Extract platform from signal
- */
-function extractPlatform(signal: Signal): string {
-  const payload = signal.payload_json || {};
-  return (
-    (payload as Record<string, unknown>).platform as string ||
-    (payload as Record<string, unknown>).source as string ||
-    signal.category ||
-    'unknown'
-  );
 }
 
 // Score signal using Trust-Gated logic with actor history
@@ -360,10 +328,10 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // 🔑 Actor Fingerprinting - get or create actor profile
-      const platform = extractPlatform(signal as Signal);
-      const author = extractAuthor(signal as Signal);
-      const fingerprint = generateFingerprint(platform, author);
+      // 🔑 Actor Fingerprinting - get or create actor profile using stable lead_key
+      const platform = extractPlatformFromPayload(signal.payload_json || {}, signal.category);
+      const author = extractAuthorFromPayload(signal.payload_json || {});
+      const fingerprint = computeLeadKey(platform, author, signal.source_url);
       
       // Lookup actor profile
       let actorProfile: ActorProfile | null = null;
