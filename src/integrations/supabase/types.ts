@@ -738,6 +738,8 @@ export type Database = {
           session_rotate_if_hours_left: number
           session_rotation_enabled: boolean
           session_ttl_hours: number
+          throttle_reason: string | null
+          throttle_until: string | null
           treasury_target_asset: string
           treasury_target_network: string
           updated_at: string
@@ -766,6 +768,8 @@ export type Database = {
           session_rotate_if_hours_left?: number
           session_rotation_enabled?: boolean
           session_ttl_hours?: number
+          throttle_reason?: string | null
+          throttle_until?: string | null
           treasury_target_asset?: string
           treasury_target_network?: string
           updated_at?: string
@@ -794,6 +798,8 @@ export type Database = {
           session_rotate_if_hours_left?: number
           session_rotation_enabled?: boolean
           session_ttl_hours?: number
+          throttle_reason?: string | null
+          throttle_until?: string | null
           treasury_target_asset?: string
           treasury_target_network?: string
           updated_at?: string
@@ -1461,6 +1467,54 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      free_value_events: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          event_data: Json | null
+          event_type: string
+          id: string
+          lead_id: string | null
+          session_id: string | null
+          source_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          event_data?: Json | null
+          event_type: string
+          id?: string
+          lead_id?: string | null
+          session_id?: string | null
+          source_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+          lead_id?: string | null
+          session_id?: string | null
+          source_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "free_value_events_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "users_customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "free_value_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
             referencedColumns: ["id"]
           },
         ]

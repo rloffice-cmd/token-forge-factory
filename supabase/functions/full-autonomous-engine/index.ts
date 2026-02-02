@@ -26,6 +26,8 @@ import {
   detectBlockRisk,
   shouldThrottleCheckouts,
   getMaxCheckoutsAllowed,
+  isThrottleActive,
+  getThrottleExpiry,
 } from "../_shared/master-prompt-config.ts";
 
 const corsHeaders = {
@@ -198,7 +200,7 @@ serve(async (req) => {
       .eq('status', 'sent')
       .gte('created_at', `${today}T00:00:00Z`);
 
-    // 🔒 PAYMENT-FIRST THROTTLE: Check recent checkouts vs payments
+    // 🔒 PAYMENT-FIRST THROTTLE: Check recent checkouts vs payments (ROLLING 24h)
     const last24h = new Date(Date.now() - PAYMENT_THROTTLE.window_hours * 60 * 60 * 1000).toISOString();
     
     const { count: recentCheckouts } = await supabase
@@ -213,11 +215,37 @@ serve(async (req) => {
       .eq('status', 'confirmed')
       .gte('confirmed_at', last24h);
 
-    const isThrottled = shouldThrottleCheckouts(recentCheckouts || 0, recentPayments || 0);
+    // 🔒 STICKY THROTTLE: Check if throttle is already active from previous run
+    const { data: currentSettings } = await supabase
+      .from('brain_settings')
+      .select('throttle_until, throttle_reason')
+      .eq('id', true)
+      .single();
+
+    const stickyThrottleActive = isThrottleActive(currentSettings?.throttle_until);
+    const shouldActivateThrottle = shouldThrottleCheckouts(recentCheckouts || 0, recentPayments || 0);
+    
+    // Determine if throttled (either sticky or new activation)
+    let isThrottled = stickyThrottleActive;
+    
+    if (shouldActivateThrottle && !stickyThrottleActive) {
+      // NEW throttle activation - set sticky duration
+      const throttleExpiry = getThrottleExpiry();
+      await supabase
+        .from('brain_settings')
+        .update({ 
+          throttle_until: throttleExpiry,
+          throttle_reason: `Checkouts=${recentCheckouts}, Payments=${recentPayments} in 24h`
+        })
+        .eq('id', true);
+      isThrottled = true;
+      console.log(`🔒 STICKY THROTTLE ACTIVATED: Locked until ${throttleExpiry}`);
+    }
+
     const maxCheckouts = getMaxCheckoutsAllowed(recentPayments || 0);
 
     if (isThrottled) {
-      console.log(`🛑 PAYMENT-FIRST THROTTLE ACTIVE: ${recentCheckouts} checkouts, ${recentPayments} payments → FREE_ONLY mode`);
+      console.log(`🛑 PAYMENT-FIRST THROTTLE ACTIVE: ${recentCheckouts} checkouts, ${recentPayments} payments → FREE_ONLY mode (until ${currentSettings?.throttle_until || 'new lock'})`);
     }
 
     if ((todayPosts || 0) >= LIMITS.MAX_POSTS_PER_DAY) {
@@ -577,17 +605,28 @@ If you cannot create content that follows the rules, return: { "content": null }
     }
 
     // =====================================================
-    // STAGE 5: AUDIT & LEARN
+    // STAGE 5: AUDIT & LEARN (FORENSIC LOGGING)
     // =====================================================
     console.log('📈 STAGE 5: LEARN - Recording metrics for optimization');
 
+    // 🔍 FORENSIC LOGGING: Include all critical decision factors
     await supabase.from('audit_logs').insert({
       job_id: 'a0000000-0000-0000-0000-000000000006',
       action: 'master_prompt_cycle',
       metadata: {
         ...stats,
         threshold_used: SCORING.AUTO_PUBLISH_THRESHOLD,
-        pipeline_version: 'master_prompt_v1',
+        pipeline_version: 'master_prompt_v2_sticky_throttle',
+        // 📊 CRITICAL FORENSIC FIELDS
+        payments_confirmed_last_24h: recentPayments || 0,
+        checkouts_last_24h: recentCheckouts || 0,
+        throttle_state: isThrottled ? 'ON' : 'OFF',
+        throttle_until: currentSettings?.throttle_until || null,
+        throttle_reason: currentSettings?.throttle_reason || (isThrottled ? 'newly_activated' : null),
+        max_checkouts_allowed: maxCheckouts,
+        trust_cap_applied: TRUST_CAP.no_history_max,
+        min_interactions_required: TRUST_CAP.min_interactions_for_paid,
+        // Qualified leads summary
         qualified_leads: qualifiedLeads.slice(0, 5).map(l => ({
           score: l.score,
           platform: l.platform,
@@ -597,7 +636,7 @@ If you cannot create content that follows the rules, return: { "content": null }
     });
 
     // Log cycle completion (no Telegram - only daily summary)
-    console.log(`✅ CYCLE COMPLETE | Qualified: ${stats.leads_qualified} | Archived: ${stats.leads_archived} | Outreach: ${stats.outreach_sent} | Guardrails: ${stats.blocked_by_guardrails}`);
+    console.log(`✅ CYCLE COMPLETE | Qualified: ${stats.leads_qualified} | Archived: ${stats.leads_archived} | Outreach: ${stats.outreach_sent} | Throttle: ${isThrottled ? 'ON' : 'OFF'} | Guardrails: ${stats.blocked_by_guardrails}`);
 
     return new Response(
       JSON.stringify({ success: true, stats }),
