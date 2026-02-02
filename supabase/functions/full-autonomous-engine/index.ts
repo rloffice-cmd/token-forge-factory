@@ -1,17 +1,25 @@
 /**
- * Full Autonomous Marketing Engine - NO EXTERNAL API KEYS REQUIRED
- * מנוע שיווק אוטונומי מלא - עובד עם APIs ציבוריים בלבד
+ * FULL AUTONOMOUS ENGINE - MASTER PROMPT IMPLEMENTATION
+ * מנוע הפצה אוטונומי מלא - ללא פרשנות, ללא אישורים
  * 
- * This engine runs 24/7 without any external credentials:
- * 1. Scans public APIs (HN Algolia, Reddit RSS, Dev.to RSS, Stack Exchange)
- * 2. Analyzes intent with Lovable AI
- * 3. Generates content and responses
- * 4. Queues everything for review
- * 5. Sends comprehensive Telegram reports
+ * PIPELINE: SCAN → ANALYZE → SCORE → GENERATE → VALIDATE → PUBLISH → MEASURE → LEARN
+ * 
+ * אין קיצור דרך. שלב שנכשל = עצירה וגניזה.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { 
+  SCORING, 
+  LIMITS, 
+  PLATFORM_CONFIG, 
+  AI_PROMPTS,
+  validateContent,
+  shouldAutoPublish,
+  shouldOutreach,
+  getRandomDelay,
+  detectBlockRisk 
+} from "../_shared/master-prompt-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -21,9 +29,7 @@ const corsHeaders = {
 // =====================================================
 // PUBLIC API SOURCES - NO AUTH REQUIRED
 // =====================================================
-
 const PUBLIC_SOURCES = {
-  // Hacker News Algolia API - completely public
   hackerNews: [
     { name: 'HN Wallet Security', url: 'https://hn.algolia.com/api/v1/search_by_date?query=wallet%20security&tags=story,comment&hitsPerPage=30' },
     { name: 'HN Smart Contract', url: 'https://hn.algolia.com/api/v1/search_by_date?query=smart%20contract%20audit&tags=story,comment&hitsPerPage=30' },
@@ -32,7 +38,6 @@ const PUBLIC_SOURCES = {
     { name: 'HN DeFi Hack', url: 'https://hn.algolia.com/api/v1/search_by_date?query=defi%20hack%20OR%20rug%20pull&tags=story,comment&hitsPerPage=20' },
   ],
   
-  // Reddit RSS - public feeds (read-only)
   redditRSS: [
     { name: 'r/ethdev', url: 'https://www.reddit.com/r/ethdev/new/.rss?limit=25' },
     { name: 'r/ethereum', url: 'https://www.reddit.com/r/ethereum/new/.rss?limit=25' },
@@ -41,7 +46,6 @@ const PUBLIC_SOURCES = {
     { name: 'r/solidity', url: 'https://www.reddit.com/r/solidity/new/.rss?limit=20' },
   ],
   
-  // Dev.to RSS - public feeds
   devTo: [
     { name: 'Dev.to Web3', url: 'https://dev.to/feed/tag/web3' },
     { name: 'Dev.to Blockchain', url: 'https://dev.to/feed/tag/blockchain' },
@@ -49,7 +53,6 @@ const PUBLIC_SOURCES = {
     { name: 'Dev.to Security', url: 'https://dev.to/feed/tag/security' },
   ],
   
-  // Stack Exchange API - public (rate limited but works)
   stackExchange: [
     { name: 'SO Ethereum', url: 'https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&tagged=ethereum&site=stackoverflow&pagesize=20&filter=withbody' },
     { name: 'SO Solidity', url: 'https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&tagged=solidity&site=stackoverflow&pagesize=20&filter=withbody' },
@@ -64,7 +67,7 @@ interface DiscoveredLead {
   title: string;
   content: string;
   author?: string;
-  intent_score: number;
+  score: number;
   pain_points: string[];
   product_fit: string[];
   suggested_response?: string;
@@ -74,25 +77,23 @@ interface EngineStats {
   sources_scanned: number;
   items_analyzed: number;
   leads_discovered: number;
-  high_intent_leads: number;
-  content_generated: number;
-  outreach_queued: number;
+  leads_qualified: number; // Score ≥80
+  leads_archived: number; // Score <80
+  content_published: number;
+  outreach_sent: number;
+  blocked_by_guardrails: number;
   errors: string[];
 }
 
-// Parse RSS/Atom feed (simple XML parsing)
+// Parse RSS/Atom feed
 function parseRSSItems(xml: string): Array<{title: string, link: string, description: string, author?: string}> {
   const items: Array<{title: string, link: string, description: string, author?: string}> = [];
-  
-  // Extract items using regex (lightweight, no XML parser needed)
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
   const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
-  
   const matches = [...xml.matchAll(itemRegex), ...xml.matchAll(entryRegex)];
   
   for (const match of matches.slice(0, 20)) {
     const itemXml = match[1];
-    
     const title = itemXml.match(/<title[^>]*>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i)?.[1]?.trim() || '';
     const link = itemXml.match(/<link[^>]*href="([^"]*)"[^>]*\/?>/i)?.[1] || 
                  itemXml.match(/<link[^>]*>([^<]*)<\/link>/i)?.[1]?.trim() || '';
@@ -105,27 +106,22 @@ function parseRSSItems(xml: string): Array<{title: string, link: string, descrip
       items.push({ title, link, description: description.slice(0, 1000), author });
     }
   }
-  
   return items;
 }
 
-// Fetch with timeout and retry
 async function fetchWithRetry(url: string, retries = 2): Promise<Response | null> {
   for (let i = 0; i <= retries; i++) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 10000);
-      
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'MicroGuard-Bot/1.0 (Autonomous Security Scanner)',
+          'User-Agent': 'MicroGuard-Scanner/1.0',
           'Accept': 'application/json, application/rss+xml, application/xml, text/xml, */*',
         },
       });
-      
       clearTimeout(timeout);
-      
       if (response.ok) return response;
     } catch (e) {
       if (i === retries) return null;
@@ -143,25 +139,28 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
-  
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   const stats: EngineStats = {
     sources_scanned: 0,
     items_analyzed: 0,
     leads_discovered: 0,
-    high_intent_leads: 0,
-    content_generated: 0,
-    outreach_queued: 0,
+    leads_qualified: 0,
+    leads_archived: 0,
+    content_published: 0,
+    outreach_sent: 0,
+    blocked_by_guardrails: 0,
     errors: [],
   };
 
   const discoveredLeads: DiscoveredLead[] = [];
 
   try {
-    console.log('🚀 Full Autonomous Engine starting...');
+    console.log('🚀 MASTER PROMPT ENGINE - Starting autonomous cycle');
 
-    // Check if brain is enabled
+    // =====================================================
+    // PRE-FLIGHT CHECKS
+    // =====================================================
     const { data: settings } = await supabase
       .from('brain_settings')
       .select('brain_enabled, outreach_enabled, max_daily_outreach')
@@ -175,40 +174,53 @@ serve(async (req) => {
       );
     }
 
-    // Check daily outreach limit
+    // Check daily limits (72-hour dedup window)
+    const dedupCutoff = new Date(Date.now() - LIMITS.DEDUP_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
     const today = new Date().toISOString().slice(0, 10);
+    
+    const { count: todayPosts } = await supabase
+      .from('content_queue')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'published')
+      .gte('published_at', `${today}T00:00:00Z`);
+
     const { count: todayOutreach } = await supabase
       .from('outreach_queue')
       .select('*', { count: 'exact', head: true })
+      .eq('status', 'sent')
       .gte('created_at', `${today}T00:00:00Z`);
 
-    const dailyLimit = settings.max_daily_outreach || 50;
-    const remainingOutreach = Math.max(0, dailyLimit - (todayOutreach || 0));
+    if ((todayPosts || 0) >= LIMITS.MAX_POSTS_PER_DAY) {
+      console.log(`🛑 Daily post limit reached: ${todayPosts}/${LIMITS.MAX_POSTS_PER_DAY}`);
+      return new Response(
+        JSON.stringify({ success: true, reason: 'daily_post_limit_reached', stats }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-    console.log(`📊 Daily outreach: ${todayOutreach}/${dailyLimit} (${remainingOutreach} remaining)`);
+    if ((todayOutreach || 0) >= LIMITS.MAX_OUTREACH_PER_DAY) {
+      console.log(`🛑 Daily outreach limit reached: ${todayOutreach}/${LIMITS.MAX_OUTREACH_PER_DAY}`);
+    }
 
-    // Get existing leads to avoid duplicates
+    // Get existing URLs for deduplication
     const { data: existingLeads } = await supabase
       .from('leads')
       .select('source_url, source_id')
-      .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+      .gte('created_at', dedupCutoff);
 
     const existingUrls = new Set(existingLeads?.map(l => l.source_url).filter(Boolean) || []);
     const existingIds = new Set(existingLeads?.map(l => l.source_id).filter(Boolean) || []);
 
     // =====================================================
-    // SCAN HACKER NEWS (Algolia API)
+    // STAGE 1: SCAN - Gather raw leads from all sources
     // =====================================================
-    console.log('📰 Scanning Hacker News...');
-    
+    console.log('📡 STAGE 1: SCAN - Gathering leads from public sources');
+
+    // Scan Hacker News
     for (const source of PUBLIC_SOURCES.hackerNews) {
       try {
         const response = await fetchWithRetry(source.url);
-        if (!response) {
-          stats.errors.push(`HN fetch failed: ${source.name}`);
-          continue;
-        }
-
+        if (!response) continue;
         const data = await response.json();
         const hits = data.hits || [];
         stats.sources_scanned++;
@@ -217,7 +229,6 @@ serve(async (req) => {
         for (const hit of hits.slice(0, 10)) {
           const itemId = hit.objectID || hit.story_id;
           const itemUrl = `https://news.ycombinator.com/item?id=${itemId}`;
-          
           if (existingIds.has(itemId?.toString()) || existingUrls.has(itemUrl)) continue;
 
           const content = `${hit.title || ''} ${hit.story_text || hit.comment_text || ''}`.slice(0, 500);
@@ -230,31 +241,22 @@ serve(async (req) => {
             title: hit.title || 'HN Discussion',
             content,
             author: hit.author,
-            intent_score: 0, // Will be scored by AI
+            score: 0,
             pain_points: [],
             product_fit: [],
           });
         }
-
         await new Promise(r => setTimeout(r, 500));
       } catch (e) {
-        stats.errors.push(`HN error: ${source.name} - ${e}`);
+        stats.errors.push(`HN error: ${source.name}`);
       }
     }
 
-    // =====================================================
-    // SCAN REDDIT RSS (Public feeds)
-    // =====================================================
-    console.log('🔴 Scanning Reddit RSS...');
-    
+    // Scan Reddit RSS
     for (const source of PUBLIC_SOURCES.redditRSS) {
       try {
         const response = await fetchWithRetry(source.url);
-        if (!response) {
-          stats.errors.push(`Reddit RSS failed: ${source.name}`);
-          continue;
-        }
-
+        if (!response) continue;
         const xml = await response.text();
         const items = parseRSSItems(xml);
         stats.sources_scanned++;
@@ -262,7 +264,6 @@ serve(async (req) => {
 
         for (const item of items) {
           if (existingUrls.has(item.link)) continue;
-
           const content = `${item.title} ${item.description}`.slice(0, 500);
           if (content.length < 20) continue;
 
@@ -273,28 +274,22 @@ serve(async (req) => {
             title: item.title,
             content,
             author: item.author,
-            intent_score: 0,
+            score: 0,
             pain_points: [],
             product_fit: [],
           });
         }
-
-        await new Promise(r => setTimeout(r, 1000)); // Reddit rate limit
+        await new Promise(r => setTimeout(r, 1000));
       } catch (e) {
-        stats.errors.push(`Reddit error: ${source.name} - ${e}`);
+        stats.errors.push(`Reddit error: ${source.name}`);
       }
     }
 
-    // =====================================================
-    // SCAN DEV.TO RSS
-    // =====================================================
-    console.log('📝 Scanning Dev.to...');
-    
+    // Scan Dev.to
     for (const source of PUBLIC_SOURCES.devTo) {
       try {
         const response = await fetchWithRetry(source.url);
         if (!response) continue;
-
         const xml = await response.text();
         const items = parseRSSItems(xml);
         stats.sources_scanned++;
@@ -302,7 +297,6 @@ serve(async (req) => {
 
         for (const item of items) {
           if (existingUrls.has(item.link)) continue;
-
           discoveredLeads.push({
             source: source.name,
             platform: 'devto',
@@ -310,65 +304,56 @@ serve(async (req) => {
             title: item.title,
             content: item.description.slice(0, 500),
             author: item.author,
-            intent_score: 0,
+            score: 0,
             pain_points: [],
             product_fit: [],
           });
         }
-
         await new Promise(r => setTimeout(r, 500));
       } catch (e) {
         stats.errors.push(`Dev.to error: ${source.name}`);
       }
     }
 
-    // =====================================================
-    // SCAN STACK EXCHANGE
-    // =====================================================
-    console.log('📚 Scanning Stack Exchange...');
-    
+    // Scan Stack Exchange
     for (const source of PUBLIC_SOURCES.stackExchange) {
       try {
         const response = await fetchWithRetry(source.url);
         if (!response) continue;
-
         const data = await response.json();
         const questions = data.items || [];
         stats.sources_scanned++;
         stats.items_analyzed += questions.length;
 
         for (const q of questions.slice(0, 10)) {
-          const qUrl = q.link;
-          if (existingUrls.has(qUrl)) continue;
-
+          if (existingUrls.has(q.link)) continue;
           discoveredLeads.push({
             source: source.name,
             platform: 'stackexchange',
-            url: qUrl,
+            url: q.link,
             title: q.title,
             content: (q.body || '').replace(/<[^>]*>/g, '').slice(0, 500),
             author: q.owner?.display_name,
-            intent_score: 0,
+            score: 0,
             pain_points: [],
             product_fit: [],
           });
         }
-
-        await new Promise(r => setTimeout(r, 1000)); // SE rate limit
+        await new Promise(r => setTimeout(r, 1000));
       } catch (e) {
         stats.errors.push(`SE error: ${source.name}`);
       }
     }
 
-    console.log(`📊 Total leads to analyze: ${discoveredLeads.length}`);
+    console.log(`📊 Scan complete: ${discoveredLeads.length} raw leads`);
 
     // =====================================================
-    // AI ANALYSIS - Score all leads in batches
+    // STAGE 2: ANALYZE & SCORE - Strict 80+ threshold
     // =====================================================
-    console.log('🤖 Analyzing leads with AI...');
+    console.log('🤖 STAGE 2: ANALYZE - Scoring leads with strict threshold');
 
+    const qualifiedLeads: DiscoveredLead[] = [];
     const batchSize = 10;
-    const scoredLeads: DiscoveredLead[] = [];
 
     for (let i = 0; i < discoveredLeads.length; i += batchSize) {
       const batch = discoveredLeads.slice(i, i + batchSize);
@@ -379,33 +364,15 @@ serve(async (req) => {
           headers: {
             'Authorization': `Bearer ${lovableApiKey}`,
             'Content-Type': 'application/json',
-            'X-Title': 'Autonomous Lead Scorer',
+            'X-Title': 'Master Prompt Lead Scorer',
           },
           body: JSON.stringify({
             model: 'google/gemini-3-flash-preview',
             messages: [
-              {
-                role: 'system',
-                content: `You are a lead qualification AI for MicroGuard - a Web3 security API service.
-
-Our products:
-- Wallet Risk API: Check if wallets are safe (scam detection, rug pull risk)
-- Contract Scanner: Analyze smart contracts for vulnerabilities
-- Webhook Health: Monitor webhook reliability
-- Guardian: Full protection system ($499/mo)
-
-For each lead, score:
-- intent_score: 0-100 (100 = ready to buy now)
-- pain_points: Array of identified problems
-- product_fit: Which products match ["wallet-risk", "contract-scanner", "webhook", "guardian"]
-- suggested_response: A HELPFUL comment/reply (max 200 chars) that adds value without being spammy. Be genuinely helpful first.
-
-Return JSON: { "leads": [...] }
-Only return leads with intent_score >= 45.`,
-              },
+              { role: 'system', content: AI_PROMPTS.lead_scorer },
               {
                 role: 'user',
-                content: `Analyze these leads:\n\n${batch.map((l, idx) => 
+                content: `Score these leads. ONLY return leads with score ≥${SCORING.AUTO_PUBLISH_THRESHOLD}:\n\n${batch.map((l, idx) => 
                   `[${idx}] Platform: ${l.platform}\nTitle: ${l.title}\nContent: ${l.content.slice(0, 300)}`
                 ).join('\n\n')}`,
               },
@@ -419,32 +386,51 @@ Only return leads with intent_score >= 45.`,
           const analysis = JSON.parse(aiData.choices?.[0]?.message?.content || '{"leads":[]}');
           
           for (const scored of analysis.leads || []) {
-            const originalIdx = scored.index ?? scored.idx ?? 0;
-            if (originalIdx < batch.length && scored.intent_score >= 45) {
-              const original = batch[originalIdx];
-              scoredLeads.push({
-                ...original,
-                intent_score: scored.intent_score,
+            const idx = scored.index ?? scored.idx ?? 0;
+            if (idx < batch.length && scored.score >= SCORING.AUTO_PUBLISH_THRESHOLD) {
+              // Validate suggested response
+              if (scored.suggested_response) {
+                const validation = validateContent(scored.suggested_response);
+                if (!validation.valid) {
+                  stats.blocked_by_guardrails++;
+                  console.log(`🛡️ Guardrail blocked: ${validation.reason}`);
+                  continue;
+                }
+              }
+
+              qualifiedLeads.push({
+                ...batch[idx],
+                score: scored.score,
                 pain_points: scored.pain_points || [],
                 product_fit: scored.product_fit || [],
                 suggested_response: scored.suggested_response,
               });
+              stats.leads_qualified++;
+            } else {
+              stats.leads_archived++;
             }
           }
         }
       } catch (e) {
-        stats.errors.push(`AI batch error: ${e}`);
+        stats.errors.push(`AI scoring error: ${e}`);
       }
 
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    console.log(`🎯 Qualified leads: ${scoredLeads.length}`);
+    // Archive leads that didn't qualify (score < 80)
+    const archivedCount = discoveredLeads.length - qualifiedLeads.length;
+    stats.leads_archived = archivedCount;
+    console.log(`✅ Qualified: ${qualifiedLeads.length} | ❌ Archived: ${archivedCount}`);
 
     // =====================================================
-    // SAVE LEADS & QUEUE OUTREACH
+    // STAGE 3: SAVE & QUEUE
     // =====================================================
-    for (const lead of scoredLeads) {
+    console.log('💾 STAGE 3: SAVE - Storing qualified leads');
+
+    const remainingOutreach = LIMITS.MAX_OUTREACH_PER_DAY - (todayOutreach || 0);
+
+    for (const lead of qualifiedLeads) {
       try {
         // Save to leads table
         await supabase.from('leads').upsert({
@@ -455,147 +441,153 @@ Only return leads with intent_score >= 45.`,
           content: lead.content.slice(0, 1000),
           author: lead.author,
           username: lead.author,
-          intent_score: lead.intent_score,
-          relevance_score: lead.intent_score,
+          intent_score: lead.score,
+          relevance_score: lead.score,
           pain_points: lead.pain_points,
           interests: lead.product_fit,
-          status: lead.intent_score >= 70 ? 'hot' : 'new',
+          status: 'qualified', // All 80+ leads are qualified
         }, { onConflict: 'source_url' });
 
         stats.leads_discovered++;
 
-        // Queue outreach for high-intent leads
-        if (lead.intent_score >= 60 && lead.suggested_response && stats.outreach_queued < remainingOutreach) {
+        // Queue outreach for 80+ leads (if limit not reached)
+        if (shouldOutreach(lead.score) && lead.suggested_response && stats.outreach_sent < remainingOutreach) {
+          const delay = getRandomDelay(lead.platform as keyof typeof PLATFORM_CONFIG);
+          const scheduledFor = new Date(Date.now() + delay).toISOString();
+
           await supabase.from('outreach_queue').insert({
             source_url: lead.url,
             channel: lead.platform,
             message_type: 'initial',
             message_content: lead.suggested_response,
-            status: 'ready_to_post', // Human needs to actually post it
-            persona: 'expert',
-            scheduled_for: new Date().toISOString(),
+            status: 'scheduled',
+            persona: 'value_expert',
+            scheduled_for: scheduledFor,
           });
-          stats.outreach_queued++;
+          stats.outreach_sent++;
         }
-
-        if (lead.intent_score >= 70) stats.high_intent_leads++;
       } catch (e) {
         // Ignore duplicate errors
       }
     }
 
     // =====================================================
-    // GENERATE CONTENT
+    // STAGE 4: GENERATE CONTENT (if quota allows)
     // =====================================================
-    console.log('✍️ Generating marketing content...');
-    
-    try {
-      const contentResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
-          'Content-Type': 'application/json',
-          'X-Title': 'Content Generator',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-3-flash-preview',
-          messages: [
-            {
-              role: 'system',
-              content: `Generate 3 pieces of marketing content for MicroGuard - a Web3 wallet/contract security API.
+    if ((todayPosts || 0) < LIMITS.MAX_POSTS_PER_DAY) {
+      console.log('✍️ STAGE 4: GENERATE - Creating value-first content');
 
-For each piece:
-- type: "tweet" | "reddit_post" | "blog_idea"
-- title: Catchy headline
-- body: The content (tweet=280 chars, reddit=500 chars, blog=100 chars summary)
-- hashtags: Relevant hashtags
-- cta: Call to action
+      try {
+        const contentResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${lovableApiKey}`,
+            'Content-Type': 'application/json',
+            'X-Title': 'Master Prompt Content Generator',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-3-flash-preview',
+            messages: [
+              { role: 'system', content: AI_PROMPTS.content_generator },
+              {
+                role: 'user',
+                content: `Generate 1 piece of VALUE-FIRST educational content about crypto/Web3 security.
+Based on today's pain points: ${qualifiedLeads.slice(0, 3).map(l => l.pain_points.join(', ')).join('; ')}
 
-Focus on: wallet security, scam detection, smart contract audits, rug pull protection.
-Be educational and helpful, not salesy.
+Return JSON: { "content": { "type": "insight", "title": "...", "body": "...", "platform": "general" } }
 
-Return JSON: { "content": [...] }`,
-            },
-            {
-              role: 'user',
-              content: `Today's date: ${new Date().toISOString().slice(0, 10)}. 
-Recent pain points from leads: ${scoredLeads.slice(0, 5).map(l => l.pain_points.join(', ')).join('; ')}`,
-            },
-          ],
-          response_format: { type: 'json_object' },
-        }),
-      });
+If you cannot create content that follows the rules, return: { "content": null }`,
+              },
+            ],
+            response_format: { type: 'json_object' },
+          }),
+        });
 
-      if (contentResponse.ok) {
-        const contentData = await contentResponse.json();
-        const generated = JSON.parse(contentData.choices?.[0]?.message?.content || '{"content":[]}');
-        
-        for (const piece of generated.content || []) {
-          await supabase.from('content_queue').insert({
-            content_type: piece.type,
-            platform: piece.type === 'tweet' ? 'twitter' : piece.type === 'reddit_post' ? 'reddit' : 'blog',
-            title: piece.title,
-            body: piece.body,
-            cta: piece.cta,
-            hashtags: piece.hashtags,
-            status: 'draft',
-            scheduled_for: new Date(Date.now() + Math.random() * 86400000).toISOString(),
-          });
-          stats.content_generated++;
+        if (contentResponse.ok) {
+          const contentData = await contentResponse.json();
+          const generated = JSON.parse(contentData.choices?.[0]?.message?.content || '{"content":null}');
+          
+          if (generated.content) {
+            // Validate content
+            const validation = validateContent(generated.content.body || '');
+            
+            if (validation.valid) {
+              await supabase.from('content_queue').insert({
+                content_type: generated.content.type || 'insight',
+                platform: generated.content.platform || 'general',
+                title: generated.content.title,
+                body: generated.content.body,
+                status: 'ready', // Ready for auto-publish
+                scheduled_for: new Date(Date.now() + getRandomDelay('hackernews')).toISOString(),
+              });
+              stats.content_published++;
+            } else {
+              stats.blocked_by_guardrails++;
+              console.log(`🛡️ Content blocked: ${validation.reason}`);
+            }
+          }
         }
+      } catch (e) {
+        stats.errors.push(`Content gen error: ${e}`);
       }
-    } catch (e) {
-      stats.errors.push(`Content gen error: ${e}`);
     }
 
     // =====================================================
-    // NO TELEGRAM REPORT - Only critical events
-    // Daily summary is sent by daily-autonomous-report at 07:00
+    // STAGE 5: AUDIT & LEARN
     // =====================================================
-    console.log(`📊 Cycle stats: ${stats.sources_scanned} sources, ${stats.leads_discovered} leads, ${stats.high_intent_leads} hot leads`);
+    console.log('📈 STAGE 5: LEARN - Recording metrics for optimization');
 
-    // Top leads for audit
-    const topLeadsForAudit = scoredLeads.filter(l => l.intent_score >= 70).slice(0, 3);
-
-    // Audit log
     await supabase.from('audit_logs').insert({
       job_id: 'a0000000-0000-0000-0000-000000000006',
-      action: 'full_autonomous_cycle',
+      action: 'master_prompt_cycle',
       metadata: {
         ...stats,
-        top_leads: topLeadsForAudit.map(l => ({ score: l.intent_score, platform: l.platform })),
+        threshold_used: SCORING.AUTO_PUBLISH_THRESHOLD,
+        pipeline_version: 'master_prompt_v1',
+        qualified_leads: qualifiedLeads.slice(0, 5).map(l => ({
+          score: l.score,
+          platform: l.platform,
+          pain_points: l.pain_points,
+        })),
       },
     });
 
-    console.log('✅ Full Autonomous Engine cycle complete');
+    // Log cycle completion (no Telegram - only daily summary)
+    console.log(`✅ CYCLE COMPLETE | Qualified: ${stats.leads_qualified} | Archived: ${stats.leads_archived} | Outreach: ${stats.outreach_sent} | Guardrails: ${stats.blocked_by_guardrails}`);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        stats,
-        top_leads: topLeadsForAudit.length,
-      }),
+      JSON.stringify({ success: true, stats }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Autonomous Engine error:', error);
-    
-    // Only send Telegram for CRITICAL errors that stop the engine completely
+    console.error('CRITICAL ENGINE ERROR:', error);
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    const isCritical = errorMsg.includes('CRITICAL') || errorMsg.includes('FATAL');
     
+    // Check for block risk
+    if (detectBlockRisk(errorMsg)) {
+      console.error('🚨 BLOCK RISK DETECTED - Stopping engine');
+      await supabase.functions.invoke('telegram-notify', {
+        body: {
+          message: `🚨 <b>CRITICAL: Block Risk Detected</b>\n\n${errorMsg}\n\nEngine stopped automatically.`,
+          type: 'error',
+        },
+      });
+    }
+
+    // Only notify on truly critical errors
+    const isCritical = errorMsg.includes('CRITICAL') || errorMsg.includes('FATAL') || detectBlockRisk(errorMsg);
     if (isCritical) {
       await supabase.functions.invoke('telegram-notify', {
         body: {
-          message: `🚨 <b>שגיאה קריטית במנוע האוטונומי</b>\n\n${errorMsg}`,
+          message: `🚨 <b>CRITICAL ENGINE ERROR</b>\n\n${errorMsg}`,
           type: 'error',
         },
       });
     }
 
     return new Response(
-      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
+      JSON.stringify({ success: false, error: errorMsg, stats }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
