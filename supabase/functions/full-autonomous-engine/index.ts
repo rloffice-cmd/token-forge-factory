@@ -549,47 +549,13 @@ Recent pain points from leads: ${scoredLeads.slice(0, 5).map(l => l.pain_points.
     }
 
     // =====================================================
-    // SEND TELEGRAM REPORT
+    // NO TELEGRAM REPORT - Only critical events
+    // Daily summary is sent by daily-autonomous-report at 07:00
     // =====================================================
-    const reportLines = [
-      '🤖 <b>מחזור שיווק אוטונומי הושלם</b>',
-      '',
-      `📊 <b>סטטיסטיקות:</b>`,
-      `• מקורות שנסרקו: ${stats.sources_scanned}`,
-      `• פריטים שנותחו: ${stats.items_analyzed}`,
-      `• לידים חדשים: ${stats.leads_discovered}`,
-      `• לידים חמים (70+): ${stats.high_intent_leads}`,
-      `• הודעות בתור: ${stats.outreach_queued}`,
-      `• תוכן שנוצר: ${stats.content_generated}`,
-      '',
-    ];
+    console.log(`📊 Cycle stats: ${stats.sources_scanned} sources, ${stats.leads_discovered} leads, ${stats.high_intent_leads} hot leads`);
 
-    // Top leads summary
-    const topLeads = scoredLeads.filter(l => l.intent_score >= 70).slice(0, 3);
-    if (topLeads.length > 0) {
-      reportLines.push('<b>🔥 לידים חמים:</b>');
-      for (const lead of topLeads) {
-        reportLines.push(`• [${lead.intent_score}] ${lead.title.slice(0, 40)}...`);
-        reportLines.push(`  ${lead.platform} | ${lead.product_fit.join(', ')}`);
-      }
-      reportLines.push('');
-    }
-
-    // Errors if any (excluding minor ones)
-    const criticalErrors = stats.errors.filter(e => !e.includes('fetch failed'));
-    if (criticalErrors.length > 0) {
-      reportLines.push(`⚠️ שגיאות: ${criticalErrors.length}`);
-    }
-
-    reportLines.push('');
-    reportLines.push(`⏰ ${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })}`);
-
-    await supabase.functions.invoke('telegram-notify', {
-      body: {
-        message: reportLines.join('\n'),
-        type: 'marketing_report',
-      },
-    });
+    // Top leads for audit
+    const topLeadsForAudit = scoredLeads.filter(l => l.intent_score >= 70).slice(0, 3);
 
     // Audit log
     await supabase.from('audit_logs').insert({
@@ -597,7 +563,7 @@ Recent pain points from leads: ${scoredLeads.slice(0, 5).map(l => l.pain_points.
       action: 'full_autonomous_cycle',
       metadata: {
         ...stats,
-        top_leads: topLeads.map(l => ({ score: l.intent_score, platform: l.platform })),
+        top_leads: topLeadsForAudit.map(l => ({ score: l.intent_score, platform: l.platform })),
       },
     });
 
@@ -607,7 +573,7 @@ Recent pain points from leads: ${scoredLeads.slice(0, 5).map(l => l.pain_points.
       JSON.stringify({
         success: true,
         stats,
-        top_leads: topLeads.length,
+        top_leads: topLeadsForAudit.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -615,12 +581,18 @@ Recent pain points from leads: ${scoredLeads.slice(0, 5).map(l => l.pain_points.
   } catch (error) {
     console.error('Autonomous Engine error:', error);
     
-    await supabase.functions.invoke('telegram-notify', {
-      body: {
-        message: `🚨 <b>שגיאה במנוע האוטונומי</b>\n\n${error instanceof Error ? error.message : 'Unknown error'}`,
-        type: 'error',
-      },
-    });
+    // Only send Telegram for CRITICAL errors that stop the engine completely
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const isCritical = errorMsg.includes('CRITICAL') || errorMsg.includes('FATAL');
+    
+    if (isCritical) {
+      await supabase.functions.invoke('telegram-notify', {
+        body: {
+          message: `🚨 <b>שגיאה קריטית במנוע האוטונומי</b>\n\n${errorMsg}`,
+          type: 'error',
+        },
+      });
+    }
 
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
