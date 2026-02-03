@@ -61,15 +61,15 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Security: Verify admin token (dual check - header or auth header)
+  // Security: Verify admin token using STRICT x-admin-token header only
   const authResult = verifyAdminToken(req);
-  const authHeader = req.headers.get("authorization") || "";
-  const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "";
   
-  if (!authResult.authorized && (!adminToken || !authHeader.includes(adminToken))) {
+  if (!authResult.authorized) {
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
     await logSecurityEvent(supabase, 'admin_unauthorized', {
       endpoint: 'self-healing-brain',
-      ip: req.headers.get('x-forwarded-for') || 'unknown',
+      ip,
+      identifier: `admin:self-healing-brain:${ip}`,
     });
     return new Response(
       JSON.stringify({ error: "Unauthorized" }),
