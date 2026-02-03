@@ -71,8 +71,11 @@ serve(async (req) => {
     }
 
     // Use AI Job Processor instead of manual pipeline
+    // Pass through the cron secret for internal auth
+    const cronSecret = Deno.env.get('CRON_SECRET');
     const { data: aiResult, error: aiError } = await supabase.functions.invoke('ai-job-processor', {
       body: {},
+      headers: cronSecret ? { 'x-cron-secret': cronSecret } : undefined,
     });
 
     if (aiError) {
