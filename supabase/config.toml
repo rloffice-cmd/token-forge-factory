@@ -167,3 +167,6 @@ verify_jwt = false
 
 [functions.self-healing-verifier]
 verify_jwt = false
+
+[functions.customer-intelligence-engine]
+verify_jwt = false

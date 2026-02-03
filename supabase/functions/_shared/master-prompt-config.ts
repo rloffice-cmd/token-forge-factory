@@ -1,7 +1,9 @@
 /**
- * 🧠 MASTER SYSTEM PROMPT
- * TOKEN FORGE FACTORY
- * FULL AUTO – DIRECT CONVERSION – TRUST GATED REVENUE MODE
+ * 🧠💰 MASTER SYSTEM PROMPT
+ * AUTONOMOUS AI SALES & CUSTOMER INTELLIGENCE ENGINE
+ * FULL AUTO – TRUST-GATED – CUSTOMER DNA DRIVEN
+ * 
+ * ROLE: Chief Revenue Officer + Head of Customer Psychology
  * 
  * NON-NEGOTIABLE PRINCIPLES:
  * 1. NO HUMAN APPROVAL — EVER
@@ -10,6 +12,8 @@
  * 4. SILENCE IS BETTER THAN WEAK ACTION
  * 5. VANITY METRICS ARE FAILURES
  * 6. REPUTATION > SPEED > VOLUME
+ * 7. אין מכירה אגרסיבית - בניית אמון לפני כסף
+ * 8. כל החלטת מכירה מבוססת דאטה + התנהגות לקוח
  */
 
 // =====================================================
@@ -21,6 +25,181 @@ export const EXECUTION_MODE = {
   DRAFT_MODE: false,
   IMMEDIATE_ACTION: true,
   HUMAN_IN_LOOP: false, // NEVER
+};
+
+// =====================================================
+// 🧬 CUSTOMER DNA ENGINE - Layer 1
+// =====================================================
+export type BuyingStyle = 'cautious' | 'explorer' | 'fast-buyer' | 'skeptic' | 'unknown';
+export type TechnicalLevel = 'beginner' | 'intermediate' | 'advanced' | 'unknown';
+export type EmotionalState = 'calm' | 'curious' | 'confused' | 'panicking' | 'skeptical' | 'ready';
+
+export interface CustomerDNA {
+  trust_level: number;           // 0-100
+  fear_signals: string[];        // Detected fears
+  curiosity_level: number;       // 0-100
+  technical_level: TechnicalLevel;
+  buying_style: BuyingStyle;
+  time_to_value: boolean;        // Has received real value
+  objections_history: string[];  // Past objections
+  preferred_channel: string;
+  engagement_velocity: number;   // Interactions per day
+  payment_resistance_score: number; // 0-100 (high = resistant)
+  lifetime_value_prediction: number;
+  churn_risk: number;           // 0-1
+}
+
+// DNA Thresholds
+export const DNA_THRESHOLDS = {
+  // Trust levels for different actions
+  SAFE_MODE_TRIGGER: 40,        // Below = SAFE MODE (educate only)
+  FREE_VALUE_ALLOWED: 60,       // 40-60 = free value only
+  PAID_CONSIDERATION: 80,       // 60-80 = can discuss paid, no push
+  FULL_OFFER: 90,               // 80+ = can make offer
+  
+  // Fear detection triggers safe mode
+  MAX_FEAR_SIGNALS: 2,          // More than 2 = forced safe mode
+  
+  // Confusion detection
+  CONFUSION_KEYWORDS: ['מה זה בכלל', 'לא הבנתי', 'what is this', 'confused', 'not sure', 'איך זה עובד'],
+  
+  // Minimum value before sale
+  MIN_VALUE_EVENTS_FOR_SALE: 2,
+};
+
+// =====================================================
+// 🎭 EMOTIONAL & COGNITIVE ANALYSIS - Layer 2
+// =====================================================
+export const EMOTIONAL_SIGNALS = {
+  // Fear/Risk Aversion
+  fear_keywords: [
+    'scared', 'worried', 'afraid', 'nervous', 'risky', 'dangerous',
+    'מפחד', 'חושש', 'מסוכן', 'פוחד', 'לא בטוח',
+    'lose money', 'get hacked', 'scam', 'fraud',
+  ],
+  
+  // Confusion/Cognitive Overload
+  confusion_keywords: [
+    'confused', 'dont understand', "don't get it", 'complicated', 'too much',
+    'מבולבל', 'לא מבין', 'מסובך', 'יותר מדי',
+    'what do you mean', 'can you explain', 'תסביר לי',
+  ],
+  
+  // Curiosity (positive)
+  curiosity_keywords: [
+    'interesting', 'how does', 'tell me more', 'curious', 'want to know',
+    'מעניין', 'איך זה', 'ספר לי עוד', 'סקרן',
+  ],
+  
+  // Control need
+  control_keywords: [
+    'i want to control', 'my decision', 'let me decide', 'options',
+    'אני רוצה לשלוט', 'ההחלטה שלי', 'תן לי לבחור',
+  ],
+  
+  // Money anxiety
+  money_anxiety_keywords: [
+    'waste money', 'too expensive', 'cant afford', 'burn money',
+    'בזבוז כסף', 'יקר מדי', 'לא יכול להרשות', 'שריפת כסף',
+  ],
+};
+
+// =====================================================
+// 🛡️ TRUST-FIRST SALES STRATEGY - Layer 3
+// =====================================================
+export const TRUST_FIRST_RULES = {
+  // HARD BLOCK conditions for payment
+  block_payment_if: {
+    trust_level_below: 80,
+    free_value_events_below: 2,
+    time_to_value: false,
+  },
+  
+  // Alternative actions when blocked
+  alternatives: [
+    'explanation',      // הסבר
+    'demonstration',    // הדגמה
+    'free_result',      // תוצאה חינמית
+    'success_story',    // סיפור שימוש אמיתי
+    'before_after',     // השוואה לפני/אחרי
+  ],
+  
+  // Trust building events
+  trust_boosters: {
+    scan_completed: 10,
+    results_viewed: 5,
+    time_on_page_60s: 5,
+    report_downloaded: 15,
+    return_visit: 10,
+    positive_feedback: 20,
+  },
+  
+  // Trust reducers
+  trust_reducers: {
+    abandoned_checkout: -15,
+    ignored_message: -5,
+    quick_bounce: -10,
+    negative_feedback: -30,
+  },
+};
+
+// =====================================================
+// 🎯 ADAPTIVE OFFER ENGINE - Layer 4
+// =====================================================
+export type AdaptiveStrategy = 'micro_offer' | 'trial' | 'direct' | 'pay_after_value' | 'educate_only';
+
+export interface OfferStrategy {
+  strategy: AdaptiveStrategy;
+  reason: string;
+  allowed_actions: string[];
+  forbidden_actions: string[];
+}
+
+export const ADAPTIVE_STRATEGIES: Record<BuyingStyle, OfferStrategy> = {
+  skeptic: {
+    strategy: 'micro_offer',
+    reason: 'Low commitment to reduce perceived risk',
+    allowed_actions: ['micro_trial', 'free_scan', 'money_back_guarantee'],
+    forbidden_actions: ['direct_checkout', 'upsell', 'bundle'],
+  },
+  explorer: {
+    strategy: 'trial',
+    reason: 'Wants to test before committing',
+    allowed_actions: ['free_trial', 'demo', 'sandbox_access'],
+    forbidden_actions: ['hard_sell', 'limited_time'],
+  },
+  'fast-buyer': {
+    strategy: 'direct',
+    reason: 'Ready to buy, dont slow them down',
+    allowed_actions: ['direct_checkout', 'quick_start'],
+    forbidden_actions: ['excessive_education', 'too_many_steps'],
+  },
+  cautious: {
+    strategy: 'pay_after_value',
+    reason: 'Needs to see value before paying',
+    allowed_actions: ['free_first', 'guarantee', 'refund_policy', 'testimonials'],
+    forbidden_actions: ['upfront_payment', 'no_refund'],
+  },
+  unknown: {
+    strategy: 'educate_only',
+    reason: 'Insufficient data - gather more before offering',
+    allowed_actions: ['free_value', 'education', 'questions'],
+    forbidden_actions: ['any_paid_offer', 'checkout'],
+  },
+};
+
+// Offer components for trust building
+export const OFFER_TRUST_COMPONENTS = {
+  always_include: [
+    'למה זה בטוח',           // Why it's safe
+    'מה קורה אם לא עובד',    // What if it doesn't work
+    'איך יוצאים בלי כאב',    // How to exit painlessly
+  ],
+  optional: [
+    'money_back_guarantee',
+    'free_cancellation',
+    'no_credit_card_required',
+  ],
 };
 
 // =====================================================
@@ -522,6 +701,316 @@ export function validateContent(content: string): { valid: boolean; reason?: str
   }
   
   return { valid: true };
+}
+
+// =====================================================
+// 🎙️ CONVERSATIONAL AI TONE - Layer 5
+// =====================================================
+export const CONVERSATION_TONE = {
+  // Required tone attributes
+  required: [
+    'human',           // אנושי
+    'calm',            // רגוע
+    'not_pushy',       // לא לוחץ
+    'supportive',      // "אנחנו איתך, לא נגדך"
+  ],
+  
+  // Forbidden elements
+  forbidden: [
+    'FOMO',            // Fear of missing out
+    'pressure',        // לחץ
+    'manipulation',    // מניפולציות
+    'artificial_urgency',
+  ],
+  
+  // Required elements
+  include: [
+    'transparency',    // שקיפות
+    'empathy',         // אמפתיה
+    'confidence_building', // חיזוק ביטחון
+  ],
+};
+
+// =====================================================
+// 🔄 CONTINUOUS LEARNING LOOP - Layer 6
+// =====================================================
+export interface FeedbackLoop {
+  what_worked: string[];
+  what_failed: string[];
+  objections_detected: string[];
+  revenue_result: number;
+  churn_risk: number;
+  trust_delta: number;
+}
+
+export const LEARNING_RULES = {
+  // After each interaction, update:
+  update_on_interaction: [
+    'customer_dna',
+    'sales_strategy',
+    'offer_timing',
+    'messaging_style',
+  ],
+  
+  // Success indicators
+  success_signals: [
+    'payment_completed',
+    'positive_feedback',
+    'return_visit',
+    'referral',
+  ],
+  
+  // Failure indicators
+  failure_signals: [
+    'abandoned_checkout',
+    'negative_feedback',
+    'unsubscribe',
+    'complaint',
+  ],
+};
+
+// =====================================================
+// 🛑 KILL GATES (ENHANCED) - Safety Layer
+// =====================================================
+export const ENHANCED_KILL_GATES = {
+  // Stop sale immediately if:
+  stop_sale_if: {
+    customer_confused: true,          // לקוח מבולבל
+    asked_what_is_this: true,         // שאל יותר מדי "מה זה בכלל"
+    no_value_seen: true,              // לא ראה ערך בפועל
+    previous_payment_failed: true,    // נכשל בתשלום קודם
+  },
+  
+  // Action on kill gate
+  fallback_action: 'educate_and_value', // חזור לחינוך + ערך
+  
+  // Cool-off period after kill gate
+  cooloff_hours: 24,
+};
+
+// =====================================================
+// 📈 KPI MEASUREMENTS
+// =====================================================
+export const SUCCESS_KPIS = {
+  // Primary metrics
+  primary: [
+    'trust_growth',           // Trust Growth
+    'time_to_first_value',    // Time To First Value
+    'conversion_after_value', // Conversion After Value
+    'churn_prevention',       // Churn Prevention
+    'revenue_per_customer',   // Revenue / Customer
+  ],
+  
+  // Hard requirement
+  negative_feedback_target: 0, // Must be ZERO
+  
+  // Golden rule
+  golden_rule: 'If you are not sure customer will say "wow, this helped me" — DO NOT SELL',
+};
+
+// =====================================================
+// 🧠 DNA ANALYSIS FUNCTIONS
+// =====================================================
+
+/**
+ * Detect fear signals in text
+ */
+export function detectFearSignals(text: string): string[] {
+  const lower = text.toLowerCase();
+  const detected: string[] = [];
+  
+  for (const keyword of EMOTIONAL_SIGNALS.fear_keywords) {
+    if (lower.includes(keyword.toLowerCase())) {
+      detected.push(keyword);
+    }
+  }
+  
+  return detected;
+}
+
+/**
+ * Detect confusion signals
+ */
+export function detectConfusion(text: string): boolean {
+  const lower = text.toLowerCase();
+  return EMOTIONAL_SIGNALS.confusion_keywords.some(kw => lower.includes(kw.toLowerCase())) ||
+         DNA_THRESHOLDS.CONFUSION_KEYWORDS.some(kw => lower.includes(kw.toLowerCase()));
+}
+
+/**
+ * Detect curiosity level (0-100)
+ */
+export function detectCuriosity(text: string): number {
+  const lower = text.toLowerCase();
+  let score = 30; // Base
+  
+  for (const keyword of EMOTIONAL_SIGNALS.curiosity_keywords) {
+    if (lower.includes(keyword.toLowerCase())) {
+      score += 15;
+    }
+  }
+  
+  // Questions indicate curiosity
+  const questionCount = (text.match(/\?/g) || []).length;
+  score += questionCount * 10;
+  
+  return Math.min(100, score);
+}
+
+/**
+ * Detect money anxiety
+ */
+export function detectMoneyAnxiety(text: string): boolean {
+  const lower = text.toLowerCase();
+  return EMOTIONAL_SIGNALS.money_anxiety_keywords.some(kw => lower.includes(kw.toLowerCase()));
+}
+
+/**
+ * Classify buying style from behavior
+ */
+export function classifyBuyingStyle(
+  fearSignals: string[],
+  curiosityLevel: number,
+  interactionVelocity: number,
+  hasMoneyAnxiety: boolean,
+  previousPurchases: number
+): BuyingStyle {
+  // Fast buyer: low fear, has purchased before, high velocity
+  if (fearSignals.length === 0 && previousPurchases > 0 && interactionVelocity > 2) {
+    return 'fast-buyer';
+  }
+  
+  // Skeptic: high fear, money anxiety
+  if (fearSignals.length >= 2 || hasMoneyAnxiety) {
+    return 'skeptic';
+  }
+  
+  // Explorer: high curiosity, some interactions
+  if (curiosityLevel > 60 && interactionVelocity > 0.5) {
+    return 'explorer';
+  }
+  
+  // Cautious: moderate fear, slow velocity
+  if (fearSignals.length > 0 || interactionVelocity < 0.3) {
+    return 'cautious';
+  }
+  
+  return 'unknown';
+}
+
+/**
+ * Detect current emotional state
+ */
+export function detectEmotionalState(
+  text: string,
+  fearSignals: string[],
+  confusionDetected: boolean,
+  curiosityLevel: number,
+  trustLevel: number
+): EmotionalState {
+  // Panicking
+  if (fearSignals.length >= 2 || PAIN_INDICATORS.emotional_keywords.some(kw => text.toLowerCase().includes(kw))) {
+    return 'panicking';
+  }
+  
+  // Confused
+  if (confusionDetected) {
+    return 'confused';
+  }
+  
+  // Skeptical
+  if (fearSignals.length === 1 || trustLevel < 50) {
+    return 'skeptical';
+  }
+  
+  // Curious
+  if (curiosityLevel > 60) {
+    return 'curious';
+  }
+  
+  // Ready
+  if (trustLevel >= 80 && fearSignals.length === 0) {
+    return 'ready';
+  }
+  
+  return 'calm';
+}
+
+/**
+ * Get adaptive offer strategy based on DNA
+ */
+export function getAdaptiveStrategy(dna: CustomerDNA): OfferStrategy {
+  // Force safe mode if too many fear signals
+  if (dna.fear_signals.length > DNA_THRESHOLDS.MAX_FEAR_SIGNALS) {
+    return {
+      strategy: 'educate_only',
+      reason: 'Too many fear signals detected - need trust building',
+      allowed_actions: ['free_value', 'education', 'reassurance'],
+      forbidden_actions: ['any_offer', 'checkout', 'pricing'],
+    };
+  }
+  
+  // Force safe mode if no value received
+  if (!dna.time_to_value) {
+    return {
+      strategy: 'educate_only',
+      reason: 'Customer hasnt seen value yet',
+      allowed_actions: ['free_scan', 'demo', 'free_result'],
+      forbidden_actions: ['paid_offer', 'checkout'],
+    };
+  }
+  
+  return ADAPTIVE_STRATEGIES[dna.buying_style];
+}
+
+/**
+ * Check if sale is allowed based on DNA
+ */
+export function canMakeSale(dna: CustomerDNA): { allowed: boolean; reason: string } {
+  if (dna.trust_level < TRUST_FIRST_RULES.block_payment_if.trust_level_below) {
+    return { 
+      allowed: false, 
+      reason: `Trust level ${dna.trust_level} below threshold ${TRUST_FIRST_RULES.block_payment_if.trust_level_below}` 
+    };
+  }
+  
+  if (!dna.time_to_value) {
+    return { 
+      allowed: false, 
+      reason: 'Customer has not received value yet' 
+    };
+  }
+  
+  if (dna.fear_signals.length > DNA_THRESHOLDS.MAX_FEAR_SIGNALS) {
+    return { 
+      allowed: false, 
+      reason: `Too many fear signals: ${dna.fear_signals.join(', ')}` 
+    };
+  }
+  
+  return { allowed: true, reason: 'All trust gates passed' };
+}
+
+/**
+ * Update DNA trust level based on event
+ */
+export function updateDNATrust(
+  currentTrust: number, 
+  event: string, 
+  isPositive: boolean
+): number {
+  const boosters = TRUST_FIRST_RULES.trust_boosters;
+  const reducers = TRUST_FIRST_RULES.trust_reducers;
+  
+  let delta = 0;
+  
+  if (isPositive && event in boosters) {
+    delta = boosters[event as keyof typeof boosters];
+  } else if (!isPositive && event in reducers) {
+    delta = reducers[event as keyof typeof reducers];
+  }
+  
+  return Math.max(0, Math.min(100, currentTrust + delta));
 }
 
 // KPI: Only these matter
