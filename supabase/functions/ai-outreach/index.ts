@@ -113,6 +113,12 @@ serve(async (req) => {
 Your tone: ${personaConfig.tone}
 Your style: ${personaConfig.style}
 
+CRITICAL LANGUAGE RULE:
+- First, detect the language of the lead's post/question
+- Write your response IN THE SAME LANGUAGE as the lead
+- If language detection is unclear, default to English
+- NEVER mention AI, bots, or automation
+
 Rules:
 1. NEVER be pushy or salesy
 2. Reference their specific problem/question
@@ -120,13 +126,15 @@ Rules:
 4. Keep it SHORT (2-3 sentences max)
 5. End with a soft call-to-action (question, not demand)
 6. Sound human, not like a bot
+7. Match the lead's language exactly
 
-Our service: AI-powered automation that helps startups and developers ship faster.
+Our service: Developer tools that help startups ship faster.
 
 Return JSON with:
-- message: The outreach message
-- subject: Short subject line (if email)
-- hook: Why this message should work`
+- message: The outreach message (in the lead's language)
+- subject: Short subject line (if email, in the lead's language)
+- hook: Why this message should work
+- detected_language: The language you detected (e.g., "en", "he", "es", "de")`
             },
             {
               role: 'user',
@@ -136,7 +144,7 @@ Their post/question: "${lead.title || 'No title'}"
 Details: "${lead.content ? lead.content.slice(0, 500) : 'No details available'}"
 Author: ${lead.author || 'Unknown'}
 
-Write an initial outreach message for ${lead.source_type === 'reddit' ? 'Reddit comment/DM' : 'direct message'}.`
+Detect the language of this content and write an outreach message IN THAT LANGUAGE for ${lead.source_type === 'reddit' ? 'Reddit comment/DM' : 'direct message'}.`
             }
           ],
           response_format: { type: 'json_object' },
