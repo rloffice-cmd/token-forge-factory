@@ -6,11 +6,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { verifyCronSecret, unauthorizedResponse, corsHeaders } from '../_shared/auth-guards.ts';
 
 // Lovable AI Gateway endpoint
 const LOVABLE_AI_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
@@ -38,14 +34,20 @@ interface AIResult {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { headers: corsHeaders });
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // Security: Verify cron secret for internal calls
+  const authResult = verifyCronSecret(req);
+  if (!authResult.authorized) {
+    return unauthorizedResponse(authResult.error!, 'ai-job-processor');
+  }
+
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableApiKey) {
     return new Response(
       JSON.stringify({ success: false, error: 'LOVABLE_API_KEY not configured' }),
