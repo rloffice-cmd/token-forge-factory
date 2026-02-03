@@ -196,13 +196,42 @@ serve(async (req) => {
       );
     }
 
-    // ========== SILENT MODE: Log only, NO Telegram ==========
-    // Per notification policy: Telegram reserved for payments, daily report, critical errors only
-    
-    console.log(`📝 Job ${jobId} logged (SILENT MODE - no Telegram)`);
+    // ========== ACTIVE MODE: Send Hot Leads to Telegram ==========
+    console.log(`📤 Processing hot lead job ${jobId}`);
     console.log(`   Source: ${job.source}, Topic: ${job.intent_topic}, Confidence: ${conf}`);
 
-    // Increment daily limit for tracking purposes
+    // Build Telegram message with lead details and AI-drafted response
+    const leadTitle = lead.title || lead.author || lead.username || "Unknown Lead";
+    const aiDraft = job.ai_draft || job.message_draft || "No draft available";
+    
+    const telegramMessage = `🎯 <b>Hot Lead Alert!</b>
+
+<b>Source:</b> ${job.source || "Unknown"}
+<b>Topic:</b> ${job.intent_topic || "General"}
+<b>Confidence:</b> ${Math.round(conf * 100)}%
+
+<b>Lead:</b> ${leadTitle}
+
+<b>AI Draft Response:</b>
+<i>${String(aiDraft).slice(0, 500)}${String(aiDraft).length > 500 ? "..." : ""}</i>
+
+🔗 <a href="${threadUrl}">View Original Post</a>`;
+
+    // Send to Telegram
+    try {
+      await supabase.functions.invoke("telegram-notify", {
+        body: {
+          message: telegramMessage,
+          type: "hot_lead_alert",
+        },
+      });
+      console.log(`✅ Telegram notification sent for job ${jobId}`);
+    } catch (telegramError) {
+      console.error(`⚠️ Telegram send failed (will continue):`, telegramError);
+      // Don't fail the job if Telegram fails - just log it
+    }
+
+    // Increment daily limit
     if (lim) {
       await supabase
         .from("outreach_limits")
@@ -214,19 +243,19 @@ serve(async (req) => {
         .insert({ limit_date: today, sent_count: 1, cap_count: capCount });
     }
 
-    // Mark as processed (not "sent" since we didn't actually send to Telegram)
+    // Mark as sent
     await supabase
       .from("outreach_jobs")
       .update({
-        status: "processed", // Changed from "sent" - indicates logged but not notified
-        provider_response: { silent_mode: true, reason: "notification_policy" },
+        status: "sent",
+        provider_response: { telegram_sent: true, sent_at: new Date().toISOString() },
         gate_fail_reason: null,
         next_retry_at: null,
       })
       .eq("id", jobId);
 
     return new Response(
-      JSON.stringify({ ok: true, logged: true, silent_mode: true }),
+      JSON.stringify({ ok: true, sent: true, channel: "telegram" }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (e) {
