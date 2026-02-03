@@ -386,7 +386,12 @@ export const FAILURE_LEARNING = {
 // CONTENT GUARDRAILS (LOCKED)
 // =====================================================
 export const GUARDRAILS = {
-  FORBIDDEN_WORDS: [
+  // Words checked as WHOLE words only (not substrings)
+  FORBIDDEN_WORDS_WHOLE: [
+    'AI', 'bot', 'bots',
+  ],
+  // Phrases and terms checked with includes()
+  FORBIDDEN_PHRASES: [
     // Marketing promises
     'guaranteed', 'risk-free', 'no-brainer', 'game-changer', 'revolutionary',
     'best in the market', 'number one', '#1', 'unbeatable',
@@ -394,12 +399,12 @@ export const GUARDRAILS = {
     'buy now', 'sign up today', 'limited time', 'act now', 'dont miss',
     'exclusive offer', 'special deal', 'hurry',
     // Clickbait
-    'you wont believe', 'shocking', 'secret', 'hack', 'trick',
+    'you wont believe', 'shocking', 'secret hack', 'secret trick',
     // Automation reveal
-    'AI', 'bot', 'automated', 'automation', 'algorithm', 'machine learning',
-    // Upsell language (NEW)
-    'premium', 'pro version', 'upgrade', 'unlock', 'full access',
-    'unlimited', 'bundle', 'package deal',
+    'automated system', 'automation tool', 'machine learning', 'artificial intelligence',
+    // Upsell language
+    'premium tier', 'pro version', 'upgrade now', 'unlock full', 'full access',
+    'unlimited plan', 'bundle deal', 'package deal',
   ],
   
   FORUM_REPLY_RULES: {
@@ -688,9 +693,19 @@ export function canSendOutreach(painScore: number, trustScore: number): boolean 
 export function validateContent(content: string): { valid: boolean; reason?: string } {
   const lower = content.toLowerCase();
   
-  for (const word of GUARDRAILS.FORBIDDEN_WORDS) {
-    if (lower.includes(word.toLowerCase())) {
-      return { valid: false, reason: `Contains forbidden word: ${word}` };
+  // Check whole-word matches (like "AI", "bot") 
+  for (const word of GUARDRAILS.FORBIDDEN_WORDS_WHOLE) {
+    // Use word boundary regex for whole-word matching
+    const regex = new RegExp(`\\b${word}\\b`, 'i');
+    if (regex.test(content)) {
+      return { valid: false, reason: `Contains forbidden term: ${word}` };
+    }
+  }
+  
+  // Check phrases with includes()
+  for (const phrase of GUARDRAILS.FORBIDDEN_PHRASES) {
+    if (lower.includes(phrase.toLowerCase())) {
+      return { valid: false, reason: `Contains forbidden phrase: ${phrase}` };
     }
   }
   
