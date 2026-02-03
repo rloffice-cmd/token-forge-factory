@@ -2,15 +2,13 @@
  * Daily Sweep Edge Function
  * משיכה יומית אוטומטית של כל ההכנסות לארנק שלך
  * Runs every day at 07:00 UTC (10:00 Israel time)
+ * 
+ * SECURITY: INTERNAL_CRON - Requires x-cron-secret header
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { verifyCronSecret, unauthorizedResponse, logSecurityEvent, corsHeaders } from '../_shared/auth-guards.ts';
 
 // Config
 const MIN_SWEEP_USD = 10; // Minimum amount to sweep (avoid dust transactions)
@@ -34,6 +32,17 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Security: Verify cron secret
+  const authResult = verifyCronSecret(req);
+  if (!authResult.authorized) {
+    await logSecurityEvent(supabase, 'cron_unauthorized', {
+      endpoint: 'daily-sweep',
+      error: authResult.error,
+      ip: req.headers.get('x-forwarded-for') || 'unknown',
+    });
+    return unauthorizedResponse(authResult.error!, 'daily-sweep');
+  }
 
   try {
     console.log('💸 Daily Sweep starting...');

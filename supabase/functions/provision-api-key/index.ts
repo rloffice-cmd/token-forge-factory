@@ -1,6 +1,8 @@
 /**
  * Provision API Key - Auto-generates API key after confirmed payment
  * 
+ * SECURITY: ADMIN_ONLY - Requires x-admin-token header
+ * 
  * RULES:
  * 1. Only called from coinbase-webhook after confirmed/resolved
  * 2. Creates key only if customer doesn't have active one (mode=create_if_missing)
@@ -11,11 +13,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { verifyAdminToken, unauthorizedResponse, logSecurityEvent, corsHeaders } from '../_shared/auth-guards.ts';
 
 /**
  * Generate secure random API key
@@ -60,9 +58,20 @@ serve(async (req) => {
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
   const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const API_KEY_PEPPER = Deno.env.get('API_KEY_PEPPER') || 'default-pepper-change-me-in-production';
-
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+  // Security: Verify admin token
+  const authResult = verifyAdminToken(req);
+  if (!authResult.authorized) {
+    await logSecurityEvent(supabase, 'admin_unauthorized', {
+      endpoint: 'provision-api-key',
+      error: authResult.error,
+      ip: req.headers.get('x-forwarded-for') || 'unknown',
+    });
+    return unauthorizedResponse(authResult.error!, 'provision-api-key');
+  }
+
+  const API_KEY_PEPPER = Deno.env.get('API_KEY_PEPPER') || 'default-pepper-change-me-in-production';
 
   try {
     const { customer_id, payment_id, mode = 'create_if_missing' } = await req.json();

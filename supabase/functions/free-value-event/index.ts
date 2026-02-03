@@ -1,6 +1,8 @@
 /**
  * Free Value Event Tracker v2
  * 
+ * SECURITY: PUBLIC_EVENT - Rate limiting + Origin check + Dedup
+ * 
  * Client-side events that count as "free value received"
  * This builds Trust and enables Paid flow
  * 
@@ -8,6 +10,7 @@
  * - Anti-abuse: rate limiting + dedup
  * - Proper identity: actor_fingerprint vs lead_key separation
  * - Trusted events only boost trust
+ * - Origin allowlist for production
  * 
  * VALID EVENTS:
  * - scan_started
@@ -19,6 +22,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { verifyOrigin, logSecurityEvent, getClientIP, corsHeaders } from '../_shared/auth-guards.ts';
 import { 
   isValidFreeValueEvent, 
   computeActorFingerprint, 
@@ -32,11 +36,13 @@ import {
   generateDedupKey,
 } from "../_shared/self-heal-policy.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+// Allowed origins for production
+const ALLOWED_ORIGINS = [
+  'id-preview--c789e62a-6c80-4817-af6a-864347682163.lovable.app',
+  'microguard.io',
+  'www.microguard.io',
+  'localhost',
+];
 
 interface FreeValueEventRequest {
   event_type: string;
@@ -72,12 +78,26 @@ Deno.serve(async (req) => {
     );
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
+  // Security: Origin allowlist (for non-localhost in production)
+  const clientIP = getClientIP(req);
+  if (!verifyOrigin(req, ALLOWED_ORIGINS)) {
+    await logSecurityEvent(supabase, 'origin_rejected', {
+      endpoint: 'free-value-event',
+      origin: req.headers.get('origin'),
+      ip: clientIP,
+    });
+    return new Response(
+      JSON.stringify({ error: "Origin not allowed" }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  try {
     const body: FreeValueEventRequest = await req.json();
     
     // Validate event type

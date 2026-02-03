@@ -1,6 +1,8 @@
 /**
  * Fulfillment Provisioner - אספקה אוטומטית
  * 
+ * SECURITY: ADMIN_ONLY - Requires x-admin-token header
+ * 
  * לאחר payment CONFIRMED:
  * - api_key: מנפיק מפתח API ושולח ללקוח
  * - report: מייצר דוח ומעלה ל-storage
@@ -13,11 +15,7 @@
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { verifyAdminToken, unauthorizedResponse, logSecurityEvent, corsHeaders } from '../_shared/auth-guards.ts';
 
 interface FulfillmentJob {
   id: string;
@@ -48,6 +46,17 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
+
+  // Security: Verify admin token
+  const authResult = verifyAdminToken(req);
+  if (!authResult.authorized) {
+    await logSecurityEvent(supabase, 'admin_unauthorized', {
+      endpoint: 'fulfillment-provisioner',
+      error: authResult.error,
+      ip: req.headers.get('x-forwarded-for') || 'unknown',
+    });
+    return unauthorizedResponse(authResult.error!, 'fulfillment-provisioner');
+  }
 
   try {
     // Check if fulfillment is enabled

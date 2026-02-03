@@ -1,6 +1,9 @@
 /**
  * Self-Healing Brain v2
  * 
+ * SECURITY: ADMIN_ONLY - Requires x-admin-token header
+ * (Already has inline auth check - keeping compatible with admin token)
+ * 
  * FULL AUTO - NO HUMAN IN LOOP
  * 
  * Pipeline:
@@ -16,6 +19,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { verifyAdminToken, logSecurityEvent, corsHeaders } from '../_shared/auth-guards.ts';
 import {
   ANOMALY_CATALOG,
   SAFETY_CONSTRAINTS,
@@ -25,12 +29,6 @@ import {
   isIdentitySplit,
 } from "../_shared/self-heal-policy.ts";
 import { isThrottleActive } from "../_shared/master-prompt-config.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
 
 interface DetectedAnomaly {
   rule_id: string;
@@ -58,22 +56,28 @@ Deno.serve(async (req) => {
 
   const startTime = Date.now();
   
-  try {
-    // Auth check
-    const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "";
-    const authHeader = req.headers.get("authorization") || "";
-    
-    if (!adminToken || !authHeader.includes(adminToken)) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  // Security: Verify admin token (dual check - header or auth header)
+  const authResult = verifyAdminToken(req);
+  const authHeader = req.headers.get("authorization") || "";
+  const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "";
+  
+  if (!authResult.authorized && (!adminToken || !authHeader.includes(adminToken))) {
+    await logSecurityEvent(supabase, 'admin_unauthorized', {
+      endpoint: 'self-healing-brain',
+      ip: req.headers.get('x-forwarded-for') || 'unknown',
+    });
+    return new Response(
+      JSON.stringify({ error: "Unauthorized" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+  }
+
+  try {
 
     // Create run record
     const { data: run, error: runError } = await supabase

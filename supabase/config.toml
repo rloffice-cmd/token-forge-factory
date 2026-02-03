@@ -1,15 +1,208 @@
 project_id = "flsdahpijdvkohwiinqm"
 
-[functions.daily-sweep]
-verify_jwt = false
+# ============================================
+# SECURITY HARDENING - Default Deny Policy
+# ============================================
+# verify_jwt = true = Requires valid Supabase JWT
+# verify_jwt = false = Open endpoint (needs code guards)
+# ============================================
 
-[functions.public-api]
-verify_jwt = false
-
-[functions.ai-job-processor]
-verify_jwt = false
-
+# -----------------------------
+# ADMIN_ONLY - Require x-admin-token
+# -----------------------------
 [functions.provision-api-key]
+verify_jwt = true
+
+[functions.provision-free-trial]
+verify_jwt = true
+
+[functions.fulfillment-provisioner]
+verify_jwt = true
+
+[functions.confirm-payout]
+verify_jwt = true
+
+[functions.create-payout-request]
+verify_jwt = true
+
+[functions.create-withdrawal-request]
+verify_jwt = true
+
+# -----------------------------
+# INTERNAL_CRON - Require x-cron-secret
+# -----------------------------
+[functions.daily-sweep]
+verify_jwt = true
+
+[functions.brain-scan]
+verify_jwt = true
+
+[functions.brain-score]
+verify_jwt = true
+
+[functions.brain-close]
+verify_jwt = true
+
+[functions.brain-fulfill]
+verify_jwt = true
+
+[functions.brain-discover-sources]
+verify_jwt = true
+
+[functions.brain-daily-metrics]
+verify_jwt = true
+
+[functions.full-autonomous-engine]
+verify_jwt = true
+
+[functions.self-healing-brain]
+verify_jwt = true
+
+[functions.self-healing-verifier]
+verify_jwt = true
+
+[functions.self-improvement]
+verify_jwt = true
+
+[functions.self-audit-brain]
+verify_jwt = true
+
+[functions.daily-report]
+verify_jwt = true
+
+[functions.daily-signal-report]
+verify_jwt = true
+
+[functions.daily-autonomous-report]
+verify_jwt = true
+
+[functions.revenue-report]
+verify_jwt = true
+
+[functions.system-health]
+verify_jwt = true
+
+# -----------------------------
+# INTERNAL_ENGINE - Require x-cron-secret
+# -----------------------------
+[functions.ai-job-processor]
+verify_jwt = true
+
+[functions.ai-outreach]
+verify_jwt = true
+
+[functions.ai-content-engine]
+verify_jwt = true
+
+[functions.ai-intent-scanner]
+verify_jwt = true
+
+[functions.auto-closer]
+verify_jwt = true
+
+[functions.auto-pipeline]
+verify_jwt = true
+
+[functions.autonomous-marketer]
+verify_jwt = true
+
+[functions.demand-scanner]
+verify_jwt = true
+
+[functions.opportunity-scorer]
+verify_jwt = true
+
+[functions.lead-hunter]
+verify_jwt = true
+
+[functions.outreach-sender]
+verify_jwt = true
+
+[functions.outreach-queue]
+verify_jwt = true
+
+[functions.outreach-retry-worker]
+verify_jwt = true
+
+[functions.distribution-orchestrator]
+verify_jwt = true
+
+[functions.follow-up-engine]
+verify_jwt = true
+
+[functions.expansion-engine]
+verify_jwt = true
+
+[functions.growth-brain]
+verify_jwt = true
+
+[functions.marketing-optimizer]
+verify_jwt = true
+
+[functions.landing-ab-test]
+verify_jwt = true
+
+[functions.continuous-optimizer]
+verify_jwt = true
+
+[functions.landing-optimizer]
+verify_jwt = true
+
+[functions.dynamic-pricing-engine]
+verify_jwt = true
+
+[functions.dynamic-pricing]
+verify_jwt = true
+
+[functions.customer-intelligence-engine]
+verify_jwt = true
+
+[functions.agent-marketplace-engine]
+verify_jwt = true
+
+[functions.affiliate-automation-engine]
+verify_jwt = true
+
+[functions.reddit-auto-outreach]
+verify_jwt = true
+
+[functions.twitter-auto-outreach]
+verify_jwt = true
+
+[functions.hacker-news-outreach]
+verify_jwt = true
+
+[functions.discord-auto-outreach]
+verify_jwt = true
+
+[functions.safe-tx-tracker]
+verify_jwt = true
+
+[functions.sandbox-runner]
+verify_jwt = true
+
+[functions.send-test-telegram]
+verify_jwt = true
+
+[functions.telegram-notify]
+verify_jwt = true
+
+# -----------------------------
+# WEBHOOK_EXTERNAL - HMAC/Token validation in code
+# -----------------------------
+[functions.coinbase-webhook]
+verify_jwt = false
+
+[functions.ingest-webhook]
+verify_jwt = false
+
+[functions.affiliate-click-tracker]
+verify_jwt = false
+
+# -----------------------------
+# PUBLIC_API - API Key validation in code
+# -----------------------------
+[functions.public-api]
 verify_jwt = false
 
 [functions.signal-wallet]
@@ -18,60 +211,21 @@ verify_jwt = false
 [functions.signal-contract]
 verify_jwt = false
 
-[functions.daily-signal-report]
+# -----------------------------
+# PUBLIC_EVENT - Rate limiting + Origin check
+# -----------------------------
+[functions.free-value-event]
 verify_jwt = false
 
-[functions.system-health]
+[functions.guardian-offer]
 verify_jwt = false
 
-[functions.coinbase-webhook]
+[functions.create-coinbase-checkout]
 verify_jwt = false
 
-[functions.expansion-engine]
-verify_jwt = false
-
-[functions.self-improvement]
-verify_jwt = false
-
-[functions.lead-hunter]
-verify_jwt = false
-
-[functions.ai-outreach]
-verify_jwt = false
-
-[functions.outreach-sender]
-verify_jwt = false
-
-[functions.auto-closer]
-verify_jwt = false
-
-[functions.demand-scanner]
-verify_jwt = false
-
-[functions.opportunity-scorer]
-verify_jwt = false
-
-[functions.fulfillment-provisioner]
-verify_jwt = false
-
-[functions.brain-scan]
-verify_jwt = false
-
-[functions.brain-score]
-verify_jwt = false
-
-[functions.brain-close]
-verify_jwt = false
-
-[functions.brain-fulfill]
-verify_jwt = false
-
-[functions.brain-discover-sources]
-verify_jwt = false
-
-[functions.ingest-webhook]
-verify_jwt = false
-
+# -----------------------------
+# MICRO_PUBLIC - Customer-facing, API key required
+# -----------------------------
 [functions.micro-wallet-risk]
 verify_jwt = false
 
@@ -84,89 +238,5 @@ verify_jwt = false
 [functions.micro-brain-evaluate]
 verify_jwt = false
 
-[functions.guardian-offer]
-verify_jwt = false
-
 [functions.micro-dashboard-value]
-verify_jwt = false
-
-[functions.ai-content-engine]
-verify_jwt = false
-
-[functions.ai-intent-scanner]
-verify_jwt = false
-
-[functions.distribution-orchestrator]
-verify_jwt = false
-
-[functions.outreach-queue]
-verify_jwt = false
-
-[functions.outreach-retry-worker]
-verify_jwt = false
-
-[functions.brain-daily-metrics]
-verify_jwt = false
-
-[functions.marketing-optimizer]
-verify_jwt = false
-
-[functions.landing-ab-test]
-verify_jwt = false
-
-[functions.continuous-optimizer]
-verify_jwt = false
-
-[functions.landing-optimizer]
-verify_jwt = false
-
-[functions.growth-brain]
-verify_jwt = false
-
-[functions.provision-free-trial]
-verify_jwt = false
-
-[functions.reddit-auto-outreach]
-verify_jwt = false
-
-[functions.twitter-auto-outreach]
-verify_jwt = false
-
-[functions.autonomous-marketer]
-verify_jwt = false
-
-[functions.hacker-news-outreach]
-verify_jwt = false
-
-[functions.discord-auto-outreach]
-verify_jwt = false
-
-[functions.full-autonomous-engine]
-verify_jwt = false
-
-[functions.daily-autonomous-report]
-verify_jwt = false
-
-[functions.agent-marketplace-engine]
-verify_jwt = false
-
-[functions.affiliate-automation-engine]
-verify_jwt = false
-
-[functions.affiliate-click-tracker]
-verify_jwt = false
-
-[functions.dynamic-pricing-engine]
-verify_jwt = false
-
-[functions.free-value-event]
-verify_jwt = false
-
-[functions.self-healing-brain]
-verify_jwt = false
-
-[functions.self-healing-verifier]
-verify_jwt = false
-
-[functions.customer-intelligence-engine]
 verify_jwt = false
