@@ -50,6 +50,21 @@ export default function Dashboard() {
     },
   });
 
+  // Check ZeroDev status from Edge Function
+  const { data: hasZeroDev } = useQuery({
+    queryKey: ['zerodev-check'],
+    queryFn: async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('zerodev-status');
+        if (error) return false;
+        return data?.status === 'active';
+      } catch {
+        return false;
+      }
+    },
+    staleTime: 60000, // Cache for 1 minute
+  });
+
   if (isLoading) {
     return (
       <AppLayout>
@@ -101,7 +116,7 @@ export default function Dashboard() {
           hasCoinbaseWebhook={true}
           hasPayoutWallet={hasPayoutWallet || false}
           hasTelegram={true}
-          hasZeroDev={false}
+          hasZeroDev={hasZeroDev || false}
           hasTestPassed={false}
           hasFirstPayment={hasFirstPayment || false}
         />
