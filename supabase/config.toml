@@ -1,191 +1,196 @@
 project_id = "flsdahpijdvkohwiinqm"
 
 # ============================================
-# SECURITY HARDENING - Default Deny Policy
+# SECURITY HARDENING - Corrected Policy
 # ============================================
-# verify_jwt = true = Requires valid Supabase JWT
-# verify_jwt = false = Open endpoint (needs code guards)
+# RULE: Cron/Internal functions = verify_jwt=false + CRON_SECRET guard
+# RULE: Admin functions = verify_jwt=false + ADMIN_API_TOKEN guard
+# RULE: Webhooks = verify_jwt=false + HMAC/Token validation
+# RULE: Public = verify_jwt=false + Rate limit + Origin check
 # ============================================
 
 # -----------------------------
-# ADMIN_ONLY - Require x-admin-token
+# ADMIN_ONLY - verify_jwt=false + x-admin-token guard in code
+# (Cannot use JWT because called from scripts/internal)
 # -----------------------------
 [functions.provision-api-key]
-verify_jwt = true
+verify_jwt = false
 
 [functions.provision-free-trial]
-verify_jwt = true
+verify_jwt = false
 
 [functions.fulfillment-provisioner]
-verify_jwt = true
+verify_jwt = false
 
 [functions.confirm-payout]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create-payout-request]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create-withdrawal-request]
-verify_jwt = true
+verify_jwt = false
 
 # -----------------------------
-# INTERNAL_CRON - Require x-cron-secret
+# INTERNAL_CRON - verify_jwt=false + x-cron-secret guard in code
+# (Cron jobs don't send JWT tokens!)
 # -----------------------------
 [functions.daily-sweep]
-verify_jwt = true
+verify_jwt = false
 
 [functions.brain-scan]
-verify_jwt = true
+verify_jwt = false
 
 [functions.brain-score]
-verify_jwt = true
+verify_jwt = false
 
 [functions.brain-close]
-verify_jwt = true
+verify_jwt = false
 
 [functions.brain-fulfill]
-verify_jwt = true
+verify_jwt = false
 
 [functions.brain-discover-sources]
-verify_jwt = true
+verify_jwt = false
 
 [functions.brain-daily-metrics]
-verify_jwt = true
+verify_jwt = false
 
 [functions.full-autonomous-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.self-healing-brain]
-verify_jwt = true
+verify_jwt = false
 
 [functions.self-healing-verifier]
-verify_jwt = true
+verify_jwt = false
 
 [functions.self-improvement]
-verify_jwt = true
+verify_jwt = false
 
 [functions.self-audit-brain]
-verify_jwt = true
+verify_jwt = false
 
 [functions.daily-report]
-verify_jwt = true
+verify_jwt = false
 
 [functions.daily-signal-report]
-verify_jwt = true
+verify_jwt = false
 
 [functions.daily-autonomous-report]
-verify_jwt = true
+verify_jwt = false
 
 [functions.revenue-report]
-verify_jwt = true
+verify_jwt = false
 
 [functions.system-health]
-verify_jwt = true
+verify_jwt = false
 
 # -----------------------------
-# INTERNAL_ENGINE - Require x-cron-secret
+# INTERNAL_ENGINE - verify_jwt=false + x-cron-secret guard in code
+# (Called by cron or other internal functions)
 # -----------------------------
 [functions.ai-job-processor]
-verify_jwt = true
+verify_jwt = false
 
 [functions.ai-outreach]
-verify_jwt = true
+verify_jwt = false
 
 [functions.ai-content-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.ai-intent-scanner]
-verify_jwt = true
+verify_jwt = false
 
 [functions.auto-closer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.auto-pipeline]
-verify_jwt = true
+verify_jwt = false
 
 [functions.autonomous-marketer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.demand-scanner]
-verify_jwt = true
+verify_jwt = false
 
 [functions.opportunity-scorer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.lead-hunter]
-verify_jwt = true
+verify_jwt = false
 
 [functions.outreach-sender]
-verify_jwt = true
+verify_jwt = false
 
 [functions.outreach-queue]
-verify_jwt = true
+verify_jwt = false
 
 [functions.outreach-retry-worker]
-verify_jwt = true
+verify_jwt = false
 
 [functions.distribution-orchestrator]
-verify_jwt = true
+verify_jwt = false
 
 [functions.follow-up-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.expansion-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.growth-brain]
-verify_jwt = true
+verify_jwt = false
 
 [functions.marketing-optimizer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.landing-ab-test]
-verify_jwt = true
+verify_jwt = false
 
 [functions.continuous-optimizer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.landing-optimizer]
-verify_jwt = true
+verify_jwt = false
 
 [functions.dynamic-pricing-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.dynamic-pricing]
-verify_jwt = true
+verify_jwt = false
 
 [functions.customer-intelligence-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.agent-marketplace-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.affiliate-automation-engine]
-verify_jwt = true
+verify_jwt = false
 
 [functions.reddit-auto-outreach]
-verify_jwt = true
+verify_jwt = false
 
 [functions.twitter-auto-outreach]
-verify_jwt = true
+verify_jwt = false
 
 [functions.hacker-news-outreach]
-verify_jwt = true
+verify_jwt = false
 
 [functions.discord-auto-outreach]
-verify_jwt = true
+verify_jwt = false
 
 [functions.safe-tx-tracker]
-verify_jwt = true
+verify_jwt = false
 
 [functions.sandbox-runner]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-test-telegram]
-verify_jwt = true
+verify_jwt = false
 
 [functions.telegram-notify]
-verify_jwt = true
+verify_jwt = false
 
 # -----------------------------
 # WEBHOOK_EXTERNAL - HMAC/Token validation in code
