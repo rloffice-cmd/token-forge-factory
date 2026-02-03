@@ -245,3 +245,9 @@ verify_jwt = false
 
 [functions.micro-dashboard-value]
 verify_jwt = false
+
+# -----------------------------
+# PUBLIC_STATUS - No auth needed, read-only status
+# -----------------------------
+[functions.zerodev-status]
+verify_jwt = false

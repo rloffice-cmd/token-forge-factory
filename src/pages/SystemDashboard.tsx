@@ -27,10 +27,19 @@ import {
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { getZeroDevConfig, type ZeroDevStatus } from '@/lib/zerodev';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
+
+type ZeroDevStatusType = 'not_configured' | 'pending' | 'active' | 'error';
+
+interface ZeroDevStatusResponse {
+  configured: boolean;
+  status: ZeroDevStatusType;
+  message: string;
+  network: string;
+  bundlerRpc: string | null;
+}
 
 interface SystemStatus {
   name: string;
@@ -81,8 +90,16 @@ export default function SystemDashboard() {
     },
   });
 
-  // Get ZeroDev config
-  const zerodevConfig = getZeroDevConfig();
+  // Fetch ZeroDev status from Edge Function
+  const { data: zerodevConfig, isLoading: zerodevLoading } = useQuery({
+    queryKey: ['zerodev-status'],
+    queryFn: async (): Promise<ZeroDevStatusResponse> => {
+      const { data, error } = await supabase.functions.invoke('zerodev-status');
+      if (error) throw error;
+      return data as ZeroDevStatusResponse;
+    },
+    staleTime: 60000, // Cache for 1 minute
+  });
 
   // Send test telegram mutation - uses REAL admin token
   const sendTestMutation = useMutation({
@@ -150,7 +167,17 @@ export default function SystemDashboard() {
   };
 
   const getZeroDevStatusDisplay = (): SystemStatus => {
-    const statusMap: Record<ZeroDevStatus, 'ok' | 'warning' | 'error' | 'pending'> = {
+    if (zerodevLoading || !zerodevConfig) {
+      return {
+        name: 'ZeroDev Kernel',
+        nameHe: 'קרנל זירו-דב (Account Abstraction)',
+        status: 'pending',
+        message: 'בודק סטטוס...',
+        icon: <Cpu className="w-5 h-5" />,
+      };
+    }
+
+    const statusMap: Record<ZeroDevStatusType, 'ok' | 'warning' | 'error' | 'pending'> = {
       'active': 'ok',
       'pending': 'warning',
       'not_configured': 'pending',
@@ -355,7 +382,7 @@ export default function SystemDashboard() {
         </Card>
 
         {/* ZeroDev Setup Info */}
-        {zerodevConfig.status === 'not_configured' && (
+        {zerodevConfig?.status === 'not_configured' && (
           <Card className="glass-card border-warning/30 mt-6">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
