@@ -1264,13 +1264,92 @@ export type Database = {
           },
         ]
       }
+      customer_dna: {
+        Row: {
+          actor_fingerprint: string
+          buying_style: string
+          churn_risk: number | null
+          created_at: string
+          curiosity_level: number
+          engagement_velocity: number
+          fear_signals: Json
+          first_seen_at: string
+          id: string
+          last_negative_signal_at: string | null
+          last_positive_interaction_at: string | null
+          lifetime_value_prediction: number | null
+          objections_history: Json
+          payment_resistance_score: number
+          preferred_channel: string | null
+          technical_level: string
+          time_to_value: boolean
+          total_interactions: number
+          total_paid_usd: number
+          total_value_received: number
+          trust_level: number
+          updated_at: string
+        }
+        Insert: {
+          actor_fingerprint: string
+          buying_style?: string
+          churn_risk?: number | null
+          created_at?: string
+          curiosity_level?: number
+          engagement_velocity?: number
+          fear_signals?: Json
+          first_seen_at?: string
+          id?: string
+          last_negative_signal_at?: string | null
+          last_positive_interaction_at?: string | null
+          lifetime_value_prediction?: number | null
+          objections_history?: Json
+          payment_resistance_score?: number
+          preferred_channel?: string | null
+          technical_level?: string
+          time_to_value?: boolean
+          total_interactions?: number
+          total_paid_usd?: number
+          total_value_received?: number
+          trust_level?: number
+          updated_at?: string
+        }
+        Update: {
+          actor_fingerprint?: string
+          buying_style?: string
+          churn_risk?: number | null
+          created_at?: string
+          curiosity_level?: number
+          engagement_velocity?: number
+          fear_signals?: Json
+          first_seen_at?: string
+          id?: string
+          last_negative_signal_at?: string | null
+          last_positive_interaction_at?: string | null
+          lifetime_value_prediction?: number | null
+          objections_history?: Json
+          payment_resistance_score?: number
+          preferred_channel?: string | null
+          technical_level?: string
+          time_to_value?: boolean
+          total_interactions?: number
+          total_paid_usd?: number
+          total_value_received?: number
+          trust_level?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       decision_traces: {
         Row: {
           actor_fingerprint: string | null
+          buying_style: string | null
           created_at: string
           decision: string
+          dna_score: number | null
+          emotional_state: string | null
           entity_id: string | null
           entity_type: string
+          fear_detected: boolean | null
           free_value_events_count_24h: number | null
           free_value_events_count_30d: number | null
           id: string
@@ -1281,6 +1360,7 @@ export type Database = {
           pain_score: number | null
           platform: string | null
           reason_codes: string[] | null
+          safe_mode_activated: boolean | null
           source_url: string | null
           throttle_state: string | null
           throttle_until: string | null
@@ -1289,10 +1369,14 @@ export type Database = {
         }
         Insert: {
           actor_fingerprint?: string | null
+          buying_style?: string | null
           created_at?: string
           decision: string
+          dna_score?: number | null
+          emotional_state?: string | null
           entity_id?: string | null
           entity_type: string
+          fear_detected?: boolean | null
           free_value_events_count_24h?: number | null
           free_value_events_count_30d?: number | null
           id?: string
@@ -1303,6 +1387,7 @@ export type Database = {
           pain_score?: number | null
           platform?: string | null
           reason_codes?: string[] | null
+          safe_mode_activated?: boolean | null
           source_url?: string | null
           throttle_state?: string | null
           throttle_until?: string | null
@@ -1311,10 +1396,14 @@ export type Database = {
         }
         Update: {
           actor_fingerprint?: string | null
+          buying_style?: string | null
           created_at?: string
           decision?: string
+          dna_score?: number | null
+          emotional_state?: string | null
           entity_id?: string | null
           entity_type?: string
+          fear_detected?: boolean | null
           free_value_events_count_24h?: number | null
           free_value_events_count_30d?: number | null
           id?: string
@@ -1325,6 +1414,7 @@ export type Database = {
           pain_score?: number | null
           platform?: string | null
           reason_codes?: string[] | null
+          safe_mode_activated?: boolean | null
           source_url?: string | null
           throttle_state?: string | null
           throttle_until?: string | null

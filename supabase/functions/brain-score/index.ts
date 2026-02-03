@@ -1,14 +1,17 @@
 /**
- * Brain Score - Trust-Gated Signal Scoring
- * Implements the MASTER PROMPT trust gates and pain scoring
+ * Brain Score - Trust-Gated + Customer DNA Intelligence
  * 
- * NOW WITH: 
- * - Actor Fingerprinting (stable lead_key)
- * - Decision Trace Logging
- * - Proper interactionCount from actor_profiles
+ * IMPLEMENTS:
+ * - Customer DNA Engine (Layer 1)
+ * - Emotional & Cognitive Analysis (Layer 2)
+ * - Trust-First Sales Strategy (Layer 3)
+ * - Adaptive Offer Engine (Layer 4)
+ * - Continuous Learning Loop (Layer 6)
+ * 
+ * GOLDEN RULE: If not sure customer will say "wow, this helped me" — DO NOT SELL
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import {
   classifyIntent,
   isActionableIntent,
@@ -23,7 +26,28 @@ import {
   computeActorFingerprint,
   extractAuthorFromPayload,
   extractPlatformFromPayload,
+  PAIN_INDICATORS,
+  // DNA Engine imports
+  DNA_THRESHOLDS,
+  ADAPTIVE_STRATEGIES,
+  ENHANCED_KILL_GATES,
+  detectFearSignals,
+  detectConfusion,
+  detectCuriosity,
+  detectMoneyAnxiety,
+  classifyBuyingStyle,
+  detectEmotionalState,
+  getAdaptiveStrategy,
+  canMakeSale,
+  updateDNATrust,
+  type CustomerDNA,
+  type BuyingStyle,
+  type EmotionalState,
+  type OfferStrategy,
 } from '../_shared/master-prompt-config.ts';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabase = SupabaseClient<any, any, any>;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -57,15 +81,37 @@ interface ActorProfile {
   free_value_events_count: number;
   has_paid: boolean;
   highest_trust_score: number;
+  total_paid_usd: number;
 }
 
-// Score signal using Trust-Gated logic with actor history
-function scoreSignalWithActor(
-  signal: Signal, 
+interface CustomerDNARecord {
+  id: string;
+  actor_fingerprint: string;
+  trust_level: number;
+  curiosity_level: number;
+  fear_signals: string[];
+  buying_style: string;
+  technical_level: string;
+  time_to_value: boolean;
+  payment_resistance_score: number;
+  objections_history: string[];
+  engagement_velocity: number;
+  lifetime_value_prediction: number;
+  churn_risk: number;
+  total_interactions: number;
+  total_value_received: number;
+  total_paid_usd: number;
+}
+
+// Score signal using Trust-Gated + DNA Intelligence
+async function scoreSignalWithDNA(
+  supabase: AnySupabase,
+  signal: Signal,
   offer: Offer, 
   sourceHealthScore: number,
-  actorProfile: ActorProfile | null
-): {
+  actorProfile: ActorProfile | null,
+  dnaRecord: CustomerDNARecord | null
+): Promise<{
   score: number;
   painScore: number;
   trustScore: number;
@@ -76,7 +122,14 @@ function scoreSignalWithActor(
   freeValueEventsCount: number;
   trustCapApplied: boolean;
   reasonCodes: string[];
-} {
+  // DNA additions
+  buyingStyle: BuyingStyle;
+  emotionalState: EmotionalState;
+  fearDetected: boolean;
+  safeModeActivated: boolean;
+  adaptiveStrategy: OfferStrategy;
+  dnaScore: number;
+}> {
   const text = `${signal.query_text || ''} ${JSON.stringify(signal.payload_json || {})}`.toLowerCase();
   const reasonCodes: string[] = [];
   
@@ -85,62 +138,156 @@ function scoreSignalWithActor(
   const isActionable = isActionableIntent(intent);
   
   if (!isActionable) {
-    return { 
-      score: 0, painScore: 0, trustScore: 0, trustAction: 'BLOCK', 
-      canCheckout: false, intent, interactionCount: 0, freeValueEventsCount: 0,
-      trustCapApplied: false, reasonCodes: ['intent_not_actionable']
-    };
+    return createBlockedResult('intent_not_actionable', intent);
   }
   
   // 2. Pain Score
   const painScore = calculatePainScore(text);
   
   if (painScore < PAIN_THRESHOLD) {
-    return { 
-      score: painScore / 100, painScore, trustScore: 0, trustAction: 'SILENT', 
-      canCheckout: false, intent, interactionCount: 0, freeValueEventsCount: 0,
-      trustCapApplied: false, reasonCodes: ['pain_below_threshold']
-    };
+    return createBlockedResult('pain_below_threshold', intent, painScore);
   }
   reasonCodes.push('pain_threshold_met');
+  
+  // ===========================================
+  // 🧬 DNA ANALYSIS - Layer 1 & 2
+  // ===========================================
+  
+  // Detect emotional signals
+  const fearSignals = detectFearSignals(text);
+  const confusionDetected = detectConfusion(text);
+  const curiosityLevel = detectCuriosity(text);
+  const hasMoneyAnxiety = detectMoneyAnxiety(text);
+  
+  // Check for kill gate triggers
+  const killGateTriggered = confusionDetected || 
+    fearSignals.length > DNA_THRESHOLDS.MAX_FEAR_SIGNALS ||
+    DNA_THRESHOLDS.CONFUSION_KEYWORDS.some(kw => text.includes(kw.toLowerCase()));
+  
+  if (killGateTriggered) {
+    reasonCodes.push('kill_gate_triggered');
+  }
   
   // 3. Buying Signal Detection
   const buyingSignalKeywords = ['any tool', 'recommend', 'how can i', 'is there a way', 'looking for', 'need'];
   const hasBuyingSignal = buyingSignalKeywords.some(kw => text.includes(kw));
   if (hasBuyingSignal) reasonCodes.push('buying_signal_detected');
   
-  // 4. Trust Estimation WITH ACTOR HISTORY
-  let estimatedTrust = 50;
-  
-  // Get interaction data from actor profile
+  // 4. Get interaction data from actor profile
   const interactionCount = actorProfile?.interaction_count_30d || 0;
   const freeValueEventsCount = actorProfile?.free_value_events_count || 0;
   const hasPaid = actorProfile?.has_paid || false;
+  const totalPaidUsd = actorProfile?.total_paid_usd || 0;
+  
+  // 5. Build or update DNA profile
+  let dna: CustomerDNA;
+  let buyingStyle: BuyingStyle;
+  
+  if (dnaRecord) {
+    // Use existing DNA
+    buyingStyle = dnaRecord.buying_style as BuyingStyle;
+    dna = {
+      trust_level: dnaRecord.trust_level,
+      fear_signals: [...dnaRecord.fear_signals, ...fearSignals].slice(-10), // Keep last 10
+      curiosity_level: Math.round((dnaRecord.curiosity_level + curiosityLevel) / 2),
+      technical_level: dnaRecord.technical_level as 'beginner' | 'intermediate' | 'advanced' | 'unknown',
+      buying_style: buyingStyle,
+      time_to_value: dnaRecord.time_to_value || freeValueEventsCount >= DNA_THRESHOLDS.MIN_VALUE_EVENTS_FOR_SALE,
+      objections_history: dnaRecord.objections_history,
+      preferred_channel: 'telegram',
+      engagement_velocity: dnaRecord.engagement_velocity,
+      payment_resistance_score: dnaRecord.payment_resistance_score,
+      lifetime_value_prediction: dnaRecord.lifetime_value_prediction,
+      churn_risk: dnaRecord.churn_risk,
+    };
+  } else {
+    // Classify buying style from signals
+    buyingStyle = classifyBuyingStyle(
+      fearSignals,
+      curiosityLevel,
+      interactionCount / 30, // Velocity: interactions per day
+      hasMoneyAnxiety,
+      hasPaid ? 1 : 0
+    );
+    
+    dna = {
+      trust_level: 30, // Start low
+      fear_signals: fearSignals,
+      curiosity_level: curiosityLevel,
+      technical_level: 'unknown',
+      buying_style: buyingStyle,
+      time_to_value: freeValueEventsCount >= DNA_THRESHOLDS.MIN_VALUE_EVENTS_FOR_SALE,
+      objections_history: [],
+      preferred_channel: 'telegram',
+      engagement_velocity: interactionCount / 30,
+      payment_resistance_score: hasMoneyAnxiety ? 70 : 50,
+      lifetime_value_prediction: 0,
+      churn_risk: 0.5,
+    };
+  }
+  
+  // 6. Detect emotional state
+  const emotionalState = detectEmotionalState(
+    text,
+    fearSignals,
+    confusionDetected,
+    curiosityLevel,
+    dna.trust_level
+  );
+  reasonCodes.push(`emotional_state:${emotionalState}`);
+  
+  // 7. Check if safe mode should be activated
+  const safeModeActivated = 
+    emotionalState === 'panicking' ||
+    emotionalState === 'confused' ||
+    fearSignals.length > DNA_THRESHOLDS.MAX_FEAR_SIGNALS ||
+    killGateTriggered;
+  
+  if (safeModeActivated) {
+    reasonCodes.push('safe_mode_activated');
+  }
+  
+  // ===========================================
+  // 🛡️ TRUST SCORING WITH DNA - Layer 3
+  // ===========================================
+  
+  let estimatedTrust = dna.trust_level;
   
   // Boost trust based on actor history
   if (interactionCount > 0) {
-    estimatedTrust += Math.min(25, interactionCount * 5);
+    estimatedTrust += Math.min(15, interactionCount * 3);
     reasonCodes.push(`interaction_history:${interactionCount}`);
   }
   
   if (freeValueEventsCount > 0) {
-    estimatedTrust += 30; // Received free value boost
+    estimatedTrust += Math.min(20, freeValueEventsCount * 10);
     reasonCodes.push(`free_value_received:${freeValueEventsCount}`);
   }
   
   if (hasPaid) {
-    estimatedTrust += 20; // Previous payment = high trust
+    estimatedTrust += 25;
     reasonCodes.push('previous_payment');
   }
   
   // Boost trust if source is healthy
-  estimatedTrust += sourceHealthScore * 20;
+  estimatedTrust += sourceHealthScore * 10;
   
-  // Reduce trust if panic language detected
-  const panicWords = ['urgent', 'help', 'please', 'asap', 'now'];
-  if (panicWords.some(w => text.includes(w))) {
+  // REDUCE trust based on emotional state
+  if (emotionalState === 'panicking') {
+    estimatedTrust -= 20;
+    reasonCodes.push('trust_reduced:panicking');
+  } else if (emotionalState === 'confused') {
+    estimatedTrust -= 15;
+    reasonCodes.push('trust_reduced:confused');
+  } else if (emotionalState === 'skeptical') {
     estimatedTrust -= 10;
-    reasonCodes.push('panic_language_detected');
+    reasonCodes.push('trust_reduced:skeptical');
+  }
+  
+  // Reduce trust for money anxiety
+  if (hasMoneyAnxiety) {
+    estimatedTrust -= 10;
+    reasonCodes.push('money_anxiety_detected');
   }
   
   // 🔒 TRUST CAP: Apply if insufficient interaction history
@@ -156,9 +303,12 @@ function scoreSignalWithActor(
   
   estimatedTrust = Math.max(0, Math.min(100, estimatedTrust));
   
+  // Update DNA trust level
+  dna.trust_level = estimatedTrust;
+  
   // Determine trust action
   let trustAction: 'BLOCK' | 'FREE_ONLY' | 'PAID_OK';
-  if (estimatedTrust < TRUST_GATES.BLOCK_PAYMENT) {
+  if (safeModeActivated || estimatedTrust < TRUST_GATES.BLOCK_PAYMENT) {
     trustAction = 'BLOCK';
     reasonCodes.push('trust_blocked');
   } else if (estimatedTrust < TRUST_GATES.PAID_ALLOWED) {
@@ -169,21 +319,83 @@ function scoreSignalWithActor(
     reasonCodes.push('trust_paid_ok');
   }
   
-  // 5. Can Create Checkout? (with real interactionCount)
-  const canCheckout = canCreateCheckout(painScore, hasBuyingSignal, estimatedTrust, interactionCount);
+  // ===========================================
+  // 🎯 ADAPTIVE OFFER STRATEGY - Layer 4
+  // ===========================================
+  
+  const adaptiveStrategy = getAdaptiveStrategy(dna);
+  reasonCodes.push(`strategy:${adaptiveStrategy.strategy}`);
+  
+  // Check if sale is allowed using DNA rules
+  const saleCheck = canMakeSale(dna);
+  if (!saleCheck.allowed) {
+    trustAction = trustAction === 'PAID_OK' ? 'FREE_ONLY' : trustAction;
+    reasonCodes.push(`sale_blocked:${saleCheck.reason}`);
+  }
+  
+  // 5. Can Create Checkout? (with real interactionCount + DNA validation)
+  const canCheckout = !safeModeActivated && 
+                      saleCheck.allowed &&
+                      canCreateCheckout(painScore, hasBuyingSignal, estimatedTrust, interactionCount);
+  
   if (!canCheckout && trustAction === 'PAID_OK') {
     reasonCodes.push('checkout_blocked_by_requirements');
   }
   
-  // 6. Calculate composite score
+  // 6. Calculate composite score with DNA weight
   let compositeScore = 0;
-  compositeScore += (painScore / 100) * 0.4;
-  if (hasBuyingSignal) compositeScore += 0.2;
-  compositeScore += (estimatedTrust / 100) * 0.2;
-  compositeScore += sourceHealthScore * 0.1;
+  compositeScore += (painScore / 100) * 0.30;
+  if (hasBuyingSignal) compositeScore += 0.15;
+  compositeScore += (estimatedTrust / 100) * 0.25;
+  compositeScore += sourceHealthScore * 0.10;
+  
+  // DNA-based scoring adjustments
+  if (emotionalState === 'ready') compositeScore += 0.10;
+  if (buyingStyle === 'fast-buyer') compositeScore += 0.05;
+  if (safeModeActivated) compositeScore -= 0.20;
   
   const matchedKeywords = offer.keywords.filter(kw => text.includes(kw.toLowerCase()));
-  compositeScore += Math.min(0.1, matchedKeywords.length * 0.02);
+  compositeScore += Math.min(0.10, matchedKeywords.length * 0.02);
+  
+  // DNA Score: 0-100 overall quality
+  const dnaScore = Math.round(
+    (dna.trust_level * 0.3) +
+    (dna.curiosity_level * 0.2) +
+    ((100 - dna.payment_resistance_score) * 0.2) +
+    (dna.time_to_value ? 20 : 0) +
+    (fearSignals.length === 0 ? 10 : 0)
+  );
+  
+  // ===========================================
+  // 🔄 UPDATE DNA IN DATABASE - Layer 6
+  // ===========================================
+  
+  const fingerprint = computeActorFingerprint(
+    extractPlatformFromPayload(signal.payload_json || {}, signal.category),
+    extractAuthorFromPayload(signal.payload_json || {})
+  );
+  
+  // Use raw table operation with type assertion to bypass strict typing
+  await (supabase as AnySupabase).from('customer_dna').upsert({
+    actor_fingerprint: fingerprint,
+    trust_level: estimatedTrust,
+    curiosity_level: dna.curiosity_level,
+    fear_signals: dna.fear_signals,
+    buying_style: buyingStyle,
+    technical_level: dna.technical_level,
+    time_to_value: dna.time_to_value,
+    payment_resistance_score: dna.payment_resistance_score,
+    objections_history: dna.objections_history,
+    engagement_velocity: dna.engagement_velocity,
+    lifetime_value_prediction: dna.lifetime_value_prediction,
+    churn_risk: dna.churn_risk,
+    total_interactions: (dnaRecord?.total_interactions || 0) + 1,
+    total_value_received: freeValueEventsCount,
+    total_paid_usd: totalPaidUsd,
+    updated_at: new Date().toISOString(),
+  }, {
+    onConflict: 'actor_fingerprint',
+  });
   
   return {
     score: Math.min(1.0, Math.max(0, compositeScore)),
@@ -196,6 +408,41 @@ function scoreSignalWithActor(
     freeValueEventsCount,
     trustCapApplied,
     reasonCodes,
+    buyingStyle,
+    emotionalState,
+    fearDetected: fearSignals.length > 0,
+    safeModeActivated,
+    adaptiveStrategy,
+    dnaScore,
+  };
+}
+
+// Helper to create blocked results
+function createBlockedResult(reason: string, intent: string, painScore = 0): ReturnType<typeof scoreSignalWithDNA> extends Promise<infer T> ? T : never {
+  const defaultStrategy: OfferStrategy = {
+    strategy: 'educate_only',
+    reason: 'Blocked',
+    allowed_actions: [],
+    forbidden_actions: ['all'],
+  };
+  
+  return {
+    score: 0,
+    painScore,
+    trustScore: 0,
+    trustAction: 'BLOCK',
+    canCheckout: false,
+    intent,
+    interactionCount: 0,
+    freeValueEventsCount: 0,
+    trustCapApplied: false,
+    reasonCodes: [reason],
+    buyingStyle: 'unknown',
+    emotionalState: 'calm',
+    fearDetected: false,
+    safeModeActivated: false,
+    adaptiveStrategy: defaultStrategy,
+    dnaScore: 0,
   };
 }
 
@@ -299,6 +546,8 @@ Deno.serve(async (req) => {
       auto_approved: 0,
       blocked_low_trust: 0,
       blocked_low_pain: 0,
+      safe_mode_activations: 0,
+      dna_profiles_updated: 0,
     };
 
     for (const signal of signals || []) {
@@ -329,17 +578,13 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // 🔑 Actor Fingerprinting v2 - STABLE IDENTITY (platform::author only, NO URL hash)
+      // 🔑 Actor Fingerprinting - STABLE IDENTITY
       const platform = extractPlatformFromPayload(signal.payload_json || {}, signal.category);
       const author = extractAuthorFromPayload(signal.payload_json || {});
-      
-      // Use computeActorFingerprint for STABLE identity (no URL hash)
       const fingerprint = computeActorFingerprint(platform, author);
-      
-      // Also compute lead_key for decision trace (includes URL context)
       const leadKey = computeLeadKey(platform, author, signal.source_url);
       
-      // Lookup actor profile by STABLE fingerprint
+      // Lookup actor profile
       let actorProfile: ActorProfile | null = null;
       const { data: existingActor } = await supabase
         .from('actor_profiles')
@@ -349,7 +594,6 @@ Deno.serve(async (req) => {
       
       if (existingActor) {
         actorProfile = existingActor as ActorProfile;
-        // Update last_seen and increment interaction_count (this IS a real interaction - signal processed)
         await supabase.from('actor_profiles')
           .update({ 
             last_seen_at: new Date().toISOString(), 
@@ -357,7 +601,6 @@ Deno.serve(async (req) => {
           })
           .eq('id', existingActor.id);
       } else {
-        // Create new actor profile with STABLE fingerprint
         const { data: newActor } = await supabase
           .from('actor_profiles')
           .insert({ 
@@ -371,31 +614,51 @@ Deno.serve(async (req) => {
         actorProfile = newActor as ActorProfile;
       }
       
-      // Link actor to lead_key if confidence is high
+      // Link actor to lead_key
       if (actorProfile) {
         await supabase
           .from('actor_lead_links')
           .upsert({
             actor_fingerprint: fingerprint,
             lead_key: leadKey,
-            confidence: 0.9, // Signal processing = high confidence link
+            confidence: 0.9,
             last_seen_at: new Date().toISOString(),
           }, {
             onConflict: 'actor_fingerprint,lead_key',
           });
       }
 
+      // 🧬 Lookup DNA profile
+      const { data: dnaRecord } = await supabase
+        .from('customer_dna')
+        .select('*')
+        .eq('actor_fingerprint', fingerprint)
+        .maybeSingle();
+
       const sourceHealthScore = signal.offer_sources?.health_score || 0.5;
-      const scoringResult = scoreSignalWithActor(
-        signal as Signal, 
+      
+      // Score with DNA Intelligence
+      const scoringResult = await scoreSignalWithDNA(
+        supabase as AnySupabase,
+        signal as Signal,
         offer as Offer, 
         sourceHealthScore,
-        actorProfile
+        actorProfile,
+        dnaRecord as CustomerDNARecord | null
       );
       
-      const { score, painScore, trustScore, trustAction, canCheckout, intent, interactionCount, freeValueEventsCount, trustCapApplied, reasonCodes } = scoringResult;
+      const { 
+        score, painScore, trustScore, trustAction, canCheckout, intent, 
+        interactionCount, freeValueEventsCount, trustCapApplied, reasonCodes,
+        buyingStyle, emotionalState, fearDetected, safeModeActivated, adaptiveStrategy, dnaScore
+      } = scoringResult;
 
-      // 📝 Write Decision Trace (FORENSIC LOGGING) - Now with lead_key
+      if (safeModeActivated) {
+        results.safe_mode_activations++;
+      }
+      results.dna_profiles_updated++;
+
+      // 📝 Write Decision Trace with DNA data
       await supabase.from('decision_traces').insert({
         entity_type: 'signal',
         entity_id: signal.id,
@@ -413,14 +676,20 @@ Deno.serve(async (req) => {
         offer_id: offer.id,
         platform,
         actor_fingerprint: fingerprint,
-        lead_key: leadKey, // v2: separate lead_key for context tracking
+        lead_key: leadKey,
+        // DNA fields
+        buying_style: buyingStyle,
+        fear_detected: fearDetected,
+        safe_mode_activated: safeModeActivated,
+        dna_score: dnaScore,
+        emotional_state: emotionalState,
       });
       
       // Apply trust gates
       if (trustAction === 'BLOCK') {
         await supabase
           .from('demand_signals')
-          .update({ status: 'rejected', rejection_reason: 'trust_too_low' })
+          .update({ status: 'rejected', rejection_reason: safeModeActivated ? 'safe_mode_kill_gate' : 'trust_too_low' })
           .eq('id', signal.id);
         results.blocked_low_trust++;
         results.signals_processed++;
@@ -442,12 +711,25 @@ Deno.serve(async (req) => {
       const starterPrice = pricing?.starter?.price || pricing?.micro?.price || offer.min_value_usd;
       const estValue = starterPrice * (0.5 + score);
       
-      // Only auto-approve if checkout is allowed
+      // Only auto-approve if checkout is allowed AND not in safe mode
       const autoApprove = canCheckout && 
+                          !safeModeActivated &&
                           score >= (settings.auto_approve_threshold || 0.8) && 
                           estValue >= (settings.min_opportunity_value_usd || 20);
       
-      // Create opportunity with trust metadata
+      // Determine opportunity status based on adaptive strategy
+      let oppStatus: string;
+      if (autoApprove) {
+        oppStatus = 'approved';
+      } else if (safeModeActivated || trustAction === 'FREE_ONLY') {
+        oppStatus = 'free_value';
+      } else if (adaptiveStrategy.strategy === 'educate_only') {
+        oppStatus = 'nurture';
+      } else {
+        oppStatus = 'pending';
+      }
+      
+      // Create opportunity with DNA metadata
       const { error: insertError } = await supabase
         .from('opportunities')
         .insert({
@@ -457,7 +739,7 @@ Deno.serve(async (req) => {
           composite_score: score,
           est_value_usd: estValue,
           expected_value_usd: estValue,
-          status: autoApprove ? 'approved' : (trustAction === 'FREE_ONLY' ? 'free_value' : 'pending'),
+          status: oppStatus,
           auto_approved: autoApprove,
           approved_at: autoApprove ? new Date().toISOString() : null,
           metadata: {
@@ -469,7 +751,14 @@ Deno.serve(async (req) => {
             interaction_count: interactionCount,
             reason_codes: reasonCodes,
             actor_fingerprint: fingerprint,
-            scoring_version: 'trust_gated_v2_with_actor',
+            // DNA Intelligence
+            scoring_version: 'customer_dna_v1',
+            buying_style: buyingStyle,
+            emotional_state: emotionalState,
+            fear_detected: fearDetected,
+            safe_mode_activated: safeModeActivated,
+            adaptive_strategy: adaptiveStrategy.strategy,
+            dna_score: dnaScore,
           },
         });
       
@@ -496,7 +785,7 @@ Deno.serve(async (req) => {
     if (validJob) {
       await supabase.from('audit_logs').insert({
         job_id: validJob.id,
-        action: 'brain-score:trust-gated',
+        action: 'brain-score:customer-dna-v1',
         metadata: results
       });
     }
