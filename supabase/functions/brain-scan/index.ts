@@ -1,14 +1,12 @@
 /**
  * Brain Scan - RSS/Source Scanner
  * Scans all active offer_sources, extracts signals, and stores them
+ * 
+ * SECURITY: INTERNAL_CRON - Requires x-cron-secret header
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { verifyCronSecret, unauthorizedResponse, logSecurityEvent, corsHeaders } from '../_shared/auth-guards.ts';
 
 interface OfferSource {
   id: string;
@@ -119,6 +117,17 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
+
+  // Security: Verify cron secret
+  const authResult = verifyCronSecret(req);
+  if (!authResult.authorized) {
+    await logSecurityEvent(supabase, 'cron_unauthorized', {
+      endpoint: 'brain-scan',
+      error: authResult.error,
+      ip: req.headers.get('x-forwarded-for') || 'unknown',
+    });
+    return unauthorizedResponse(authResult.error!, 'brain-scan');
+  }
 
   try {
     // Check brain_enabled

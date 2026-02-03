@@ -35,7 +35,8 @@ interface SafeTransaction {
 
 // Get public client for chain verification - supports Base network
 function getPublicClient(network: string) {
-  const chainConfigs: Record<string, { chain: typeof base; rpcUrl: string }> = {
+  type ChainConfig = { chain: typeof base | typeof mainnet | typeof sepolia; rpcUrl: string };
+  const chainConfigs: Record<string, ChainConfig> = {
     base: { chain: base, rpcUrl: 'https://mainnet.base.org' },
     ethereum: { chain: mainnet, rpcUrl: 'https://eth.llamarpc.com' },
     mainnet: { chain: mainnet, rpcUrl: 'https://eth.llamarpc.com' },

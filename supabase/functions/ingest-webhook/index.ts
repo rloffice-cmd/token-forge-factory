@@ -1,14 +1,12 @@
 /**
  * Ingest Webhook - Receive and store webhooks for Offer B customers
  * Provides webhook ingestion, logging, and replay capabilities
+ * 
+ * SECURITY: WEBHOOK_EXTERNAL - Requires Bearer token + rate limiting
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-signature, x-hub-signature-256',
-};
+import { verifyWebhookToken, logSecurityEvent, getClientIP, checkRateLimit, corsHeaders } from '../_shared/auth-guards.ts';
 
 // Verify HMAC signature
 async function verifySignature(payload: string, signature: string, secret: string): Promise<boolean> {
@@ -46,6 +44,35 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   );
+
+  const clientIP = getClientIP(req);
+
+  // Security: Verify webhook token
+  const authResult = verifyWebhookToken(req);
+  if (!authResult.authorized) {
+    await logSecurityEvent(supabase, 'ingest_unauthorized', {
+      endpoint: 'ingest-webhook',
+      error: authResult.error,
+      ip: clientIP,
+    });
+    return new Response(
+      JSON.stringify({ error: authResult.error }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Rate limiting: Max 100 requests per minute per IP
+  const isRateLimited = await checkRateLimit(supabase, `ingest:${clientIP}`, 100, 1);
+  if (isRateLimited) {
+    await logSecurityEvent(supabase, 'ingest_rate_limited', {
+      endpoint: 'ingest-webhook',
+      ip: clientIP,
+    });
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded' }),
+      { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 
   try {
     // Extract endpoint ID from URL

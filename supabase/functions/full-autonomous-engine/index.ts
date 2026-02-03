@@ -2,6 +2,8 @@
  * FULL AUTONOMOUS ENGINE - MASTER PROMPT IMPLEMENTATION
  * מנוע הפצה אוטונומי מלא - ללא פרשנות, ללא אישורים
  * 
+ * SECURITY: INTERNAL_CRON - Requires x-cron-secret header
+ * 
  * PIPELINE: SCAN → ANALYZE → SCORE → GENERATE → VALIDATE → PUBLISH → MEASURE → LEARN
  * 
  * אין קיצור דרך. שלב שנכשל = עצירה וגניזה.
@@ -9,6 +11,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { verifyCronSecret, unauthorizedResponse, logSecurityEvent, corsHeaders } from '../_shared/auth-guards.ts';
 import { 
   SCORING, 
   LIMITS, 
@@ -29,11 +32,6 @@ import {
   isThrottleActive,
   getThrottleExpiry,
 } from "../_shared/master-prompt-config.ts";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 // =====================================================
 // PUBLIC API SOURCES - NO AUTH REQUIRED
@@ -149,6 +147,17 @@ serve(async (req) => {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Security: Verify cron secret
+  const authResult = verifyCronSecret(req);
+  if (!authResult.authorized) {
+    await logSecurityEvent(supabase, 'cron_unauthorized', {
+      endpoint: 'full-autonomous-engine',
+      error: authResult.error,
+      ip: req.headers.get('x-forwarded-for') || 'unknown',
+    });
+    return unauthorizedResponse(authResult.error!, 'full-autonomous-engine');
+  }
 
   const stats: EngineStats = {
     sources_scanned: 0,
