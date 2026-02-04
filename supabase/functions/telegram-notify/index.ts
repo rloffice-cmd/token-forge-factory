@@ -4,13 +4,17 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type NotificationType = 'stuck' | 'daily_report' | 'error' | 'success' | 'kill_gate' | 'cashout';
+// Types that are ALWAYS allowed even during emergency stop
+const ALWAYS_ALLOWED_TYPES = ['payment_confirmed', 'cashout', 'error', 'kill_gate', 'critical'];
+
+type NotificationType = 'stuck' | 'daily_report' | 'error' | 'success' | 'kill_gate' | 'cashout' | 'payment_confirmed' | 'critical' | string;
 
 interface NotifyRequest {
   type?: NotificationType;
@@ -25,15 +29,34 @@ serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const body: NotifyRequest = await req.json();
+    const { type = 'success', title, message, data } = body;
+
+    // ========== EMERGENCY STOP CHECK ==========
+    // Only allow critical notifications during emergency stop
+    const { data: settings } = await supabase
+      .from('brain_settings')
+      .select('emergency_stop')
+      .single();
+
+    if (settings?.emergency_stop && !ALWAYS_ALLOWED_TYPES.includes(type)) {
+      console.log(`🛑 Telegram blocked during emergency_stop: type=${type}`);
+      return new Response(
+        JSON.stringify({ success: false, reason: 'emergency_stop_active', blocked_type: type }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN');
     const TELEGRAM_CHAT_ID = Deno.env.get('TELEGRAM_CHAT_ID');
 
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
       throw new Error('Missing Telegram credentials');
     }
-
-    const body: NotifyRequest = await req.json();
-    const { type = 'success', title, message, data } = body;
 
     // If message contains HTML tags, send as HTML; otherwise use title + message format
     const isHtmlMessage = message.includes('<b>') || message.includes('<i>');
