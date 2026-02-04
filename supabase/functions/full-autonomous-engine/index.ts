@@ -159,6 +159,20 @@ serve(async (req) => {
     return unauthorizedResponse(authResult.error!, 'full-autonomous-engine');
   }
 
+  // ========== EMERGENCY STOP CHECK (ABSOLUTE FIRST CHECK) ==========
+  const { data: emergencyCheck } = await supabase
+    .from('brain_settings')
+    .select('emergency_stop')
+    .single();
+
+  if (emergencyCheck?.emergency_stop) {
+    console.log('🛑 EMERGENCY STOP ACTIVE - All operations halted');
+    return new Response(
+      JSON.stringify({ success: false, reason: 'emergency_stop_active' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   const stats: EngineStats = {
     sources_scanned: 0,
     items_analyzed: 0,

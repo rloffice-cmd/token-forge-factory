@@ -157,6 +157,20 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
+    // ========== EMERGENCY STOP CHECK (BEFORE ANYTHING ELSE) ==========
+    const { data: settings } = await supabase
+      .from('brain_settings')
+      .select('brain_enabled, emergency_stop, scan_enabled')
+      .single();
+
+    if (settings?.emergency_stop || !settings?.brain_enabled) {
+      console.log('🛑 System stopped: emergency_stop or brain_disabled');
+      return new Response(
+        JSON.stringify({ success: false, reason: settings?.emergency_stop ? 'emergency_stop' : 'brain_disabled' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { targets = SCAN_TARGETS.slice(0, 3), deep_scan = false } = body;
 

@@ -130,11 +130,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Check brain_enabled
+    // ========== EMERGENCY STOP CHECK (ABSOLUTE FIRST) ==========
     const { data: settings } = await supabase
       .from('brain_settings')
-      .select('brain_enabled, scan_enabled')
+      .select('brain_enabled, scan_enabled, emergency_stop')
       .single();
+
+    if (settings?.emergency_stop) {
+      console.log('🛑 EMERGENCY STOP ACTIVE - All operations halted');
+      return new Response(
+        JSON.stringify({ success: false, reason: 'emergency_stop_active' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     
     if (!settings?.brain_enabled || !settings?.scan_enabled) {
       // Audit log
