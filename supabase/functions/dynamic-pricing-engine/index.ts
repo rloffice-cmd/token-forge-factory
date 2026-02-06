@@ -62,6 +62,20 @@ serve(async (req) => {
       mustEnv("SUPABASE_SERVICE_ROLE_KEY")
     );
 
+    // ========== EMERGENCY STOP CHECK ==========
+    const { data: settings } = await supabase
+      .from("brain_settings")
+      .select("brain_enabled, emergency_stop")
+      .single();
+
+    if (settings?.emergency_stop || !settings?.brain_enabled) {
+      console.log("🛑 Dynamic Pricing Engine blocked: emergency_stop or brain_disabled");
+      return new Response(
+        JSON.stringify({ success: false, reason: "emergency_stop_active" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const action = body.action || "optimize";
     const dryRun = body.dry_run ?? true; // Default to dry run for safety
