@@ -48,6 +48,20 @@ serve(async (req) => {
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseKey);
 
+  // ========== EMERGENCY STOP CHECK ==========
+  const { data: settings } = await supabase
+    .from('brain_settings')
+    .select('brain_enabled, emergency_stop')
+    .single();
+
+  if (settings?.emergency_stop || !settings?.brain_enabled) {
+    console.log('🛑 Auto Pipeline blocked: emergency_stop or brain_disabled');
+    return new Response(
+      JSON.stringify({ success: false, reason: 'emergency_stop_active' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   try {
     console.log('🚀 Auto Pipeline starting...');
 
