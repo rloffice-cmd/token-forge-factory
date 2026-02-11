@@ -43,10 +43,9 @@ export default function PartnerLanding() {
             >
               <Linkedin className="w-5 h-5" />
             </a>
-            <Link to="/forge/money-machine">
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <Monitor className="w-4 h-4" />
-                Console
+            <Link to="/login">
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+                Login
               </Button>
             </Link>
           </div>

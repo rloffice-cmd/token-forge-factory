@@ -1,8 +1,26 @@
 User-agent: Googlebot
 Allow: /
+Disallow: /forge/
+Disallow: /admin/
+Disallow: /brain
+Disallow: /console
+Disallow: /dashboard
+Disallow: /intelligence
+Disallow: /discovery
+Disallow: /system
+Disallow: /treasury
+Disallow: /settings
+Disallow: /jobs
+Disallow: /sources
+Disallow: /micro/admin
+Disallow: /login
 
 User-agent: Bingbot
 Allow: /
+Disallow: /forge/
+Disallow: /admin/
+Disallow: /brain
+Disallow: /console
 
 User-agent: Twitterbot
 Allow: /
@@ -12,3 +30,17 @@ Allow: /
 
 User-agent: *
 Allow: /
+Disallow: /forge/
+Disallow: /admin/
+Disallow: /brain
+Disallow: /console
+Disallow: /dashboard
+Disallow: /intelligence
+Disallow: /discovery
+Disallow: /system
+Disallow: /treasury
+Disallow: /settings
+Disallow: /jobs
+Disallow: /sources
+Disallow: /micro/admin
+Disallow: /login
