@@ -110,16 +110,16 @@ export default function Dashboard() {
           </p>
         </div>
 
-        {/* Standby Mode Banner */}
-        <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 flex items-center gap-3">
-          <Radio className="w-5 h-5 text-primary animate-pulse" />
+        {/* Partial Launch Banner */}
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 flex items-center gap-3">
+          <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
           <div className="flex-1">
-            <h3 className="font-semibold text-primary">⏸️ Standby Mode: Leads Queued</h3>
+            <h3 className="font-semibold text-emerald-400">🚀 Partial Launch: Woodpecker Engine Active | Others Queued</h3>
             <p className="text-sm text-muted-foreground">
-              Signal scanning active. Brain processing matched leads. Ready for launch — awaiting approval.
+              Signal scanning active. Brain matching all leads. Outreach dispatching for Woodpecker only — other partners on standby.
             </p>
           </div>
-          <Clock className="w-5 h-5 text-primary/50" />
+          <Clock className="w-5 h-5 text-emerald-500/50" />
         </div>
 
         {/* Activation Checklist */}
