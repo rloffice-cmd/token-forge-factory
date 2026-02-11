@@ -25,12 +25,10 @@ interface AppSidebarProps {
 }
 
 const navItems = [
+  { icon: Zap, label: 'Token Forge', href: '/forge/money-machine' },
   { icon: DollarSign, label: 'Money Machine', href: '/' },
   { icon: Brain, label: 'Brain Dashboard', href: '/brain' },
-  { icon: Compass, label: 'אינטליגנציה', href: '/intelligence' },
   { icon: Rss, label: 'מקורות', href: '/sources' },
-  { icon: LayoutDashboard, label: 'דשבורד', href: '/dashboard' },
-  { icon: FileCode2, label: 'ג׳ובים', href: '/jobs' },
   { icon: Wallet, label: 'קופה', href: '/treasury' },
   { icon: Activity, label: 'מערכת', href: '/system' },
   { icon: Settings, label: 'הגדרות', href: '/settings' },

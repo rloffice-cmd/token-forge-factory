@@ -1430,6 +1430,7 @@ export type Database = {
           detected_at: string
           external_id: string | null
           id: string
+          m2m_status: string | null
           payload_json: Json
           query_text: string
           rejection_reason: string | null
@@ -1445,6 +1446,7 @@ export type Database = {
           detected_at?: string
           external_id?: string | null
           id?: string
+          m2m_status?: string | null
           payload_json?: Json
           query_text: string
           rejection_reason?: string | null
@@ -1460,6 +1462,7 @@ export type Database = {
           detected_at?: string
           external_id?: string | null
           id?: string
+          m2m_status?: string | null
           payload_json?: Json
           query_text?: string
           rejection_reason?: string | null
@@ -2336,6 +2339,123 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      m2m_ledger: {
+        Row: {
+          actual_revenue_usd: number | null
+          affiliate_link: string
+          confirmed_at: string | null
+          created_at: string
+          dispatched_at: string
+          estimated_bounty_usd: number
+          id: string
+          lead_context: string | null
+          matched_keywords: string[] | null
+          partner_id: string | null
+          postback_log: Json | null
+          signal_id: string | null
+          status: string
+        }
+        Insert: {
+          actual_revenue_usd?: number | null
+          affiliate_link: string
+          confirmed_at?: string | null
+          created_at?: string
+          dispatched_at?: string
+          estimated_bounty_usd?: number
+          id?: string
+          lead_context?: string | null
+          matched_keywords?: string[] | null
+          partner_id?: string | null
+          postback_log?: Json | null
+          signal_id?: string | null
+          status?: string
+        }
+        Update: {
+          actual_revenue_usd?: number | null
+          affiliate_link?: string
+          confirmed_at?: string | null
+          created_at?: string
+          dispatched_at?: string
+          estimated_bounty_usd?: number
+          id?: string
+          lead_context?: string | null
+          matched_keywords?: string[] | null
+          partner_id?: string | null
+          postback_log?: Json | null
+          signal_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "m2m_ledger_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "m2m_partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "m2m_ledger_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "demand_signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      m2m_partners: {
+        Row: {
+          affiliate_base_url: string
+          api_key_encrypted: string | null
+          category_tags: string[]
+          commission_rate: number
+          commission_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          keyword_triggers: string[]
+          name: string
+          postback_url: string | null
+          total_conversions: number
+          total_dispatches: number
+          total_revenue_usd: number
+          updated_at: string
+        }
+        Insert: {
+          affiliate_base_url: string
+          api_key_encrypted?: string | null
+          category_tags?: string[]
+          commission_rate?: number
+          commission_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          keyword_triggers?: string[]
+          name: string
+          postback_url?: string | null
+          total_conversions?: number
+          total_dispatches?: number
+          total_revenue_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          affiliate_base_url?: string
+          api_key_encrypted?: string | null
+          category_tags?: string[]
+          commission_rate?: number
+          commission_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          keyword_triggers?: string[]
+          name?: string
+          postback_url?: string | null
+          total_conversions?: number
+          total_dispatches?: number
+          total_revenue_usd?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       marketing_insights: {
         Row: {
