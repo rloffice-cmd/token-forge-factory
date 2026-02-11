@@ -3,7 +3,7 @@ import { StatCard } from '@/components/StatCard';
 import { JobsTable } from '@/components/JobsTable';
 import { StatusChart } from '@/components/StatusChart';
 import { ActivationChecklist } from '@/components/ActivationChecklist';
-import { FileCode2, Percent, Coins, AlertTriangle, Loader2 } from 'lucide-react';
+import { FileCode2, Percent, Coins, AlertTriangle, Loader2, Radio, Clock } from 'lucide-react';
 import { useDashboardStats } from '@/hooks/useDatabase';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -108,6 +108,18 @@ export default function Dashboard() {
           <p className="text-muted-foreground mt-1 text-sm lg:text-base">
             סקירה כללית של מערכת Token Forge Factory
           </p>
+        </div>
+
+        {/* Standby Mode Banner */}
+        <div className="bg-primary/10 border border-primary/30 rounded-lg p-4 flex items-center gap-3">
+          <Radio className="w-5 h-5 text-primary animate-pulse" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-primary">⏸️ Standby Mode: Leads Queued</h3>
+            <p className="text-sm text-muted-foreground">
+              Signal scanning active. Brain processing matched leads. Ready for launch — awaiting approval.
+            </p>
+          </div>
+          <Clock className="w-5 h-5 text-primary/50" />
         </div>
 
         {/* Activation Checklist */}
