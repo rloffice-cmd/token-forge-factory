@@ -10,19 +10,33 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSignup, setIsSignup] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      toast({ title: 'Authentication failed', description: error.message, variant: 'destructive' });
+    if (isSignup) {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin },
+      });
+      if (error) {
+        toast({ title: 'Signup failed', description: error.message, variant: 'destructive' });
+      } else {
+        toast({ title: 'Account created', description: 'You are now signed in.' });
+        navigate('/forge/money-machine');
+      }
     } else {
-      navigate('/forge/money-machine');
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        toast({ title: 'Authentication failed', description: error.message, variant: 'destructive' });
+      } else {
+        navigate('/forge/money-machine');
+      }
     }
     setLoading(false);
   };
@@ -35,7 +49,7 @@ export default function Login() {
           <span className="font-semibold text-lg tracking-tight">Token Forge AI</span>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             type="email"
             placeholder="Email"
@@ -49,12 +63,20 @@ export default function Login() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={6}
           />
           <Button type="submit" className="w-full gap-2" disabled={loading}>
             <LogIn className="w-4 h-4" />
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Processing...' : isSignup ? 'Create Account' : 'Sign In'}
           </Button>
         </form>
+
+        <button
+          onClick={() => setIsSignup(!isSignup)}
+          className="w-full text-center text-sm text-muted-foreground hover:text-foreground mt-4 transition-colors"
+        >
+          {isSignup ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+        </button>
       </div>
     </div>
   );
