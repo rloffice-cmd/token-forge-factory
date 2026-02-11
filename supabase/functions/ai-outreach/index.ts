@@ -14,6 +14,11 @@ const corsHeaders = {
 
 // Partner-specific selling contexts
 const PARTNER_CONTEXTS: Record<string, { pain_points: string[]; key_features: string; positioning: string }> = {
+  woodpecker: {
+    pain_points: ["cold email deliverability", "emails landing in spam", "low reply rates", "scaling outbound", "email warmup", "follow-up sequences", "inbox placement"],
+    key_features: "automated cold email sequences with built-in deliverability optimization, email warmup, and A/B testing",
+    positioning: "a cold email platform that keeps your emails out of spam and automates multi-step follow-ups with real deliverability intelligence",
+  },
   hubspot: {
     pain_points: ["scaling sales", "organizing messy leads", "CRM chaos", "losing track of prospects", "manual follow-ups"],
     key_features: "automated lead management and sales pipeline tracking",
@@ -98,13 +103,19 @@ serve(async (req) => {
       );
     }
 
-    console.log(`📧 Processing ${leadsToProcess.length} leads against ${partners.length} M2M partners...`);
+    // SELECTIVE OUTREACH: Only allow outreach for approved partners
+    const OUTREACH_ENABLED_PARTNERS = ['woodpecker'];
+    const outreachPartners = partners.filter(p => 
+      OUTREACH_ENABLED_PARTNERS.includes(p.name.toLowerCase())
+    );
+
+    console.log(`📧 Processing ${leadsToProcess.length} leads against ${outreachPartners.length} outreach-enabled partners (${partners.length} total tracked)...`);
 
     const results: Array<{ lead_id: string; partner: string; dispatched: boolean }> = [];
 
     for (const lead of leadsToProcess) {
-      // Match lead to best partner via keyword/category overlap
-      const matched = matchPartner(lead, partners as MatchedPartner[]);
+      // Match lead to best outreach-enabled partner only
+      const matched = matchPartner(lead, outreachPartners as MatchedPartner[]);
       if (!matched) {
         console.log(`⏭️ No partner match for: ${lead.title}`);
         continue;

@@ -210,9 +210,17 @@ export default function M2MDashboard() {
                         const cvr = p.total_dispatches > 0
                           ? ((p.total_conversions / p.total_dispatches) * 100).toFixed(1)
                           : '—';
+                        const isLive = p.name.toLowerCase() === 'woodpecker';
                         return (
-                          <tr key={p.id} className="border-b border-border/30 hover:bg-muted/20 transition-colors">
-                            <td className="py-3 pr-4 font-medium">{p.name}</td>
+                          <tr key={p.id} className={`border-b border-border/30 hover:bg-muted/20 transition-colors ${isLive ? 'bg-emerald-500/5' : ''}`}>
+                            <td className="py-3 pr-4 font-medium flex items-center gap-2">
+                              {p.name}
+                              {isLive && (
+                                <Badge variant="outline" className="border-emerald-500/50 text-emerald-400 bg-emerald-500/10 text-[10px] px-1.5 py-0">
+                                  <Zap className="w-2.5 h-2.5 mr-0.5" />REVENUE LIVE
+                                </Badge>
+                              )}
+                            </td>
                             <td className="py-3 px-2 text-right text-amber-400">${p.commission_rate}</td>
                             <td className="py-3 px-2 text-right">{p.total_dispatches}</td>
                             <td className="py-3 px-2 text-right text-emerald-400">{p.total_conversions}</td>
