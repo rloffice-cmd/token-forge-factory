@@ -1,6 +1,7 @@
 /**
- * AI Outreach System - Autonomous Contact & Follow-up
- * יצירת הודעות מותאמות אישית ושליחה אוטומטית ללידים
+ * AI Outreach System - Value-First M2M Mode
+ * Matches signals to partners, generates "Solution Provider" messages
+ * with dynamic affiliate links from m2m_partners table.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -11,23 +12,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Outreach templates
-const OUTREACH_PERSONAS = {
-  helpful: {
-    tone: 'friendly, helpful, not salesy',
-    style: 'Offer genuine value first, mention solution naturally',
+// Partner-specific selling contexts
+const PARTNER_CONTEXTS: Record<string, { pain_points: string[]; key_features: string; positioning: string }> = {
+  hubspot: {
+    pain_points: ["scaling sales", "organizing messy leads", "CRM chaos", "losing track of prospects", "manual follow-ups"],
+    key_features: "automated lead management and sales pipeline tracking",
+    positioning: "a platform that organizes your entire sales pipeline and automates follow-ups",
   },
-  expert: {
-    tone: 'professional, knowledgeable',
-    style: 'Share insight about their problem, offer expertise',
+  "monday.com": {
+    pain_points: ["workflow bottlenecks", "team visibility", "project tracking", "task management", "cross-team coordination"],
+    key_features: "visual workflow automation and team collaboration",
+    positioning: "a tool that gives your team full visibility on every project with automated workflows",
   },
-  curious: {
-    tone: 'curious, engaging',
-    style: 'Ask questions about their challenge, show interest',
+  vercel: {
+    pain_points: ["instant deployment", "serverless performance", "slow CI/CD", "hosting complexity", "frontend scaling"],
+    key_features: "zero-config deployment and edge-optimized performance",
+    positioning: "a platform that deploys your code instantly with built-in serverless infrastructure",
   },
 };
 
-interface Lead {
+interface SignalLead {
   id?: string;
   source_url: string;
   source_type: string;
@@ -35,17 +39,17 @@ interface Lead {
   content: string;
   author?: string | null;
   username?: string | null;
-  source?: string | null;
   relevance_score: number;
+  category?: string | null;
 }
 
-interface OutreachMessage {
-  lead_id: string;
-  message_type: 'initial' | 'follow_up_1' | 'follow_up_2' | 'final';
-  channel: string;
-  content: string;
-  persona: string;
-  scheduled_for: string;
+interface MatchedPartner {
+  id: string;
+  name: string;
+  affiliate_base_url: string;
+  commission_rate: number;
+  category_tags: string[];
+  keyword_triggers: string[];
 }
 
 serve(async (req) => {
@@ -56,24 +60,21 @@ serve(async (req) => {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')!;
-  
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
     const { leads: inputLeads, mode = 'initial' } = await req.json();
-    
+
     // Get leads to process
-    let leadsToProcess: Lead[] = inputLeads || [];
-    
+    let leadsToProcess: SignalLead[] = inputLeads || [];
+
     if (!inputLeads) {
-      // Fetch unprocessed leads from DB
       const { data: dbLeads } = await supabase
         .from('leads')
         .select('*')
         .eq('status', 'new')
         .order('relevance_score', { ascending: false })
         .limit(10);
-      
       leadsToProcess = dbLeads || [];
     }
 
@@ -84,67 +85,86 @@ serve(async (req) => {
       );
     }
 
-    console.log(`📧 Processing ${leadsToProcess.length} leads for outreach...`);
+    // Load active M2M partners
+    const { data: partners } = await supabase
+      .from('m2m_partners')
+      .select('*')
+      .eq('is_active', true);
 
-    const outreachMessages: OutreachMessage[] = [];
+    if (!partners || partners.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No active M2M partners configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    console.log(`📧 Processing ${leadsToProcess.length} leads against ${partners.length} M2M partners...`);
+
+    const results: Array<{ lead_id: string; partner: string; dispatched: boolean }> = [];
 
     for (const lead of leadsToProcess) {
-      // Select persona based on lead characteristics
-      const persona = lead.relevance_score >= 80 ? 'expert' : 
-                      lead.relevance_score >= 60 ? 'helpful' : 'curious';
-      
-      const personaConfig = OUTREACH_PERSONAS[persona];
-      
-      // Generate personalized message with AI
+      // Match lead to best partner via keyword/category overlap
+      const matched = matchPartner(lead, partners as MatchedPartner[]);
+      if (!matched) {
+        console.log(`⏭️ No partner match for: ${lead.title}`);
+        continue;
+      }
+
+      const partnerKey = matched.name.toLowerCase();
+      const context = PARTNER_CONTEXTS[partnerKey] || {
+        pain_points: matched.keyword_triggers || [],
+        key_features: `solutions in ${matched.category_tags?.join(', ') || 'your area'}`,
+        positioning: `a tool that handles ${matched.category_tags?.[0] || 'this'} effectively`,
+      };
+
+      // Generate Value-First message via AI
       const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
-          'X-Title': 'AI Outreach',
+          'X-Title': 'M2M Outreach',
         },
         body: JSON.stringify({
           model: 'google/gemini-3-flash-preview',
           messages: [
             {
               role: 'system',
-              content: `You are an expert at writing engaging, non-spammy outreach messages.
+              content: `You write short, human, non-spammy outreach messages using the "Solution Provider" framework.
 
-Your tone: ${personaConfig.tone}
-Your style: ${personaConfig.style}
+STRUCTURE (follow exactly):
+1. OBSERVATION: "I saw your [source] about [specific problem]."
+2. VALIDATION: "That's a common challenge in [category]."
+3. SOLUTION: "I found this [positioning] that specifically handles [key feature]."
+4. LINK: {{AFFILIATE_LINK}}
+5. SOFT CLOSE: "Thought it might save you some time."
 
-CRITICAL LANGUAGE RULE:
-- First, detect the language of the lead's post/question
-- Write your response IN THE SAME LANGUAGE as the lead
-- If language detection is unclear, default to English
-- NEVER mention AI, bots, or automation
+PARTNER CONTEXT for ${matched.name}:
+- Pain points to reference: ${context.pain_points.join(', ')}
+- Key features: ${context.key_features}
+- Positioning: ${context.positioning}
 
-Rules:
-1. NEVER be pushy or salesy
-2. Reference their specific problem/question
-3. Offer genuine value or insight
-4. Keep it SHORT (2-3 sentences max)
-5. End with a soft call-to-action (question, not demand)
-6. Sound human, not like a bot
-7. Match the lead's language exactly
+CRITICAL RULES:
+- Detect the lead's language and write IN THAT LANGUAGE
+- Keep it under 4 sentences (excluding the link line)
+- Sound like a helpful peer, NOT a marketer
+- NEVER mention commissions, affiliates, or automation
+- Reference their SPECIFIC problem from the post
+- The link line should be on its own: just the URL, no markdown
 
-Our service: Developer tools that help startups ship faster.
-
-Return JSON with:
-- message: The outreach message (in the lead's language)
-- subject: Short subject line (if email, in the lead's language)
-- hook: Why this message should work
-- detected_language: The language you detected (e.g., "en", "he", "es", "de")`
+Return JSON:
+- message: the full outreach message with {{AFFILIATE_LINK}} placeholder
+- detected_language: ISO code (en, he, es, de, etc.)
+- hook_reason: one sentence on why this message should convert`
             },
             {
               role: 'user',
-              content: `Lead context:
-Source: ${lead.source_type || 'unknown'}
-Their post/question: "${lead.title || 'No title'}"
-Details: "${lead.content ? lead.content.slice(0, 500) : 'No details available'}"
-Author: ${lead.author || 'Unknown'}
-
-Detect the language of this content and write an outreach message IN THAT LANGUAGE for ${lead.source_type === 'reddit' ? 'Reddit comment/DM' : 'direct message'}.`
+              content: `Lead:
+Source: ${lead.source_type || 'forum'}
+Post title: "${lead.title || 'No title'}"
+Content: "${(lead.content || '').slice(0, 600)}"
+Author: ${lead.author || lead.username || 'Unknown'}
+Category: ${lead.category || 'General'}`
             }
           ],
           response_format: { type: 'json_object' },
@@ -152,121 +172,116 @@ Detect the language of this content and write an outreach message IN THAT LANGUA
       });
 
       if (!aiResponse.ok) {
-        console.warn(`AI failed for lead: ${lead.title}`);
+        console.warn(`⚠️ AI generation failed for lead: ${lead.title}`);
         continue;
       }
 
       const aiData = await aiResponse.json();
-      const messageData = JSON.parse(aiData.choices?.[0]?.message?.content || '{}');
-      
-      if (messageData.message) {
-        const outreach: OutreachMessage = {
-          lead_id: lead.id || crypto.randomUUID(),
-          message_type: 'initial',
-          channel: lead.source_type,
-          content: messageData.message,
-          persona: persona,
-          scheduled_for: new Date().toISOString(),
-        };
-        
-        outreachMessages.push(outreach);
-        
-        // Save to outreach queue
-        await supabase.from('outreach_queue').insert({
-          lead_id: lead.id,
-          source_url: lead.source_url,
-          message_type: outreach.message_type,
-          channel: outreach.channel,
-          message_content: outreach.content,
-          subject: messageData.subject,
-          persona: outreach.persona,
-          status: 'queued',
-          scheduled_for: outreach.scheduled_for,
-        });
-        
-        // Update lead status to a valid status value
-        if (lead.id) {
-          await supabase
-            .from('leads')
-            .update({ status: 'contacted' })
-            .eq('id', lead.id);
-        }
+      const parsed = JSON.parse(aiData.choices?.[0]?.message?.content || '{}');
+
+      if (!parsed.message) continue;
+
+      // Inject actual affiliate link
+      const finalMessage = parsed.message.replace(/\{\{AFFILIATE_LINK\}\}/g, matched.affiliate_base_url);
+      const leadId = lead.id || crypto.randomUUID();
+
+      // Save to outreach queue
+      await supabase.from('outreach_queue').insert({
+        lead_id: leadId,
+        source_url: lead.source_url,
+        message_type: 'initial',
+        channel: lead.source_type,
+        message_content: finalMessage,
+        persona: 'solution_provider',
+        status: 'queued',
+        scheduled_for: new Date().toISOString(),
+      });
+
+      // Record in M2M ledger
+      await supabase.from('m2m_ledger').insert({
+        signal_id: leadId,
+        partner_id: matched.id,
+        affiliate_link_sent: matched.affiliate_base_url,
+        status: 'dispatched',
+        estimated_bounty_usd: matched.commission_rate,
+      });
+
+      // Update partner dispatch count
+      await supabase.rpc('increment_partner_dispatches', { partner_row_id: matched.id }).catch(() => {
+        // RPC may not exist yet, fallback silent
+      });
+
+      // Update lead status
+      if (lead.id) {
+        await supabase.from('leads').update({ status: 'contacted' }).eq('id', lead.id);
       }
+
+      results.push({ lead_id: leadId, partner: matched.name, dispatched: true });
+      console.log(`✅ Dispatched: ${lead.title} → ${matched.name}`);
     }
 
-    // Generate follow-up sequences for high-value leads
-    const highValueLeads = leadsToProcess.filter(l => l.relevance_score >= 75);
-    
-    for (const lead of highValueLeads) {
-      // Schedule follow-ups
-      const followUpDays = [2, 5, 10]; // Days after initial contact
-      
-      for (let i = 0; i < followUpDays.length; i++) {
+    // Schedule follow-ups for dispatched leads (days 2, 5)
+    for (const r of results) {
+      for (const dayOffset of [2, 5]) {
         const scheduledDate = new Date();
-        scheduledDate.setDate(scheduledDate.getDate() + followUpDays[i]);
-        
+        scheduledDate.setDate(scheduledDate.getDate() + dayOffset);
         await supabase.from('outreach_queue').insert({
-          lead_id: lead.id,
-          source_url: lead.source_url,
-          message_type: i === 0 ? 'follow_up_1' : i === 1 ? 'follow_up_2' : 'final',
-          channel: lead.source_type,
-          message_content: null, // Will be generated when it's time to send
+          lead_id: r.lead_id,
+          message_type: dayOffset === 2 ? 'follow_up_1' : 'follow_up_2',
+          channel: 'auto',
           status: 'scheduled',
           scheduled_for: scheduledDate.toISOString(),
         });
       }
     }
 
-    // Send Telegram notification for hot leads
-    const hotLeads = leadsToProcess.filter(l => l.relevance_score >= 80);
-    if (hotLeads.length > 0) {
-      const hotLeadsSummary = hotLeads
-        .map(l => `• ${l.title || l.author || l.username || l.source || 'Unknown Lead'} (${l.relevance_score}%)`)
-        .join('\n');
-      
-      await supabase.functions.invoke('telegram-notify', {
-        body: {
-          message: `🎯 <b>Hot Leads Found!</b>\n\n${hotLeadsSummary}\n\n📧 Outreach queued automatically`,
-          type: 'lead_alert',
-        },
-      });
-    }
-
-    // Audit log - get a valid job_id
-    const { data: validJob } = await supabase
-      .from('jobs')
-      .select('id')
-      .limit(1)
-      .single();
-    
-    if (validJob) {
-      await supabase.from('audit_logs').insert({
-        job_id: validJob.id,
-        action: 'outreach_generated',
-        metadata: {
-          leads_processed: leadsToProcess.length,
-          messages_created: outreachMessages.length,
-          hot_leads: hotLeads.length,
-        },
-      });
-    }
-
     return new Response(
       JSON.stringify({
         success: true,
         leads_processed: leadsToProcess.length,
-        messages_created: outreachMessages.length,
-        hot_leads_alerted: hotLeads.length,
+        dispatched: results.length,
+        partners_used: [...new Set(results.map(r => r.partner))],
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
     console.error('AI Outreach error:', error);
-    
     return new Response(
       JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
+
+/** Match a lead to the best M2M partner by keyword/category overlap */
+function matchPartner(lead: SignalLead, partners: MatchedPartner[]): MatchedPartner | null {
+  const text = `${lead.title || ''} ${lead.content || ''} ${lead.category || ''}`.toLowerCase();
+  let bestMatch: MatchedPartner | null = null;
+  let bestScore = 0;
+
+  for (const p of partners) {
+    let score = 0;
+    // Check keyword triggers
+    for (const kw of (p.keyword_triggers || [])) {
+      if (text.includes(kw.toLowerCase())) score += 3;
+    }
+    // Check category tags
+    for (const tag of (p.category_tags || [])) {
+      if (text.includes(tag.toLowerCase())) score += 2;
+    }
+    // Check partner name
+    if (text.includes(p.name.toLowerCase())) score += 5;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = p;
+    }
+  }
+
+  // Fallback: if no keyword match, pick highest commission partner
+  if (!bestMatch && partners.length > 0) {
+    bestMatch = partners.reduce((a, b) => a.commission_rate > b.commission_rate ? a : b);
+  }
+
+  return bestMatch;
+}
