@@ -18,6 +18,8 @@ import {
   ArrowDownRight,
   Radio,
   Shield,
+  PieChart as PieIcon,
+  Clock,
 } from 'lucide-react';
 import {
   BarChart,
@@ -27,6 +29,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  PieChart,
+  Pie,
 } from 'recharts';
 
 interface PartnerRow {
@@ -50,6 +54,12 @@ interface LedgerRow {
   partner_id: string;
 }
 
+interface OutreachJob {
+  intent_topic: string;
+  status: string;
+  confidence: number;
+}
+
 const CHART_COLORS = [
   'hsl(142, 71%, 45%)',
   'hsl(199, 89%, 48%)',
@@ -60,6 +70,21 @@ const CHART_COLORS = [
   'hsl(24, 95%, 53%)',
   'hsl(290, 65%, 55%)',
 ];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Security': 'hsl(346, 87%, 56%)',
+  'Email Marketing': 'hsl(142, 71%, 45%)',
+  'Webhooks': 'hsl(199, 89%, 48%)',
+  'Other': 'hsl(262, 83%, 58%)',
+};
+
+function categorizeIntent(topic: string): string {
+  const t = topic.toLowerCase();
+  if (t.includes('wallet') || t.includes('security') || t.includes('guardian') || t.includes('risk')) return 'Security';
+  if (t.includes('email') || t.includes('cold') || t.includes('outreach') || t.includes('deliverability') || t.includes('woodpecker')) return 'Email Marketing';
+  if (t.includes('webhook') || t.includes('replay')) return 'Webhooks';
+  return 'Other';
+}
 
 export default function M2MDashboard() {
   const { data: partners = [] } = useQuery<PartnerRow[]>({
@@ -74,6 +99,17 @@ export default function M2MDashboard() {
     },
   });
 
+  const { data: allPartners = [] } = useQuery<PartnerRow[]>({
+    queryKey: ['m2m-partners-all'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('m2m_partners')
+        .select('id, name, commission_rate, total_dispatches, total_conversions, total_revenue_usd, category_tags, is_active')
+        .order('name');
+      return (data as any[]) || [];
+    },
+  });
+
   const { data: ledger = [] } = useQuery<LedgerRow[]>({
     queryKey: ['m2m-ledger-recent'],
     queryFn: async () => {
@@ -82,6 +118,19 @@ export default function M2MDashboard() {
         .select('id, status, estimated_bounty_usd, actual_revenue_usd, dispatched_at, confirmed_at, partner_id')
         .order('created_at', { ascending: false })
         .limit(200);
+      return (data as any[]) || [];
+    },
+  });
+
+  // Fetch outreach jobs for category distribution
+  const { data: outreachJobs = [] } = useQuery<OutreachJob[]>({
+    queryKey: ['outreach-jobs-categories'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('outreach_jobs')
+        .select('intent_topic, status, confidence')
+        .order('created_at', { ascending: false })
+        .limit(500);
       return (data as any[]) || [];
     },
   });
@@ -113,6 +162,26 @@ export default function M2MDashboard() {
       bounty: p.commission_rate,
     }));
 
+  // Lead Category Distribution data
+  const categoryMap: Record<string, number> = {};
+  outreachJobs.forEach((j) => {
+    const cat = categorizeIntent(j.intent_topic || '');
+    categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+  });
+  const categoryChartData = Object.entries(categoryMap).map(([name, value]) => ({
+    name,
+    value,
+    fill: CATEGORY_COLORS[name] || CATEGORY_COLORS['Other'],
+  }));
+
+  // Highest confidence security lead
+  const securityLeads = outreachJobs.filter(
+    (j) => categorizeIntent(j.intent_topic || '') === 'Security' && j.status === 'queued' && j.confidence >= 0.85
+  );
+
+  // Standby partners (inactive)
+  const standbyPartners = allPartners.filter((p) => !p.is_active);
+
   // Recent ledger activity
   const recentActivity = ledger.slice(0, 10);
 
@@ -130,10 +199,32 @@ export default function M2MDashboard() {
             </h1>
             <p className="text-muted-foreground mt-1">Pay-Per-Lead Command Center · Autonomous Bounty Tracking</p>
           </div>
-          <Badge variant="outline" className="border-emerald-500/50 text-emerald-400 bg-emerald-500/10">
-            <Zap className="w-3 h-3 mr-1" /> {partners.length} Partners Active
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="border-emerald-500/50 text-emerald-400 bg-emerald-500/10">
+              <Zap className="w-3 h-3 mr-1" /> {partners.length} Partners Active
+            </Badge>
+            {standbyPartners.length > 0 && (
+              <Badge variant="outline" className="border-amber-500/50 text-amber-400 bg-amber-500/10">
+                <Clock className="w-3 h-3 mr-1" /> {standbyPartners.length} Standby
+              </Badge>
+            )}
+          </div>
         </div>
+
+        {/* Security Lead Alert */}
+        {securityLeads.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 flex items-center gap-3">
+            <Shield className="w-5 h-5 text-amber-400 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-300">
+                {securityLeads.length} High-Intent Security Lead{securityLeads.length > 1 ? 's' : ''} — Awaiting Security Partner
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Confidence ≥ 85%. Preserved in queue until a relevant partner (e.g. NordLayer) is activated.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* KPI Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -235,9 +326,79 @@ export default function M2MDashboard() {
                   </table>
                 </div>
               )}
+
+              {/* Standby Partners */}
+              {standbyPartners.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border/30">
+                  <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Standby Partners</p>
+                  <div className="flex flex-wrap gap-2">
+                    {standbyPartners.map((p) => (
+                      <Badge key={p.id} variant="outline" className="border-amber-500/30 text-amber-400/70 bg-amber-500/5 text-xs">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {p.name} — Awaiting Link
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
+          {/* Lead Category Distribution */}
+          <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <PieIcon className="w-5 h-5 text-violet-400" />
+                Lead Category Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {categoryChartData.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-8">No lead data yet.</p>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={categoryChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={50}
+                        outerRadius={80}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {categoryChartData.map((entry, i) => (
+                          <Cell key={i} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          background: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: 8,
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap gap-3 mt-2 justify-center">
+                    {categoryChartData.map((cat) => (
+                      <div key={cat.name} className="flex items-center gap-1.5 text-xs">
+                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: cat.fill }} />
+                        <span className="text-muted-foreground">{cat.name}</span>
+                        <span className="font-medium">{cat.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Bounty Distribution + Recent Activity */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
           {/* Bounty Distribution Chart */}
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardHeader>
@@ -277,70 +438,70 @@ export default function M2MDashboard() {
               )}
             </CardContent>
           </Card>
-        </div>
 
-        {/* Recent Dispatch Activity */}
-        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-400" />
-              Recent Dispatch Activity
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {recentActivity.length === 0 ? (
-              <p className="text-muted-foreground text-sm text-center py-6">No dispatches recorded yet. The engine will populate this automatically.</p>
-            ) : (
-              <div className="space-y-2">
-                {recentActivity.map((entry) => {
-                  const partner = partners.find((p) => p.id === entry.partner_id);
-                  return (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border/30"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            entry.status === 'confirmed'
-                              ? 'bg-emerald-400'
-                              : entry.status === 'rejected'
-                              ? 'bg-red-400'
-                              : 'bg-amber-400 animate-pulse'
-                          }`}
-                        />
-                        <span className="font-medium text-sm">{partner?.name || 'Unknown'}</span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            entry.status === 'confirmed'
-                              ? 'border-emerald-500/50 text-emerald-400'
-                              : entry.status === 'rejected'
-                              ? 'border-red-500/50 text-red-400'
-                              : 'border-amber-500/50 text-amber-400'
-                          }
-                        >
-                          {entry.status}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span className="text-muted-foreground">
-                          Est: ${Number(entry.estimated_bounty_usd || 0).toFixed(2)}
-                        </span>
-                        {entry.status === 'confirmed' && (
-                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                            <ArrowUpRight className="w-3 h-3" />
-                            ${Number(entry.actual_revenue_usd || 0).toFixed(2)}
+          {/* Recent Dispatch Activity */}
+          <Card className="xl:col-span-2 bg-card/50 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-400" />
+                Recent Dispatch Activity
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentActivity.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-6">No dispatches recorded yet. The engine will populate this automatically.</p>
+              ) : (
+                <div className="space-y-2">
+                  {recentActivity.map((entry) => {
+                    const partner = partners.find((p) => p.id === entry.partner_id);
+                    return (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border border-border/30"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              entry.status === 'confirmed'
+                                ? 'bg-emerald-400'
+                                : entry.status === 'rejected'
+                                ? 'bg-red-400'
+                                : 'bg-amber-400 animate-pulse'
+                            }`}
+                          />
+                          <span className="font-medium text-sm">{partner?.name || 'Unknown'}</span>
+                          <Badge
+                            variant="outline"
+                            className={
+                              entry.status === 'confirmed'
+                                ? 'border-emerald-500/50 text-emerald-400'
+                                : entry.status === 'rejected'
+                                ? 'border-red-500/50 text-red-400'
+                                : 'border-amber-500/50 text-amber-400'
+                            }
+                          >
+                            {entry.status}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-muted-foreground">
+                            Est: ${Number(entry.estimated_bounty_usd || 0).toFixed(2)}
                           </span>
-                        )}
+                          {entry.status === 'confirmed' && (
+                            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                              <ArrowUpRight className="w-3 h-3" />
+                              ${Number(entry.actual_revenue_usd || 0).toFixed(2)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </AppLayout>
   );
