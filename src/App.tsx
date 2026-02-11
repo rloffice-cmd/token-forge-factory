@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Web3Provider } from "@/components/Web3Provider";
+import AuthGuard from "@/components/AuthGuard";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import JobDetailsPage from "./pages/JobDetailsPage";
@@ -30,6 +31,7 @@ import AgentMarketplace from "./pages/AgentMarketplace";
 import AffiliateAdmin from "./pages/AffiliateAdmin";
 import DigitalProducts from "./pages/DigitalProducts";
 import PartnerLanding from "./pages/PartnerLanding";
+import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,35 +44,36 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Public Routes - Partner & Customer Facing */}
+            {/* Public Routes */}
             <Route path="/" element={<PartnerLanding />} />
             <Route path="/landing" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
             <Route path="/api-docs" element={<ApiDocs />} />
             <Route path="/purchase" element={<Purchase />} />
             <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/api-access" element={<ApiAccess />} />
             <Route path="/agents" element={<AgentMarketplace />} />
             <Route path="/products" element={<DigitalProducts />} />
-            
-            {/* Admin Routes - Control Panel */}
-            <Route path="/console" element={<MoneyMachine />} />
-            <Route path="/forge/money-machine" element={<ForgeMoneyMachine />} />
-            <Route path="/forge/m2m-dashboard" element={<M2MDashboard />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/jobs" element={<Jobs />} />
-            <Route path="/jobs/:id" element={<JobDetailsPage />} />
-            <Route path="/treasury" element={<Treasury />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/system" element={<SystemDashboard />} />
-            <Route path="/intelligence" element={<Intelligence />} />
-            <Route path="/discovery" element={<Discovery />} />
-            <Route path="/sources" element={<Sources />} />
-            <Route path="/brain" element={<BrainDashboard />} />
             <Route path="/micro" element={<MicroLanding />} />
-            <Route path="/micro/admin" element={<MicroAdminDashboard />} />
-            <Route path="/admin/security" element={<AdminSecurity />} />
-            <Route path="/admin/api-keys" element={<AdminApiKeys />} />
-            <Route path="/admin/affiliates" element={<AffiliateAdmin />} />
+            
+            {/* Protected Routes - Auth Required */}
+            <Route path="/console" element={<AuthGuard><MoneyMachine /></AuthGuard>} />
+            <Route path="/forge/money-machine" element={<AuthGuard><ForgeMoneyMachine /></AuthGuard>} />
+            <Route path="/forge/m2m-dashboard" element={<AuthGuard><M2MDashboard /></AuthGuard>} />
+            <Route path="/dashboard" element={<AuthGuard><Dashboard /></AuthGuard>} />
+            <Route path="/jobs" element={<AuthGuard><Jobs /></AuthGuard>} />
+            <Route path="/jobs/:id" element={<AuthGuard><JobDetailsPage /></AuthGuard>} />
+            <Route path="/treasury" element={<AuthGuard><Treasury /></AuthGuard>} />
+            <Route path="/settings" element={<AuthGuard><Settings /></AuthGuard>} />
+            <Route path="/system" element={<AuthGuard><SystemDashboard /></AuthGuard>} />
+            <Route path="/intelligence" element={<AuthGuard><Intelligence /></AuthGuard>} />
+            <Route path="/discovery" element={<AuthGuard><Discovery /></AuthGuard>} />
+            <Route path="/sources" element={<AuthGuard><Sources /></AuthGuard>} />
+            <Route path="/brain" element={<AuthGuard><BrainDashboard /></AuthGuard>} />
+            <Route path="/micro/admin" element={<AuthGuard><MicroAdminDashboard /></AuthGuard>} />
+            <Route path="/admin/security" element={<AuthGuard><AdminSecurity /></AuthGuard>} />
+            <Route path="/admin/api-keys" element={<AuthGuard><AdminApiKeys /></AuthGuard>} />
+            <Route path="/admin/affiliates" element={<AuthGuard><AffiliateAdmin /></AuthGuard>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
