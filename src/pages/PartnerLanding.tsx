@@ -64,28 +64,28 @@ export default function PartnerLanding() {
           </div>
 
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 leading-tight">
-            The Future of
-            <span className="text-primary block">Demand Signaling</span>
+            The Global Standard for
+            <span className="text-primary block">Autonomous Demand Signaling</span>
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
-            Identifying high-intent leads across 30+ digital sources using advanced pattern recognition — then connecting them with the right solution, instantly.
+            We connect high-intent signals from 30+ digital sources to the world's leading SaaS solutions.
           </p>
 
-          <div className="flex flex-wrap justify-center gap-4">
-            <a href="mailto:hello@token-forge.ai">
-              <Button size="lg" className="gap-2">
-                <Mail className="w-4 h-4" />
-                Partner With Us
-              </Button>
-            </a>
-            <a href="#how-it-works">
-              <Button variant="outline" size="lg" className="gap-2">
-                Learn More
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </a>
-          </div>
+           <div className="flex flex-wrap justify-center gap-4">
+             <Link to="/login">
+               <Button size="lg" className="gap-2">
+                 <ArrowRight className="w-4 h-4" />
+                 Request Lead Access
+               </Button>
+             </Link>
+             <a href="#how-it-works">
+               <Button variant="outline" size="lg" className="gap-2">
+                 Learn More
+                 <ArrowRight className="w-4 h-4" />
+               </Button>
+             </a>
+           </div>
         </div>
       </section>
 
@@ -160,13 +160,13 @@ export default function PartnerLanding() {
         </div>
       </section>
 
-      {/* For Partners */}
-      <section className="py-24 border-t border-border/30">
-        <div className="max-w-5xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-center mb-4">For Partners</h2>
-          <p className="text-center text-muted-foreground mb-16 max-w-xl mx-auto">
-            Join our network and receive pre-qualified, high-intent leads matched specifically to your product category.
-          </p>
+       {/* For Partners */}
+       <section className="py-24 border-t border-border/30">
+         <div className="max-w-5xl mx-auto px-6">
+           <h2 className="text-3xl font-bold text-center mb-4">For Partners</h2>
+           <p className="text-center text-muted-foreground mb-16 max-w-xl mx-auto">
+             Vetted, high-quality technical leads from across the internet, pre-matched to your product and delivered in real-time. No noise. Only high-intent demand.
+           </p>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {TRUST_ITEMS.map((item, i) => (
@@ -182,24 +182,47 @@ export default function PartnerLanding() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-24 border-t border-border/30">
-        <div className="max-w-3xl mx-auto px-6 text-center">
-          <div className="glass-card p-12 glow-border">
-            <h2 className="text-3xl font-bold mb-2">Ready to Partner?</h2>
-            <p className="text-muted-foreground mb-3 font-medium">hello@token-forge.ai</p>
-            <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-              We're onboarding select SaaS partners for our demand signaling network. Get in touch to learn more about integration, affiliate terms, and API documentation.
-            </p>
-            <a href="mailto:hello@token-forge.ai">
-              <Button size="lg" className="gap-2">
-                <Mail className="w-4 h-4" />
-                Contact Us
-              </Button>
-            </a>
-          </div>
-        </div>
-      </section>
+       {/* Powered By - Tech Stack */}
+       <section className="py-24 border-t border-border/30 bg-card/10">
+         <div className="max-w-5xl mx-auto px-6">
+           <p className="text-center text-xs text-muted-foreground uppercase tracking-wider mb-10">
+             Powered by Industry Standards
+           </p>
+           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
+             {[
+               { name: 'Advanced AI', icon: '🧠', desc: 'Machine Learning' },
+               { name: 'Cloud Infrastructure', icon: '☁️', desc: 'Enterprise Grade' },
+               { name: 'Security First', icon: '🔒', desc: 'GDPR Compliant' },
+               { name: 'Real-Time Processing', icon: '⚡', desc: 'Sub-50ms Latency' },
+             ].map((item, i) => (
+               <div key={i} className="flex flex-col items-center">
+                 <div className="text-4xl mb-2">{item.icon}</div>
+                 <div className="text-sm font-semibold">{item.name}</div>
+                 <div className="text-xs text-muted-foreground">{item.desc}</div>
+               </div>
+             ))}
+           </div>
+         </div>
+       </section>
+
+       {/* CTA */}
+       <section className="py-24 border-t border-border/30">
+         <div className="max-w-3xl mx-auto px-6 text-center">
+           <div className="glass-card p-12 glow-border">
+             <h2 className="text-3xl font-bold mb-2">Ready to Partner?</h2>
+             <p className="text-muted-foreground mb-3 font-medium">hello@token-forge.ai</p>
+             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
+               We're onboarding select SaaS partners for our demand signaling network. Get in touch to learn more about integration, affiliate terms, and API documentation.
+             </p>
+             <Link to="/login">
+               <Button size="lg" className="gap-2">
+                 <ArrowRight className="w-4 h-4" />
+                 Partner with Us
+               </Button>
+             </Link>
+           </div>
+         </div>
+       </section>
 
       {/* Footer */}
       <footer className="border-t border-border/30 py-8">
