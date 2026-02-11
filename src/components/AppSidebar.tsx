@@ -16,6 +16,7 @@ import {
   Brain,
   Compass,
   Rss,
+  Radio,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,7 @@ interface AppSidebarProps {
 
 const navItems = [
   { icon: Zap, label: 'Token Forge', href: '/forge/money-machine' },
+  { icon: Radio, label: 'M2M PPL Engine', href: '/forge/m2m-dashboard' },
   { icon: DollarSign, label: 'Money Machine', href: '/' },
   { icon: Brain, label: 'Brain Dashboard', href: '/brain' },
   { icon: Rss, label: 'מקורות', href: '/sources' },

@@ -15,6 +15,7 @@ import SystemDashboard from "./pages/SystemDashboard";
 import Landing from "./pages/Landing";
 import MoneyMachine from "./pages/MoneyMachine";
 import ForgeMoneyMachine from "./pages/ForgeMoneyMachine";
+import M2MDashboard from "./pages/M2MDashboard";
 import ApiDocs from "./pages/ApiDocs";
 import ApiAccess from "./pages/ApiAccess";
 import AdminSecurity from "./pages/AdminSecurity";
@@ -52,6 +53,7 @@ const App = () => (
             {/* Admin Routes - Control Panel */}
             <Route path="/" element={<MoneyMachine />} />
             <Route path="/forge/money-machine" element={<ForgeMoneyMachine />} />
+            <Route path="/forge/m2m-dashboard" element={<M2MDashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/jobs" element={<Jobs />} />
             <Route path="/jobs/:id" element={<JobDetailsPage />} />
