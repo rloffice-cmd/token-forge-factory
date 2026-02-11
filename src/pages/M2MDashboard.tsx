@@ -149,6 +149,7 @@ export default function M2MDashboard() {
 
   const signalEfficiency = totalDispatches > 0 ? ((totalConversions / totalDispatches) * 100) : 0;
 
+
   // Chart data for partner performance
   const partnerChartData = partners
     .filter((p) => p.total_dispatches > 0 || p.commission_rate > 0)
@@ -174,7 +175,21 @@ export default function M2MDashboard() {
     fill: CATEGORY_COLORS[name] || CATEGORY_COLORS['Other'],
   }));
 
-  // Highest confidence security lead
+  // V3.0 — Estimated Potential Revenue per niche
+  const NICHE_AVG_BOUNTY: Record<string, number> = {
+    'Email Marketing': 20,
+    'Security': 15,
+    'Webhooks': 10,
+    'Other': 12,
+  };
+  const nicheRevenueEstimates = Object.entries(categoryMap).map(([niche, count]) => ({
+    niche,
+    leads: count,
+    avgBounty: NICHE_AVG_BOUNTY[niche] || 12,
+    estimatedRevenue: count * (NICHE_AVG_BOUNTY[niche] || 12),
+  }));
+  const totalEstimatedRevenue = nicheRevenueEstimates.reduce((s, n) => s + n.estimatedRevenue, 0);
+
   const securityLeads = outreachJobs.filter(
     (j) => categorizeIntent(j.intent_topic || '') === 'Security' && j.status === 'queued' && j.confidence >= 0.85
   );
@@ -396,6 +411,37 @@ export default function M2MDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* V3.0 — Estimated Revenue by Niche */}
+        {nicheRevenueEstimates.length > 0 && (
+          <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-400" />
+                Estimated Revenue by Niche
+                <Badge variant="outline" className="ml-auto text-xs border-border/50">
+                  Total: ${totalEstimatedRevenue.toFixed(0)}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {nicheRevenueEstimates.map((n) => (
+                  <div key={n.niche} className="p-4 rounded-lg bg-muted/20 border border-border/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[n.niche] || CATEGORY_COLORS['Other'] }} />
+                      <span className="text-sm font-medium">{n.niche}</span>
+                    </div>
+                    <p className="text-xl font-bold text-emerald-400">${n.estimatedRevenue.toFixed(0)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {n.leads} leads × ${n.avgBounty} avg bounty
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Bounty Distribution + Recent Activity */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
