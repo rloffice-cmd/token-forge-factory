@@ -29,6 +29,7 @@ import Sources from "./pages/Sources";
 import AgentMarketplace from "./pages/AgentMarketplace";
 import AffiliateAdmin from "./pages/AffiliateAdmin";
 import DigitalProducts from "./pages/DigitalProducts";
+import PartnerLanding from "./pages/PartnerLanding";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,7 +42,8 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Public Routes - Customer Acquisition */}
+            {/* Public Routes - Partner & Customer Facing */}
+            <Route path="/" element={<PartnerLanding />} />
             <Route path="/landing" element={<Landing />} />
             <Route path="/api-docs" element={<ApiDocs />} />
             <Route path="/purchase" element={<Purchase />} />
@@ -51,7 +53,7 @@ const App = () => (
             <Route path="/products" element={<DigitalProducts />} />
             
             {/* Admin Routes - Control Panel */}
-            <Route path="/" element={<MoneyMachine />} />
+            <Route path="/console" element={<MoneyMachine />} />
             <Route path="/forge/money-machine" element={<ForgeMoneyMachine />} />
             <Route path="/forge/m2m-dashboard" element={<M2MDashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
