@@ -1,6 +1,14 @@
-import { Globe, Monitor, Radio, Shield, ArrowRight, Linkedin, Mail, Clock, Layers, BarChart3, Zap } from 'lucide-react';
+import { Globe, Monitor, Radio, Shield, ArrowRight, Linkedin, Mail, Clock, Layers, BarChart3, Zap, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+
+const PARTNERS = [
+  { name: 'HubSpot', category: 'CRM & Sales' },
+  { name: 'Monday.com', category: 'Workflow' },
+  { name: 'Vercel', category: 'Infrastructure' },
+  { name: 'Snyk', category: 'Security' },
+  { name: 'Vanta', category: 'Compliance' },
+];
 
 const TRUST_ITEMS = [
   { icon: Globe, title: 'Global Coverage', desc: '30+ digital sources scanned continuously' },
@@ -24,11 +32,11 @@ export default function PartnerLanding() {
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Radio className="w-5 h-5 text-primary" />
-            <span className="font-semibold text-lg tracking-tight">SignalForge</span>
+            <span className="font-semibold text-lg tracking-tight">Token Forge AI</span>
           </div>
           <div className="flex items-center gap-3">
             <a
-              href="https://www.linkedin.com/company/signalforge"
+              href="https://www.linkedin.com/search/results/all/?keywords=token%20forge%20ai"
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -66,7 +74,7 @@ export default function PartnerLanding() {
           </p>
 
           <div className="flex flex-wrap justify-center gap-4">
-            <a href="mailto:partners@signalforge.io">
+            <a href="mailto:hello@token-forge.ai">
               <Button size="lg" className="gap-2">
                 <Mail className="w-4 h-4" />
                 Partner With Us
@@ -94,12 +102,29 @@ export default function PartnerLanding() {
         </div>
       </section>
 
+      {/* Trust Bar - Partner Integrations */}
+      <section className="py-8 border-b border-border/30 bg-card/20">
+        <div className="max-w-5xl mx-auto px-6">
+          <p className="text-center text-xs text-muted-foreground uppercase tracking-wider mb-6">
+            Integrated with industry leaders
+          </p>
+          <div className="flex flex-wrap justify-center items-center gap-6 md:gap-10">
+            {PARTNERS.map((p, i) => (
+              <div key={i} className="text-center">
+                <div className="font-medium text-sm mb-1">{p.name}</div>
+                <div className="text-xs text-muted-foreground">{p.category}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* How it works */}
       <section id="how-it-works" className="py-24">
         <div className="max-w-5xl mx-auto px-6">
           <h2 className="text-3xl font-bold text-center mb-4">How It Works</h2>
-          <p className="text-center text-muted-foreground mb-16 max-w-xl mx-auto">
-            We bridge the gap between user pain points and expert SaaS solutions through context-aware outreach.
+          <p className="text-center text-muted-foreground mb-16 max-w-2xl mx-auto">
+            Our autonomous system identifies high-intent users, matches them to your solution, and confirms revenue through real-time postback webhooks. Zero manual overhead.
           </p>
 
           <div className="grid md:grid-cols-3 gap-8">
@@ -107,20 +132,20 @@ export default function PartnerLanding() {
               {
                 step: '01',
                 icon: Radio,
-                title: 'Signal Detection',
-                desc: 'Our engine scans forums, communities, and social platforms 24/7 to identify real-time demand signals.',
+                title: 'Autonomous Signal Detection',
+                desc: 'AI continuously monitors 30+ sources (Reddit, HackerNews, Discord) to identify users expressing specific pain points. Each signal is scored for intent and urgency.',
               },
               {
                 step: '02',
                 icon: BarChart3,
-                title: 'Intent Scoring',
-                desc: 'Each signal is scored for urgency, relevance, and purchase intent using proprietary pattern matching.',
+                title: 'AI Contextual Matching',
+                desc: 'Our engine matches high-intent leads to your specific product category using semantic analysis and behavioral patterns. Outreach is hyper-personalized and value-first.',
               },
               {
                 step: '03',
-                icon: Zap,
-                title: 'Smart Matching',
-                desc: 'High-intent leads are matched to the best-fit partner solution and delivered via natural, value-first outreach.',
+                icon: CheckCircle2,
+                title: 'Revenue Confirmation via Postback',
+                desc: 'When a user converts, your API triggers our postback webhook. We instantly confirm the lead, credit your account, and schedule payment settlement.',
               },
             ].map((item, i) => (
               <div key={i} className="glass-card p-8 text-center group hover:glow-border transition-all duration-300">
@@ -162,11 +187,12 @@ export default function PartnerLanding() {
       <section className="py-24 border-t border-border/30">
         <div className="max-w-3xl mx-auto px-6 text-center">
           <div className="glass-card p-12 glow-border">
-            <h2 className="text-3xl font-bold mb-4">Ready to Partner?</h2>
+            <h2 className="text-3xl font-bold mb-2">Ready to Partner?</h2>
+            <p className="text-muted-foreground mb-3 font-medium">hello@token-forge.ai</p>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-              We're onboarding select SaaS partners for our demand signaling network. Get in touch to learn more about integration.
+              We're onboarding select SaaS partners for our demand signaling network. Get in touch to learn more about integration, affiliate terms, and API documentation.
             </p>
-            <a href="mailto:partners@signalforge.io">
+            <a href="mailto:hello@token-forge.ai">
               <Button size="lg" className="gap-2">
                 <Mail className="w-4 h-4" />
                 Contact Us
@@ -181,15 +207,15 @@ export default function PartnerLanding() {
         <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <Radio className="w-4 h-4 text-primary" />
-            <span>© 2026 SignalForge. All rights reserved.</span>
+            <span>© 2026 Token Forge AI. All rights reserved.</span>
           </div>
-          <div className="flex items-center gap-4">
-            <a href="mailto:partners@signalforge.io" className="hover:text-foreground transition-colors">Contact</a>
+          <div className="flex items-center gap-6">
+            <a href="mailto:hello@token-forge.ai" className="hover:text-foreground transition-colors">Contact</a>
             <a
-              href="https://www.linkedin.com/company/signalforge"
+              href="https://www.linkedin.com/search/results/all/?keywords=token%20forge%20ai"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-foreground transition-colors flex items-center gap-1"
+              className="hover:text-foreground transition-colors flex items-center gap-2"
             >
               <Linkedin className="w-4 h-4" />
               LinkedIn
