@@ -62,6 +62,13 @@ const PARTNER_CONTEXTS: Record<string, {
     competitors: ["google analytics", "mixpanel", "amplitude", "triple whale", "northbeam"],
     displacement_hook: "Compass delivers actionable eCommerce insights out of the box, without the complexity of generic analytics tools",
   },
+  webinargeek: {
+    pain_points: ["webinar platform", "hosting webinars", "live streaming", "online events", "virtual events", "webinar automation", "audience engagement", "webinar registration", "video marketing"],
+    key_features: "all-in-one webinar platform with automated and live webinars, registration pages, analytics, and audience engagement tools",
+    positioning: "a webinar platform that makes hosting professional live and automated webinars effortless, with built-in marketing tools",
+    competitors: ["zoom webinar", "gotowebinar", "demio", "livestorm", "webex events"],
+    displacement_hook: "WebinarGeek gives you dedicated webinar features like automated replays, registration funnels, and engagement analytics — not just a video call with extras",
+  },
 };
 
 interface SignalLead {
@@ -178,7 +185,7 @@ serve(async (req) => {
     }
 
     // SELECTIVE OUTREACH: Only dispatch for approved partners
-    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify', 'compass', 'adturbo ai', 'lucro crm', 'easyfund'];
+    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify', 'compass', 'adturbo ai', 'lucro crm', 'easyfund', 'webinargeek'];
     const outreachPartners = partners.filter(p =>
       OUTREACH_ENABLED_PARTNERS.includes(p.name.toLowerCase())
     );
