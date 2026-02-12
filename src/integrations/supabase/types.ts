@@ -97,6 +97,7 @@ export type Database = {
       }
       affiliate_clicks: {
         Row: {
+          actor_fingerprint: string | null
           clicked_at: string
           commission_usd: number | null
           converted: boolean
@@ -110,6 +111,7 @@ export type Database = {
           user_agent: string | null
         }
         Insert: {
+          actor_fingerprint?: string | null
           clicked_at?: string
           commission_usd?: number | null
           converted?: boolean
@@ -123,6 +125,7 @@ export type Database = {
           user_agent?: string | null
         }
         Update: {
+          actor_fingerprint?: string | null
           clicked_at?: string
           commission_usd?: number | null
           converted?: boolean
@@ -219,6 +222,7 @@ export type Database = {
       }
       affiliate_earnings: {
         Row: {
+          affiliate_click_id: string | null
           amount_usd: number
           click_id: string | null
           created_at: string
@@ -232,6 +236,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          affiliate_click_id?: string | null
           amount_usd: number
           click_id?: string | null
           created_at?: string
@@ -245,6 +250,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          affiliate_click_id?: string | null
           amount_usd?: number
           click_id?: string | null
           created_at?: string
@@ -258,6 +264,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "affiliate_earnings_affiliate_click_id_fkey"
+            columns: ["affiliate_click_id"]
+            isOneToOne: false
+            referencedRelation: "affiliate_clicks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "affiliate_earnings_click_id_fkey"
             columns: ["click_id"]
@@ -1087,6 +1100,7 @@ export type Database = {
       }
       click_analytics: {
         Row: {
+          actor_fingerprint: string | null
           created_at: string
           id: string
           ip_hash: string | null
@@ -1100,6 +1114,7 @@ export type Database = {
           user_agent: string | null
         }
         Insert: {
+          actor_fingerprint?: string | null
           created_at?: string
           id?: string
           ip_hash?: string | null
@@ -1113,6 +1128,7 @@ export type Database = {
           user_agent?: string | null
         }
         Update: {
+          actor_fingerprint?: string | null
           created_at?: string
           id?: string
           ip_hash?: string | null
@@ -2716,6 +2732,8 @@ export type Database = {
           name: string
           niche_winner: boolean | null
           postback_url: string | null
+          suspicious: boolean | null
+          suspicious_reason: string | null
           testing_leads_sent: number | null
           testing_phase: boolean | null
           total_conversions: number
@@ -2739,6 +2757,8 @@ export type Database = {
           name: string
           niche_winner?: boolean | null
           postback_url?: string | null
+          suspicious?: boolean | null
+          suspicious_reason?: string | null
           testing_leads_sent?: number | null
           testing_phase?: boolean | null
           total_conversions?: number
@@ -2762,6 +2782,8 @@ export type Database = {
           name?: string
           niche_winner?: boolean | null
           postback_url?: string | null
+          suspicious?: boolean | null
+          suspicious_reason?: string | null
           testing_leads_sent?: number | null
           testing_phase?: boolean | null
           total_conversions?: number
@@ -4408,8 +4430,11 @@ export type Database = {
           id: string
           job_id: string
           network: string | null
+          note: string | null
           payer_email: string | null
           payment_id: string | null
+          ref_id: string | null
+          source: string | null
           tx_hash: string | null
         }
         Insert: {
@@ -4423,8 +4448,11 @@ export type Database = {
           id?: string
           job_id: string
           network?: string | null
+          note?: string | null
           payer_email?: string | null
           payment_id?: string | null
+          ref_id?: string | null
+          source?: string | null
           tx_hash?: string | null
         }
         Update: {
@@ -4438,8 +4466,11 @@ export type Database = {
           id?: string
           job_id?: string
           network?: string | null
+          note?: string | null
           payer_email?: string | null
           payment_id?: string | null
+          ref_id?: string | null
+          source?: string | null
           tx_hash?: string | null
         }
         Relationships: [

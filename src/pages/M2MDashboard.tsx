@@ -1,6 +1,6 @@
 /**
- * M2M PPL Dashboard — Pay-Per-Lead Engine Command Center
- * Glassmorphism dark-mode dashboard for tracking bounties, signal efficiency, and partner performance.
+ * M2M PPL Dashboard v4 — Pay-Per-Lead Engine Command Center
+ * Enhanced: Partner EPC/CR cards, Revenue Heatmap by platform, auto affiliate links
  */
 
 import { useState } from 'react';
@@ -24,6 +24,8 @@ import {
   PieChart as PieIcon,
   Clock,
   Megaphone,
+  MousePointerClick,
+  BarChart3,
 } from 'lucide-react';
 import {
   BarChart,
@@ -139,6 +141,19 @@ export default function M2MDashboard() {
     },
   });
 
+  // Fetch click analytics for revenue heatmap
+  const { data: clickAnalytics = [] } = useQuery<{ source_platform: string; created_at: string }[]>({
+    queryKey: ['click-analytics-heatmap'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('click_analytics')
+        .select('source_platform, created_at')
+        .order('created_at', { ascending: false })
+        .limit(1000);
+      return (data as any[]) || [];
+    },
+  });
+
   // Aggregate metrics
   const totalDispatches = partners.reduce((s, p) => s + (p.total_dispatches || 0), 0);
   const totalConversions = partners.reduce((s, p) => s + (p.total_conversions || 0), 0);
@@ -203,6 +218,33 @@ export default function M2MDashboard() {
 
   // Recent ledger activity
   const recentActivity = ledger.slice(0, 10);
+
+  // EPC (Earnings Per Click) data per partner
+  const partnerEPCData = partners.map((p) => {
+    const epc = p.total_dispatches > 0 ? Number(p.total_revenue_usd || 0) / p.total_dispatches : 0;
+    const cr = p.total_dispatches > 0 ? (p.total_conversions / p.total_dispatches) * 100 : 0;
+    return { ...p, epc, cr };
+  });
+
+  // Revenue Heatmap by platform
+  const platformCounts: Record<string, number> = {};
+  clickAnalytics.forEach((c) => {
+    const plat = c.source_platform || 'direct';
+    platformCounts[plat] = (platformCounts[plat] || 0) + 1;
+  });
+  const PLATFORM_COLORS: Record<string, string> = {
+    linkedin: 'hsl(199, 89%, 48%)',
+    twitter: 'hsl(199, 89%, 68%)',
+    reddit: 'hsl(16, 100%, 50%)',
+    whatsapp: 'hsl(142, 71%, 45%)',
+    telegram: 'hsl(199, 89%, 58%)',
+    facebook: 'hsl(221, 68%, 55%)',
+    hackernews: 'hsl(24, 95%, 53%)',
+    direct: 'hsl(262, 83%, 58%)',
+  };
+  const heatmapData = Object.entries(platformCounts)
+    .map(([name, clicks]) => ({ name, clicks, fill: PLATFORM_COLORS[name] || 'hsl(var(--muted-foreground))' }))
+    .sort((a, b) => b.clicks - a.clicks);
 
   return (
     <AppLayout>
@@ -302,6 +344,75 @@ export default function M2MDashboard() {
             iconColor="text-violet-400"
           />
         </div>
+
+        {/* EPC & CR Partner Performance Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {partnerEPCData.slice(0, 8).map((p) => (
+            <Card key={p.id} className="bg-card/50 backdrop-blur-sm border-border/40">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-sm truncate">{p.name}</span>
+                  <MousePointerClick className="w-4 h-4 text-muted-foreground" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">EPC</p>
+                    <p className="text-lg font-bold text-emerald-400">${p.epc.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase">CVR</p>
+                    <p className="text-lg font-bold text-cyan-400">{p.cr.toFixed(1)}%</p>
+                  </div>
+                </div>
+                <Progress value={Math.min(p.cr, 100)} className="mt-3 h-1.5" />
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  {p.total_dispatches} dispatches · {p.total_conversions} conversions
+                </p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Revenue Heatmap by Platform */}
+        {heatmapData.length > 0 && (
+          <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-cyan-400" />
+                Revenue Heatmap — Click Sources by Platform
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={heatmapData} margin={{ left: 0, right: 10 }}>
+                  <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{
+                      background: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: 8,
+                    }}
+                  />
+                  <Bar dataKey="clicks" name="Clicks" radius={[4, 4, 0, 0]}>
+                    {heatmapData.map((entry, i) => (
+                      <Cell key={i} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap gap-3 mt-3 justify-center">
+                {heatmapData.map((plat) => (
+                  <div key={plat.name} className="flex items-center gap-1.5 text-xs">
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: plat.fill }} />
+                    <span className="text-muted-foreground capitalize">{plat.name}</span>
+                    <span className="font-medium">{plat.clicks}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Main Grid */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
