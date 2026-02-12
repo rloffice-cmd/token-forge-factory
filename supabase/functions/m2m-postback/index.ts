@@ -1,23 +1,84 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyWebhookToken, logSecurityEvent, getClientIP, checkRateLimit, corsHeaders } from '../_shared/auth-guards.ts';
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+// HMAC signature verification for PartnerStack/Reditus postbacks
+async function verifyPostbackSignature(payload: string, signature: string | null, secret: string): Promise<boolean> {
+  if (!signature || !secret) return false;
+  try {
+    const sigValue = signature.replace('sha256=', '');
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(payload));
+    const expectedSig = Array.from(new Uint8Array(signatureBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    return sigValue.toLowerCase() === expectedSig.toLowerCase();
+  } catch {
+    return false;
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
 
-    const body = await req.json();
+  const clientIP = getClientIP(req);
+
+  // Rate limiting: Max 60 postbacks per minute per IP
+  const isRateLimited = await checkRateLimit(supabase, `postback:${clientIP}`, 60, 1);
+  if (isRateLimited) {
+    await logSecurityEvent(supabase, 'postback_rate_limited', {
+      endpoint: 'm2m-postback',
+      ip: clientIP,
+    });
+    return new Response(
+      JSON.stringify({ error: 'Rate limit exceeded' }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  try {
+    const rawBody = await req.text();
+    let body: any;
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Optional HMAC verification if PARTNERSTACK_WEBHOOK_SECRET is set
+    const webhookSecret = Deno.env.get("PARTNERSTACK_WEBHOOK_SECRET");
+    if (webhookSecret) {
+      const signature = req.headers.get("x-partnerstack-signature") ||
+                        req.headers.get("x-webhook-signature") ||
+                        req.headers.get("x-signature");
+      const valid = await verifyPostbackSignature(rawBody, signature, webhookSecret);
+      if (!valid) {
+        await logSecurityEvent(supabase, 'postback_invalid_signature', {
+          endpoint: 'm2m-postback',
+          ip: clientIP,
+        });
+        return new Response(
+          JSON.stringify({ error: "Invalid signature" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     const { dispatch_id, status, revenue_usd, metadata } = body;
 
     if (!dispatch_id) {
@@ -41,7 +102,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Prevent double-confirm
+    // Prevent double-confirm (idempotency)
     if (dispatch.status === "confirmed" && status === "confirmed") {
       return new Response(
         JSON.stringify({ ok: true, message: "already confirmed" }),
@@ -64,6 +125,15 @@ Deno.serve(async (req) => {
       .eq("id", dispatch_id);
 
     if (updateErr) throw updateErr;
+
+    // Log security event for audit trail
+    await logSecurityEvent(supabase, 'postback_received', {
+      endpoint: 'm2m-postback',
+      dispatch_id,
+      status: newStatus,
+      revenue_usd: actualRevenue,
+      ip: clientIP,
+    });
 
     // Update partner stats if confirmed
     if (newStatus === "confirmed" && actualRevenue > 0) {
@@ -104,7 +174,7 @@ Deno.serve(async (req) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             chat_id: chatId,
-            text: `💰 M2M Postback Confirmed!\nDispatch: ${dispatch_id}\nRevenue: $${actualRevenue.toFixed(2)}`,
+            text: `💰 M2M Postback Confirmed!\nDispatch: ${dispatch_id}\nRevenue: $${actualRevenue.toFixed(2)}\nIP: ${clientIP}`,
             parse_mode: "HTML",
           }),
         });

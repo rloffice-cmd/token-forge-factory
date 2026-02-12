@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, CheckCircle, TrendingUp } from 'lucide-react';
+import { ExternalLink, TrendingUp } from 'lucide-react';
+import { getPartnerBrand } from '@/lib/partnerLogos';
 
 interface Partner {
   id: string;
@@ -86,10 +87,28 @@ export function ActivePartnerStreams() {
               className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card/50 hover:bg-accent/10 transition-colors"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                {(() => {
+                  const brand = getPartnerBrand(partner.name);
+                  return (
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0"
+                      style={{ backgroundColor: brand?.color || 'hsl(var(--primary))' }}
+                    >
+                      {brand?.initials || partner.name.slice(0, 2).toUpperCase()}
+                    </div>
+                  );
+                })()}
                 <div className="min-w-0">
                   <p className="font-medium truncate">{partner.name}</p>
                   <div className="flex items-center gap-2 mt-0.5">
+                    {(() => {
+                      const brand = getPartnerBrand(partner.name);
+                      return brand ? (
+                        <Badge variant="outline" className="text-[10px] opacity-70">
+                          {brand.category}
+                        </Badge>
+                      ) : null;
+                    })()}
                     <Badge variant="secondary" className="text-xs">
                       {commissionPct}% עמלה
                     </Badge>

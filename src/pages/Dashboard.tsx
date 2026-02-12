@@ -4,6 +4,7 @@ import { JobsTable } from '@/components/JobsTable';
 import { StatusChart } from '@/components/StatusChart';
 import { ActivationChecklist } from '@/components/ActivationChecklist';
 import { FileCode2, Percent, Coins, AlertTriangle, Loader2, Radio, Clock } from 'lucide-react';
+import { NetworkConnectivity } from '@/components/NetworkConnectivity';
 import { useDashboardStats } from '@/hooks/useDatabase';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -103,11 +104,14 @@ export default function Dashboard() {
     <AppLayout>
       <div className="p-4 lg:p-8 space-y-6 lg:space-y-8">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold">דשבורד</h1>
-          <p className="text-muted-foreground mt-1 text-sm lg:text-base">
-            סקירה כללית של מערכת Token Forge Factory
-          </p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl lg:text-3xl font-bold">דשבורד</h1>
+            <p className="text-muted-foreground mt-1 text-sm lg:text-base">
+              סקירה כללית של מערכת Token Forge Factory
+            </p>
+          </div>
+          <NetworkConnectivity />
         </div>
 
         {/* Partial Launch Banner */}
