@@ -39,6 +39,20 @@ export default function AffiliateAdmin() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
+  // Fetch verified M2M partners (active partners with direct links)
+  const { data: verifiedPartners } = useQuery({
+    queryKey: ["verified-partners"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("m2m_partners")
+        .select("id, name, affiliate_base_url, commission_rate, commission_type, category_tags, keyword_triggers, is_active, total_dispatches, total_conversions, total_revenue_usd")
+        .eq("is_active", true)
+        .order("total_revenue_usd", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const { data: programs, isLoading: programsLoading } = useQuery({
     queryKey: ["affiliate-programs"],
     queryFn: async () => {
@@ -266,6 +280,60 @@ export default function AffiliateAdmin() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Verified Partnerships (M2M Partners) */}
+        {verifiedPartners && verifiedPartners.length > 0 && (
+          <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-emerald-500" />
+                שותפויות מאומתות — Verified Partnerships
+              </CardTitle>
+              <CardDescription>שותפים פעילים עם קישורי מעקב ישירים — כל ההפניות מנוטרות אוטומטית</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 gap-4">
+                {verifiedPartners.map((partner) => (
+                  <Card key={partner.id} className="border-primary/20">
+                    <CardContent className="pt-5">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-lg">{partner.name}</h3>
+                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                              ✓ Verified
+                            </Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(partner.category_tags || []).map((tag: string) => (
+                              <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
+                            ))}
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            עמלה: {((partner.commission_rate || 0) * 100).toFixed(0)}% {partner.commission_type || 'recurring'}
+                          </p>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+                            <span>📤 {partner.total_dispatches || 0} dispatches</span>
+                            <span>💰 ${(partner.total_revenue_usd || 0).toFixed(2)} revenue</span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => window.open(partner.affiliate_base_url, '_blank', 'noopener,noreferrer')}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          Visit
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs defaultValue="pending" className="space-y-4">
           <TabsList>
