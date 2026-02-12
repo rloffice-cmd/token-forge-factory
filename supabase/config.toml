@@ -251,3 +251,7 @@ verify_jwt = false
 # -----------------------------
 [functions.zerodev-status]
 verify_jwt = false
+
+# ADMIN - Domain management
+[functions.setup-resend-domain]
+verify_jwt = false

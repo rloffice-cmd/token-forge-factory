@@ -36,6 +36,7 @@ import AffiliateRedirect from "./pages/AffiliateRedirect";
 import ManualOutreach from "./pages/ManualOutreach";
 import Login from "./pages/Login";
 import SystemAudit from "./pages/SystemAudit";
+import DomainManager from "./pages/DomainManager";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -82,6 +83,7 @@ const App = () => (
             <Route path="/admin/affiliates" element={<AuthGuard><AffiliateAdmin /></AuthGuard>} />
             <Route path="/admin/system-audit" element={<AuthGuard><SystemAudit /></AuthGuard>} />
             <Route path="/admin/manual-outreach" element={<AuthGuard><ManualOutreach /></AuthGuard>} />
+            <Route path="/admin/domain-manager" element={<AuthGuard><DomainManager /></AuthGuard>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
