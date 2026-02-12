@@ -27,6 +27,11 @@ const LEAD_SOURCES = [
   { type: 'reddit', url: 'https://www.reddit.com/r/sales/new/', keywords: ['email list quality', 'bounced emails', 'catch-all emails', 'disposable emails', 'spam traps', 'list hygiene'] },
   { type: 'reddit', url: 'https://www.reddit.com/r/digital_marketing/new/', keywords: ['email validation tool', 'clean email list', 'neverbounce alternative', 'zerobounce alternative', 'bulk email verify'] },
 
+  // ===== COMPASS HUNTERS (eCommerce Analytics / Scaling) =====
+  { type: 'reddit', url: 'https://www.reddit.com/r/ecommerce/new/', keywords: ['ecommerce analytics', 'scaling store', 'product analytics', 'revenue optimization', 'conversion tracking'] },
+  { type: 'reddit', url: 'https://www.reddit.com/r/shopify/new/', keywords: ['shopify analytics', 'scaling shopify', 'b2b ecommerce', 'growth metrics', 'sales dashboard'] },
+  { type: 'reddit', url: 'https://www.reddit.com/r/BigCommerce/new/', keywords: ['ecommerce growth', 'analytics tool', 'scaling online store', 'product performance'] },
+
   // ===== PINECONE HUNTERS (Vector DB / RAG Failures) =====
   { type: 'reddit', url: 'https://www.reddit.com/r/MachineLearning/new/', keywords: ['vector search latency', 'embedding cost', 'RAG without dedicated DB', 'similarity search scale'] },
   { type: 'reddit', url: 'https://www.reddit.com/r/LocalLLaMA/new/', keywords: ['vector database', 'embedding storage', 'RAG pipeline', 'chromadb alternative'] },

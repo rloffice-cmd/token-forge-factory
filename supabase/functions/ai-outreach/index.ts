@@ -49,11 +49,18 @@ const PARTNER_CONTEXTS: Record<string, {
     displacement_hook: "Pinecone handles the infrastructure so you can focus on your AI product, not database operations",
   },
   emaillistverify: {
-    pain_points: ["email bounce rate", "invalid emails", "email list cleaning", "hard bounces", "spam traps", "catch-all detection", "disposable emails", "email verification", "list hygiene", "email deliverability"],
+    pain_points: ["email bounce rate", "invalid emails", "email list cleaning", "hard bounces", "spam traps", "catch-all detection", "disposable emails", "email verification", "list hygiene", "email deliverability", "cold outreach", "marketing emails"],
     key_features: "bulk email list verification with 99% accuracy, real-time API, spam trap and disposable email detection",
     positioning: "an email verification service that cleans your list before you send, eliminating bounces and protecting sender reputation",
     competitors: ["neverbounce", "zerobounce", "debounce", "kickbox", "hunter.io"],
     displacement_hook: "EmailListVerify processes lists faster at a fraction of the cost, with pay-as-you-go pricing and no monthly commitments",
+  },
+  compass: {
+    pain_points: ["ecommerce analytics", "scaling online store", "b2b growth", "conversion tracking", "revenue optimization", "product performance", "ecommerce scaling", "growth metrics", "sales analytics"],
+    key_features: "AI-powered eCommerce analytics platform for B2B growth, product intelligence, and revenue optimization",
+    positioning: "an analytics platform that gives eCommerce teams the intelligence they need to scale revenue and optimize product performance",
+    competitors: ["google analytics", "mixpanel", "amplitude", "triple whale", "northbeam"],
+    displacement_hook: "Compass delivers actionable eCommerce insights out of the box, without the complexity of generic analytics tools",
   },
 };
 
@@ -171,7 +178,7 @@ serve(async (req) => {
     }
 
     // SELECTIVE OUTREACH: Only dispatch for approved partners
-    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify'];
+    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify', 'compass'];
     const outreachPartners = partners.filter(p =>
       OUTREACH_ENABLED_PARTNERS.includes(p.name.toLowerCase())
     );
