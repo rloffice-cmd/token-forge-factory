@@ -1025,6 +1025,56 @@ export type Database = {
         }
         Relationships: []
       }
+      click_analytics: {
+        Row: {
+          created_at: string
+          id: string
+          ip_hash: string | null
+          lead_id: string | null
+          partner_id: string | null
+          partner_slug: string
+          redirect_url: string
+          referrer_url: string | null
+          source_platform: string | null
+          source_url: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          lead_id?: string | null
+          partner_id?: string | null
+          partner_slug: string
+          redirect_url: string
+          referrer_url?: string | null
+          source_platform?: string | null
+          source_url?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_hash?: string | null
+          lead_id?: string | null
+          partner_id?: string | null
+          partner_slug?: string
+          redirect_url?: string
+          referrer_url?: string | null
+          source_platform?: string | null
+          source_url?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "click_analytics_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "m2m_partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       closing_attempts: {
         Row: {
           action: string
