@@ -39,6 +39,7 @@ const navItems = [
 const adminItems = [
   { icon: Shield, label: 'אבטחה', href: '/admin/security' },
   { icon: Key, label: 'API Keys', href: '/admin/api-keys' },
+  { icon: FileCode2, label: 'דוח אבחון', href: '/admin/diagnostic-report' },
 ];
 
 export function AppSidebar({ onClose }: AppSidebarProps) {
