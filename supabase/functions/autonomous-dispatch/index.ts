@@ -215,7 +215,16 @@ Link: ${supabaseUrl}/functions/v1/affiliate-redirect?partner=${partnerSlug}&lead
         console.warn(`AI generation failed for signal ${signal.id}`);
       }
 
-      if (!aiDraft) continue;
+      if (!aiDraft) {
+        // Log to manual_outreach_needed table if AI generation fails
+        await supabase.from("manual_outreach_needed").insert({
+          signal_id: signal.id,
+          partner_name: matched.name,
+          reason: "ai_generation_failed",
+          outreach_text: `[AI Generation Failed] Lead: "${signal.query_text.slice(0, 100)}"`,
+        }).catch(() => {}); // Silent fail to avoid blocking dispatch loop
+        continue;
+      }
 
       // Create outreach job directly as 'sent' (no draft queue)
       await supabase.from("outreach_jobs").insert({
@@ -261,6 +270,16 @@ Link: ${supabaseUrl}/functions/v1/affiliate-redirect?partner=${partnerSlug}&lead
 
       dispatched++;
       results.push({ signal_id: signal.id, partner: matched.name, dispatched: true });
+      
+      // Log successful dispatch
+      await supabase.from("manual_outreach_needed").insert({
+        signal_id: signal.id,
+        partner_name: matched.name,
+        outreach_text: aiDraft,
+        reason: "auto_dispatched_success",
+        resolved_at: new Date().toISOString(),
+      }).catch(() => {}); // Silent logging
+      
       console.log(`✅ Auto-dispatched: "${signal.query_text.slice(0, 60)}" → ${matched.name}`);
     }
 

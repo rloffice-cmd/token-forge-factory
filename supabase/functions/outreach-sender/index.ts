@@ -208,7 +208,7 @@ serve(async (req) => {
 
     // Build Telegram message with lead details and AI-drafted response
     const leadTitle = lead.title || lead.author || lead.username || "Unknown Lead";
-    const aiDraft = job.ai_draft || job.message_draft || "No draft available";
+    const aiDraft = job.ai_draft || job.message_draft || job.draft_text || "No draft available";
     
     const telegramMessage = `🎯 <b>Hot Lead Alert!</b>
 
@@ -224,6 +224,7 @@ serve(async (req) => {
 🔗 <a href="${threadUrl}">View Original Post</a>`;
 
     // Send to Telegram
+    let telegramSent = false;
     try {
       await supabase.functions.invoke("telegram-notify", {
         body: {
@@ -231,10 +232,23 @@ serve(async (req) => {
           type: "hot_lead_alert",
         },
       });
+      telegramSent = true;
       console.log(`✅ Telegram notification sent for job ${jobId}`);
     } catch (telegramError) {
-      console.error(`⚠️ Telegram send failed (will continue):`, telegramError);
-      // Don't fail the job if Telegram fails - just log it
+      console.warn(`⚠️ Telegram send failed: ${telegramError}. Falling back to manual outreach logging.`);
+      
+      // If external APIs unavailable (Reddit, SMTP, etc), log for manual dispatch
+      await supabase
+        .from("manual_outreach_needed")
+        .insert({
+          job_id: jobId,
+          signal_id: null,
+          outreach_text: String(aiDraft),
+          partner_name: job.source || "unknown",
+          reason: "telegram_unavailable_fallback",
+        })
+        .catch(() => {});
+      // Continue processing even if telegram fails
     }
 
     // Increment daily limit
