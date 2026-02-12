@@ -1,16 +1,19 @@
 /**
  * Active Partner Revenue Streams
- * Shows verified affiliate partners with tracked outbound links
+ * Shows verified affiliate partners with tracked outbound links + ContentForge Marketing Kit
  */
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ExternalLink, TrendingUp } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ExternalLink, TrendingUp, ChevronDown } from 'lucide-react';
 import { getPartnerBrand } from '@/lib/partnerLogos';
+import { ContentForgeCard } from '@/components/forge/ContentForgeCard';
 
 interface Partner {
   id: string;
@@ -22,6 +25,8 @@ interface Partner {
 }
 
 export function ActivePartnerStreams() {
+  const [openPartner, setOpenPartner] = useState<string | null>(null);
+
   const { data: partners, isLoading } = useQuery({
     queryKey: ['active-partners'],
     queryFn: async () => {
@@ -80,55 +85,70 @@ export function ActivePartnerStreams() {
           const commissionPct = partner.commission_rate <= 1
             ? (partner.commission_rate * 100).toFixed(0)
             : partner.commission_rate.toFixed(0);
+          const brand = getPartnerBrand(partner.name);
+          const isOpen = openPartner === partner.id;
 
           return (
-            <div
+            <Collapsible
               key={partner.id}
-              className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-card/50 hover:bg-accent/10 transition-colors"
+              open={isOpen}
+              onOpenChange={(open) => setOpenPartner(open ? partner.id : null)}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                {(() => {
-                  const brand = getPartnerBrand(partner.name);
-                  return (
+              <div className="rounded-lg border border-border/50 bg-card/50 hover:bg-accent/10 transition-colors overflow-hidden">
+                <div className="flex items-center justify-between p-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
                       className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0"
                       style={{ backgroundColor: brand?.color || 'hsl(var(--primary))' }}
                     >
                       {brand?.initials || partner.name.slice(0, 2).toUpperCase()}
                     </div>
-                  );
-                })()}
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{partner.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    {(() => {
-                      const brand = getPartnerBrand(partner.name);
-                      return brand ? (
-                        <Badge variant="outline" className="text-[10px] opacity-70">
-                          {brand.category}
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{partner.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {brand && (
+                          <Badge variant="outline" className="text-[10px] opacity-70">
+                            {brand.category}
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-xs">
+                          {commissionPct}% עמלה
                         </Badge>
-                      ) : null;
-                    })()}
-                    <Badge variant="secondary" className="text-xs">
-                      {commissionPct}% עמלה
-                    </Badge>
-                    {clicks > 0 && (
-                      <span className="text-xs text-muted-foreground">
-                        {clicks} קליקים (30 יום)
-                      </span>
-                    )}
+                        {clicks > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {clicks} קליקים (30 יום)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <CollapsibleTrigger asChild>
+                      <Button variant="ghost" size="sm">
+                        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => window.open(partner.affiliate_base_url, '_blank', 'noopener,noreferrer')}
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
+
+                <CollapsibleContent>
+                  <div className="px-3 pb-3">
+                    <ContentForgeCard
+                      partnerName={partner.name}
+                      affiliateLink={partner.affiliate_base_url}
+                      fallbackLink={`${window.location.origin}/go/${slug}`}
+                    />
+                  </div>
+                </CollapsibleContent>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => window.open(partner.affiliate_base_url, '_blank', 'noopener,noreferrer')}
-                className="shrink-0"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </Button>
-            </div>
+            </Collapsible>
           );
         })}
         {(!partners || partners.length === 0) && (
