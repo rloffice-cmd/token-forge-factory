@@ -2616,6 +2616,54 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_outreach_needed: {
+        Row: {
+          created_at: string | null
+          id: string
+          job_id: string | null
+          outreach_text: string
+          partner_name: string | null
+          reason: string | null
+          resolved_at: string | null
+          signal_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          outreach_text: string
+          partner_name?: string | null
+          reason?: string | null
+          resolved_at?: string | null
+          signal_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          job_id?: string | null
+          outreach_text?: string
+          partner_name?: string | null
+          reason?: string | null
+          resolved_at?: string | null
+          signal_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_outreach_needed_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "outreach_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "manual_outreach_needed_signal_id_fkey"
+            columns: ["signal_id"]
+            isOneToOne: false
+            referencedRelation: "demand_signals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       marketing_insights: {
         Row: {
           affected_entities: Json | null
