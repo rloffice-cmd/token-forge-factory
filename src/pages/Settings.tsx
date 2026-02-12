@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { TreasuryAddressSettings } from '@/components/settings/TreasuryAddressSettings';
 import { UserProfileCard } from '@/components/UserProfileCard';
-import { Settings2, Cpu, Gavel, Shield } from 'lucide-react';
+import { Settings2, Cpu, Gavel, Shield, Link2 } from 'lucide-react';
 
 export default function Settings() {
   return (
@@ -157,6 +157,57 @@ export default function Settings() {
                 </p>
               </div>
               <Switch defaultChecked />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* PartnerStack / Reditus Integration */}
+        <Card className="glass-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5" />
+              PartnerStack / Reditus Integration
+            </CardTitle>
+            <CardDescription>
+              מפתח API לקבלת Postback-ים מרשתות שותפים
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>PartnerStack API Key</Label>
+                <p className="text-sm text-muted-foreground">
+                  יוגדר כשנחבר רשת שותפים חיצונית
+                </p>
+              </div>
+              <Input
+                className="max-w-xs bg-muted/30 font-mono"
+                placeholder="ps_live_..."
+                disabled
+                dir="ltr"
+              />
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Postback Endpoint</Label>
+                <p className="text-sm text-muted-foreground">
+                  כתובת לקבלת אירועי המרה
+                </p>
+              </div>
+              <code className="text-xs bg-muted/30 px-3 py-1.5 rounded font-mono max-w-xs truncate block" dir="ltr">
+                /functions/v1/m2m-postback
+              </code>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Postback Authentication</Label>
+                <p className="text-sm text-muted-foreground">
+                  אימות HMAC חתימה על בקשות נכנסות
+                </p>
+              </div>
+              <Switch disabled />
             </div>
           </CardContent>
         </Card>
