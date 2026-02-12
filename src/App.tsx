@@ -38,6 +38,7 @@ import Login from "./pages/Login";
 import SystemAudit from "./pages/SystemAudit";
 import DomainManager from "./pages/DomainManager";
 import HunterDashboard from "./pages/HunterDashboard";
+import SystemDiagnosticReport from "./pages/SystemDiagnosticReport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -86,6 +87,7 @@ const App = () => (
             <Route path="/admin/manual-outreach" element={<AuthGuard><ManualOutreach /></AuthGuard>} />
             <Route path="/admin/domain-manager" element={<AuthGuard><DomainManager /></AuthGuard>} />
             <Route path="/forge/hunter" element={<AuthGuard><HunterDashboard /></AuthGuard>} />
+            <Route path="/admin/diagnostic-report" element={<AuthGuard><SystemDiagnosticReport /></AuthGuard>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
