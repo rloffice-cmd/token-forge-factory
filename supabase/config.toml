@@ -258,3 +258,10 @@ verify_jwt = false
 # ADMIN - Domain management
 [functions.setup-resend-domain]
 verify_jwt = false
+
+# TRAVEL VERTICAL + WARM-UP
+[functions.travel-classifier]
+verify_jwt = false
+
+[functions.outreach-limiter]
+verify_jwt = false
