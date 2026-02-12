@@ -275,6 +275,21 @@ Competitor Mentioned: ${lead.competitor_displacement || 'None'}`
         await supabase.from('leads').update({ status: 'contacted' }).eq('id', lead.id);
       }
 
+      // Trigger Resend email if lead has email
+      const leadEmail = (lead as Record<string, unknown>).email as string | undefined;
+      if (leadEmail && ['adturbo ai', 'lucro crm', 'emaillistverify', 'easyfund'].includes(partnerKey)) {
+        supabase.functions.invoke('automated-outreach', {
+          body: {
+            lead_email: leadEmail,
+            lead_name: lead.author || lead.username || undefined,
+            lead_id: leadId,
+            partner_name: matched.name,
+            email_body: finalMessage.replace(/\n/g, '<br/>'),
+            affiliate_url: matched.affiliate_base_url,
+          },
+        }).catch(err => console.warn(`⚠️ Resend email trigger failed: ${err}`));
+      }
+
       results.push({
         lead_id: leadId,
         partner: matched.name,
