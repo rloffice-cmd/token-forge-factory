@@ -12,6 +12,7 @@ import { LedgerTable } from '@/components/treasury/LedgerTable';
 import { CashoutHistory } from '@/components/treasury/CashoutHistory';
 import { WalletConnectButton } from '@/components/treasury/WalletConnectButton';
 import { RevenueOverview } from '@/components/treasury/RevenueOverview';
+import { ActivePartnerStreams } from '@/components/treasury/ActivePartnerStreams';
 import { PaymentHistory } from '@/components/treasury/PaymentHistory';
 import { RevenueChart } from '@/components/treasury/RevenueChart';
 import { Card, CardContent } from '@/components/ui/card';
@@ -57,10 +58,13 @@ export default function Treasury() {
           
           {/* Revenue Tab */}
           <TabsContent value="revenue" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RevenueChart />
-              <PaymentHistory />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <RevenueChart />
+              </div>
+              <ActivePartnerStreams />
             </div>
+            <PaymentHistory />
           </TabsContent>
           
           {/* Wallet Tab */}
