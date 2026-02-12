@@ -1564,6 +1564,8 @@ export type Database = {
           source_id: string | null
           source_url: string | null
           status: string
+          travel_intent_data: Json | null
+          travel_tier: number | null
           urgency_score: number | null
         }
         Insert: {
@@ -1580,6 +1582,8 @@ export type Database = {
           source_id?: string | null
           source_url?: string | null
           status?: string
+          travel_intent_data?: Json | null
+          travel_tier?: number | null
           urgency_score?: number | null
         }
         Update: {
@@ -1596,6 +1600,8 @@ export type Database = {
           source_id?: string | null
           source_url?: string | null
           status?: string
+          travel_intent_data?: Json | null
+          travel_tier?: number | null
           urgency_score?: number | null
         }
         Relationships: [
@@ -4345,6 +4351,9 @@ export type Database = {
           created_at: string
           dimensions: Json | null
           id: string
+          metadata: Json | null
+          metric_date: string | null
+          metric_key: string | null
           metric_name: string
           metric_type: string
           metric_value: number
@@ -4354,6 +4363,9 @@ export type Database = {
           created_at?: string
           dimensions?: Json | null
           id?: string
+          metadata?: Json | null
+          metric_date?: string | null
+          metric_key?: string | null
           metric_name: string
           metric_type?: string
           metric_value: number
@@ -4363,6 +4375,9 @@ export type Database = {
           created_at?: string
           dimensions?: Json | null
           id?: string
+          metadata?: Json | null
+          metric_date?: string | null
+          metric_key?: string | null
           metric_name?: string
           metric_type?: string
           metric_value?: number

@@ -4,6 +4,7 @@ import { JobsTable } from '@/components/JobsTable';
 import { StatusChart } from '@/components/StatusChart';
 import { ActivationChecklist } from '@/components/ActivationChecklist';
 import { FileCode2, Percent, Coins, AlertTriangle, Loader2, Radio, Clock } from 'lucide-react';
+import { ROITracker } from '@/components/forge/ROITracker';
 import { NetworkConnectivity } from '@/components/NetworkConnectivity';
 import { useDashboardStats } from '@/hooks/useDatabase';
 import { useQuery } from '@tanstack/react-query';
@@ -168,6 +169,9 @@ export default function Dashboard() {
             variant={stats.fpCriticalCount > 0 ? 'danger' : 'success'}
           />
         </div>
+
+        {/* ROI Tracker */}
+        <ROITracker />
 
         {/* Charts and table - stack on mobile */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
