@@ -76,6 +76,21 @@ serve(async (req) => {
       );
     }
 
+    // ========== DYNAMIC PRICING KILL SWITCH ==========
+    const { data: pricingConfig } = await supabase
+      .from("engine_config")
+      .select("config_value")
+      .eq("config_key", "dynamic_pricing_enabled")
+      .single();
+
+    if (pricingConfig?.config_value === false || pricingConfig?.config_value === "false") {
+      console.log("🛑 Dynamic Pricing DISABLED via engine_config. Fixed baselines active.");
+      return new Response(
+        JSON.stringify({ success: false, reason: "dynamic_pricing_disabled", message: "Fixed baseline pricing active. Dynamic pricing has been disabled to prevent price erosion." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const action = body.action || "optimize";
     const dryRun = body.dry_run ?? true; // Default to dry run for safety
