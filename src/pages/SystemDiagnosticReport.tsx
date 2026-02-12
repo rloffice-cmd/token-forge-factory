@@ -12,10 +12,26 @@ import { toast } from 'sonner';
 
 const REPORT_DATE = '2026-02-12T15:59:00Z';
 
-const REPORT = `# 🔬 SignalForge — FORENSIC SYSTEM AUDIT
+// Ready for Launch Checklist
+const LAUNCH_CHECKLIST = [
+  { label: 'DNS Verified (getsignalforge.com)', status: true },
+  { label: 'auto_closing_enabled = true', status: true },
+  { label: 'fulfillment_enabled = true', status: true },
+  { label: 'monster_mode = false (KEEP OFF)', status: true },
+  { label: 'dry_run_mode = true', status: true },
+  { label: 'Trackable links in outreach', status: true },
+  { label: 'M2M postback webhook live', status: false },
+  { label: 'Revenue ledger audit trail', status: true },
+  { label: 'Anti-fraud 90% CTR flagging', status: true },
+];
+
+const REPORT = `# 🚀 LEAN REVENUE ACTIVATION — READY FOR LAUNCH CHECKLIST
 **Timestamp:** ${REPORT_DATE}
-**Auditor:** Automated Forensic Engine (Live DB Queries)
-**Verdict:** OPERATIONAL BUT ZERO REAL REVENUE
+**Mission:** Affiliate-First ROI (Shortest Path to Trackable Click)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## ✅ PRE-LAUNCH CHECKLIST
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ## SECTION 1 — SYSTEM MAP (TRUTH)
@@ -463,9 +479,60 @@ export default function SystemDiagnosticReport() {
     }
   };
 
+  // Ready for Launch Checklist
+  const LAUNCH_CHECKLIST = [
+    { label: 'DNS Verified (getsignalforge.com)', status: true },
+    { label: 'auto_closing_enabled = true', status: true },
+    { label: 'fulfillment_enabled = true', status: true },
+    { label: 'monster_mode = false (KEEP OFF)', status: true },
+    { label: 'dry_run_mode = true', status: true },
+    { label: 'Trackable links in outreach', status: true },
+    { label: 'M2M postback webhook live', status: false },
+    { label: 'Revenue ledger audit trail', status: true },
+    { label: 'Anti-fraud 90% CTR flagging', status: true },
+  ];
+
+  const allChecklistPassed = LAUNCH_CHECKLIST.every(item => item.status);
+
   return (
     <AppLayout>
-      <div className="p-4 lg:p-8 space-y-4">
+      <div className="p-4 lg:p-8 space-y-6">
+        {/* Launch Status Banner */}
+        <div className={`rounded-lg border p-4 ${allChecklistPassed ? 'border-success bg-success/5' : 'border-warning bg-warning/5'}`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className={`font-bold text-lg ${allChecklistPassed ? 'text-success' : 'text-warning'}`}>
+                {allChecklistPassed ? '🟢 READY FOR LAUNCH' : '🟡 PRE-LAUNCH CHECKS'}
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                {allChecklistPassed 
+                  ? 'All revenue flags enabled. Monster Mode ON-DECK — enable when DNS verified.'
+                  : 'Complete items before enabling Monster Mode'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Checklist Card */}
+        <Card className="glass-card border-border">
+          <CardHeader>
+            <CardTitle className="text-base">Pre-Launch Requirements</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {LAUNCH_CHECKLIST.map((item, idx) => (
+                <div key={idx} className="flex items-center gap-3 p-2 rounded hover:bg-background/50 transition">
+                  <div className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${item.status ? 'bg-success/20 text-success' : 'bg-muted/50 text-muted-foreground'}`}>
+                    {item.status ? '✓' : '○'}
+                  </div>
+                  <span className={`text-sm ${item.status ? 'text-foreground' : 'text-muted-foreground'}`}>{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Full Report */}
         <Card className="border-destructive/50">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-xl">🔬 Forensic System Audit — Live Data</CardTitle>

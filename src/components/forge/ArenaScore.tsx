@@ -52,47 +52,31 @@ export function ArenaScore() {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Trophy className="w-4 h-4 text-warning" />
-          Arena Score
+          Live Revenue Arena
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center justify-center mb-4">
-          <div className="relative w-28 h-28 flex items-center justify-center">
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--muted))" strokeWidth="8" />
-              <circle
-                cx="50" cy="50" r="42" fill="none"
-                stroke="hsl(var(--primary))"
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={`${score * 2.64} 264`}
-                className="transition-all duration-1000"
-              />
-            </svg>
-            <span className={`absolute text-3xl font-bold ${scoreColor}`}>
-              {score}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div>
-            <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
-              <MousePointerClick className="w-3 h-3" /> Clicks
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+              <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
+                <MousePointerClick className="w-3 h-3" /> Live Clicks
+              </div>
+              <p className="text-2xl font-bold text-primary">{data?.clicksToday ?? 0}</p>
             </div>
-            <p className="text-lg font-semibold">{data?.clicksToday ?? 0}</p>
-          </div>
-          <div>
-            <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
-              <Target className="w-3 h-3" /> CTR
+            <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+              <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
+                <TrendingUp className="w-3 h-3" /> Postback $
+              </div>
+              <p className="text-2xl font-bold text-success">$0</p>
+              <p className="text-xs text-muted-foreground">awaiting conversion</p>
             </div>
-            <p className="text-lg font-semibold">{data?.ctr ?? 0}%</p>
-          </div>
-          <div>
-            <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
-              <TrendingUp className="w-3 h-3" /> 7d
+            <div className="bg-background/50 rounded-lg p-3 text-center border border-border">
+              <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
+                <Target className="w-3 h-3" /> Active Opps
+              </div>
+              <p className="text-2xl font-bold text-warning">{data?.dispatchesToday ?? 0}</p>
             </div>
-            <p className="text-lg font-semibold">{data?.clicksWeek ?? 0}</p>
           </div>
         </div>
       </CardContent>

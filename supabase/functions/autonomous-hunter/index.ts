@@ -44,35 +44,35 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; partner: string }>
   },
 };
 
-// Content templates per partner (simplified versions for email)
+// Content templates per partner (email + trackable redirect link)
 const EMAIL_TEMPLATES: Record<string, { subject: string; body: string }> = {
   'Woodpecker': {
     subject: 'Quick tip on improving cold email deliverability',
-    body: `Hi {{NAME}},\n\nI noticed you might be working on scaling outreach — one thing that made a huge difference for teams I've seen is using smart sending patterns instead of generic blasts.\n\nWoodpecker automates this with human-like sequences that bypass spam filters and auto-rotate sending accounts.\n\nMight be worth a look: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nI noticed you might be working on scaling outreach — one thing that made a huge difference for teams I've seen is using smart sending patterns instead of generic blasts.\n\nWoodpecker automates this with human-like sequences that bypass spam filters and auto-rotate sending accounts.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
   'EmailListVerify': {
     subject: 'Your bounce rate might be hurting deliverability',
-    body: `Hi {{NAME}},\n\nHigh bounce rates are a silent reputation killer. Before your next campaign, running your list through EmailListVerify catches invalid emails, spam traps, and disposable addresses.\n\nTeams using it consistently see 98%+ deliverability.\n\nCheck it out: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nHigh bounce rates are a silent reputation killer. Before your next campaign, running your list through EmailListVerify catches invalid emails, spam traps, and disposable addresses.\n\nTeams using it consistently see 98%+ deliverability.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
   'Compass': {
     subject: 'Are you tracking the right eCommerce metrics?',
-    body: `Hi {{NAME}},\n\nMost eCommerce teams drown in data but miss the insights that drive revenue. Compass gives you product-level analytics and channel attribution out of the box.\n\nWorth exploring: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nMost eCommerce teams drown in data but miss the insights that drive revenue. Compass gives you product-level analytics and channel attribution out of the box.\n\n👉 Worth exploring: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
   'AdTurbo AI': {
     subject: 'Cut your ad CPA by 40% — here\'s how',
-    body: `Hi {{NAME}},\n\nIf you\'re running paid campaigns, AdTurbo AI optimizes your ROAS across all channels automatically. Teams I've seen cut their CPA by 40% in the first quarter.\n\nTake a look: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nIf you\'re running paid campaigns, AdTurbo AI optimizes your ROAS across all channels automatically. Teams I've seen cut their CPA by 40% in the first quarter.\n\n👉 Take a look: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
   'Lucro CRM': {
     subject: 'Your CRM should be closing deals, not just storing contacts',
-    body: `Hi {{NAME}},\n\nLucro CRM brings intelligent deal scoring, automated follow-ups, and revenue forecasting that actually works. Teams see 25%+ improvement in close rates.\n\nWorth trying: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nLucro CRM brings intelligent deal scoring, automated follow-ups, and revenue forecasting that actually works. Teams see 25%+ improvement in close rates.\n\n👉 Worth trying: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
   'EasyFund': {
     subject: 'Simplify your fundraising process',
-    body: `Hi {{NAME}},\n\nIf you're raising capital, EasyFund streamlines your investor pipeline, document sharing, and fundraising analytics in one place.\n\nCheck it out: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nIf you're raising capital, EasyFund streamlines your investor pipeline, document sharing, and fundraising analytics in one place.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
   'WebinarGeek': {
     subject: 'Webinars still convert better than anything in B2B',
-    body: `Hi {{NAME}},\n\nWebinarGeek gives you a real webinar platform with registration funnels, automated replays, and engagement analytics — way beyond a basic video call.\n\nTake a look: {{LINK}}\n\nBest,\nSignalForge Team`,
+    body: `Hi {{NAME}},\n\nWebinarGeek gives you a real webinar platform with registration funnels, automated replays, and engagement analytics — way beyond a basic video call.\n\n👉 Take a look: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team`,
   },
 };
 
@@ -355,15 +355,19 @@ async function sendOutreach(supabase: any, settings: any, isDryRun: boolean, rem
       continue;
     }
 
+    // Generate trackable redirect link: /go/[partner-slug]/[lead-id]
+    const partnerSlug = partnerName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    const trackableLink = `https://getsignalforge.com/go/${partnerSlug}/${lead.id}`;
+
     // Use ContentForge social template for high-confidence leads
     const socialSnippet = SOCIAL_TEMPLATES[partnerName];
     const socialBlock = socialSnippet && lead.confidence >= 0.8
-      ? `\n\n---\n📣 Ready-to-post social content:\n\n${socialSnippet.replace('{{LINK}}', affiliateLink)}`
+      ? `\n\n---\n📣 Ready-to-post social content:\n\n${socialSnippet.replace('{{LINK}}', trackableLink)}`
       : '';
 
     const personalizedBody = template.body
       .replace('{{NAME}}', lead.name || 'there')
-      .replace('{{LINK}}', affiliateLink) + socialBlock;
+      .replace('{{TRACKABLE_LINK}}', trackableLink) + socialBlock;
 
     if (isDryRun) {
       // Dry run: log without sending
