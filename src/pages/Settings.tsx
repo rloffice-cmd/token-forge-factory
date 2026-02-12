@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { TreasuryAddressSettings } from '@/components/settings/TreasuryAddressSettings';
+import { UserProfileCard } from '@/components/UserProfileCard';
 import { Settings2, Cpu, Gavel, Shield } from 'lucide-react';
 
 export default function Settings() {
@@ -21,6 +22,9 @@ export default function Settings() {
             הגדרות מערכת, Treasury וקופה
           </p>
         </div>
+
+        {/* User Profile */}
+        <UserProfileCard />
 
         {/* Treasury Address Settings - CRITICAL */}
         <TreasuryAddressSettings />

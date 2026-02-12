@@ -486,13 +486,55 @@ export async function fetchFailureInsightsBySignature(
   }));
 }
 
+// ==========================================
+// USER PROFILE
+// ==========================================
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string | null;
+  linkedin_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function fetchCurrentUserProfile(): Promise<UserProfile | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from('users_customers')
+    .select('*')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as UserProfile | null;
+}
+
+export async function updateUserProfile(updates: Partial<UserProfile>): Promise<UserProfile> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('users_customers')
+    .update(updates)
+    .eq('id', user.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as UserProfile;
+}
+
 export async function fetchTopFailurePatterns(limit: number = 10): Promise<Array<{
-  pattern_signature: string;
-  failure_category: string | null;
-  root_cause: string;
-  count: number;
-  latest: string;
-}>> {
+   pattern_signature: string;
+   failure_category: string | null;
+   root_cause: string;
+   count: number;
+   latest: string;
+ }>> {
   // Fetch all insights and group client-side (Supabase JS doesn't support GROUP BY)
   const { data, error } = await supabase
     .from('failure_insights')
