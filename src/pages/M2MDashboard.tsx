@@ -3,12 +3,15 @@
  * Glassmorphism dark-mode dashboard for tracking bounties, signal efficiency, and partner performance.
  */
 
+import { useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AutomatedMarketingHub } from '@/components/forge/AutomatedMarketingHub';
 import {
   DollarSign,
   Target,
@@ -20,6 +23,7 @@ import {
   Shield,
   PieChart as PieIcon,
   Clock,
+  Megaphone,
 } from 'lucide-react';
 import {
   BarChart,
@@ -204,7 +208,7 @@ export default function M2MDashboard() {
     <AppLayout>
       <div className="p-4 lg:p-8 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl lg:text-3xl font-bold flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center">
@@ -241,6 +245,20 @@ export default function M2MDashboard() {
           </div>
         )}
 
+        {/* Main Tabs: Analytics vs Marketing Hub */}
+        <Tabs defaultValue="analytics" className="space-y-6">
+          <TabsList className="h-10">
+            <TabsTrigger value="analytics" className="gap-2">
+              <Target className="w-4 h-4" />
+              Analytics
+            </TabsTrigger>
+            <TabsTrigger value="marketing" className="gap-2">
+              <Megaphone className="w-4 h-4" />
+              Marketing Kit
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="analytics" className="space-y-6">
         {/* KPI Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard
@@ -548,6 +566,12 @@ export default function M2MDashboard() {
             </CardContent>
           </Card>
         </div>
+          </TabsContent>
+
+          <TabsContent value="marketing">
+            <AutomatedMarketingHub />
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
