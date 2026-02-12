@@ -67,10 +67,55 @@ function ScoreBadge({ score }: { score: number }) {
   );
 }
 
+interface TestResult {
+  success: boolean;
+  resend_response: unknown;
+  telegram_status: string;
+  error_code?: string;
+  error_message?: string;
+}
+
 export default function SystemAudit() {
   const [data, setData] = useState<AuditData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  const runTestEmail = async () => {
+    setTestLoading(true);
+    setTestResult(null);
+    setTestError(null);
+    try {
+      const res = await supabase.functions.invoke('automated-outreach', {
+        body: {
+          lead_email: 'test@truthtoken.io',
+          lead_name: 'Test User',
+          lead_id: 'test-dispatch-' + Date.now(),
+          partner_name: 'AdTurbo AI',
+          intent_topic: 'Facebook Ads optimization for e-commerce',
+          affiliate_url: 'https://truthtoken.io/go/adturbo/test',
+          batch_mode: false,
+        },
+      });
+      if (res.error) {
+        const msg = res.error.message || JSON.stringify(res.error);
+        const codeMatch = msg.match(/(\d{3})/);
+        setTestError(`${codeMatch ? codeMatch[1] + ' — ' : ''}${msg}`);
+      } else {
+        setTestResult({
+          success: true,
+          resend_response: res.data,
+          telegram_status: res.data?.telegram_sent ? '✅ Sent' : '⚠️ Not confirmed',
+        });
+      }
+    } catch (e) {
+      setTestError(e instanceof Error ? e.message : 'Unknown error');
+    } finally {
+      setTestLoading(false);
+    }
+  };
 
   const runAudit = async () => {
     setLoading(true);
@@ -117,6 +162,53 @@ export default function SystemAudit() {
             </CardContent>
           </Card>
         )}
+
+        {/* Test Email Dispatcher */}
+        <Card className="glass-card border-primary/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Zap className="w-5 h-5 text-primary" />
+              Test Email Dispatcher
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Sends a test email via <span className="font-mono">automated-outreach</span> to verify Resend + Telegram integration.
+            </p>
+            <Button onClick={runTestEmail} disabled={testLoading} variant="outline" className="gap-2">
+              <Zap className={`w-4 h-4 ${testLoading ? 'animate-spin' : ''}`} />
+              {testLoading ? 'Sending...' : 'Send Test Email'}
+            </Button>
+
+            {testError && (
+              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 space-y-1">
+                <p className="text-sm font-semibold text-destructive flex items-center gap-2">
+                  <XCircle className="w-4 h-4" /> Failed
+                </p>
+                <pre className="text-xs text-destructive/80 whitespace-pre-wrap font-mono">{testError}</pre>
+              </div>
+            )}
+
+            {testResult && (
+              <div className="space-y-3">
+                <div className="p-4 rounded-lg bg-success/10 border border-success/30">
+                  <p className="text-sm font-semibold text-success flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4" /> Email Sent Successfully
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Telegram: {testResult.telegram_status}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-card/50 border border-border/30">
+                  <p className="text-xs font-semibold mb-1 text-muted-foreground">Raw Resend Response</p>
+                  <pre className="text-xs whitespace-pre-wrap font-mono max-h-48 overflow-auto">
+                    {JSON.stringify(testResult.resend_response, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {!data && !loading && (
           <Card className="glass-card">
