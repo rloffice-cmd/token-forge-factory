@@ -22,6 +22,11 @@ const LEAD_SOURCES = [
   { type: 'reddit', url: 'https://www.reddit.com/r/growthhacking/new/', keywords: ['outbound strategy', 'cold outreach', 'scalability issues', 'email deliverability'] },
   { type: 'reddit', url: 'https://www.reddit.com/r/marketingautomation/new/', keywords: ['email automation', 'drip campaign', 'outreach tool', 'cold email at scale'] },
 
+  // ===== EMAILLISTVERIFY HUNTERS (Email Validation / Bounce Failures) =====
+  { type: 'reddit', url: 'https://www.reddit.com/r/Emailmarketing/new/', keywords: ['email verification', 'bounce rate high', 'invalid emails', 'email list cleaning', 'verify email list', 'hard bounces'] },
+  { type: 'reddit', url: 'https://www.reddit.com/r/sales/new/', keywords: ['email list quality', 'bounced emails', 'catch-all emails', 'disposable emails', 'spam traps', 'list hygiene'] },
+  { type: 'reddit', url: 'https://www.reddit.com/r/digital_marketing/new/', keywords: ['email validation tool', 'clean email list', 'neverbounce alternative', 'zerobounce alternative', 'bulk email verify'] },
+
   // ===== PINECONE HUNTERS (Vector DB / RAG Failures) =====
   { type: 'reddit', url: 'https://www.reddit.com/r/MachineLearning/new/', keywords: ['vector search latency', 'embedding cost', 'RAG without dedicated DB', 'similarity search scale'] },
   { type: 'reddit', url: 'https://www.reddit.com/r/LocalLLaMA/new/', keywords: ['vector database', 'embedding storage', 'RAG pipeline', 'chromadb alternative'] },

@@ -48,6 +48,13 @@ const PARTNER_CONTEXTS: Record<string, {
     competitors: ["chromadb", "weaviate", "qdrant", "milvus"],
     displacement_hook: "Pinecone handles the infrastructure so you can focus on your AI product, not database operations",
   },
+  emaillistverify: {
+    pain_points: ["email bounce rate", "invalid emails", "email list cleaning", "hard bounces", "spam traps", "catch-all detection", "disposable emails", "email verification", "list hygiene", "email deliverability"],
+    key_features: "bulk email list verification with 99% accuracy, real-time API, spam trap and disposable email detection",
+    positioning: "an email verification service that cleans your list before you send, eliminating bounces and protecting sender reputation",
+    competitors: ["neverbounce", "zerobounce", "debounce", "kickbox", "hunter.io"],
+    displacement_hook: "EmailListVerify processes lists faster at a fraction of the cost, with pay-as-you-go pricing and no monthly commitments",
+  },
 };
 
 interface SignalLead {
@@ -164,7 +171,7 @@ serve(async (req) => {
     }
 
     // SELECTIVE OUTREACH: Only dispatch for approved partners
-    const OUTREACH_ENABLED_PARTNERS = ['woodpecker'];
+    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify'];
     const outreachPartners = partners.filter(p =>
       OUTREACH_ENABLED_PARTNERS.includes(p.name.toLowerCase())
     );
