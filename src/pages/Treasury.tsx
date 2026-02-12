@@ -7,6 +7,7 @@
 import { AppLayout } from '@/components/AppLayout';
 import { TreasuryBalanceCard } from '@/components/treasury/TreasuryBalance';
 import { WithdrawPanel } from '@/components/treasury/WithdrawPanel';
+import { PayPalPayoutPanel } from '@/components/treasury/PayPalPayoutPanel';
 import { LedgerTable } from '@/components/treasury/LedgerTable';
 import { CashoutHistory } from '@/components/treasury/CashoutHistory';
 import { WalletConnectButton } from '@/components/treasury/WalletConnectButton';
@@ -70,6 +71,7 @@ export default function Treasury() {
                 <WithdrawPanel />
               </div>
               <div className="space-y-6">
+                <PayPalPayoutPanel />
                 <CashoutHistory />
               </div>
             </div>
