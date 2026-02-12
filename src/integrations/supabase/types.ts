@@ -4433,6 +4433,7 @@ export type Database = {
           created_at: string
           email: string
           id: string
+          linkedin_url: string | null
           name: string | null
           updated_at: string
         }
@@ -4440,6 +4441,7 @@ export type Database = {
           created_at?: string
           email: string
           id?: string
+          linkedin_url?: string | null
           name?: string | null
           updated_at?: string
         }
@@ -4447,6 +4449,7 @@ export type Database = {
           created_at?: string
           email?: string
           id?: string
+          linkedin_url?: string | null
           name?: string | null
           updated_at?: string
         }
