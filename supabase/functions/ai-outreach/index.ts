@@ -12,7 +12,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// V3.0 Partner contexts with competitor displacement triggers
+// V4.0 Partner contexts with competitor displacement triggers
 const PARTNER_CONTEXTS: Record<string, {
   pain_points: string[];
   key_features: string;
@@ -27,26 +27,26 @@ const PARTNER_CONTEXTS: Record<string, {
     competitors: ["instantly", "lemlist", "mailshake", "apollo", "smartlead"],
     displacement_hook: "Unlike alternatives that often get flagged, Woodpecker uses real inbox rotation and warmup algorithms that maintain sender reputation at scale",
   },
-  hubspot: {
-    pain_points: ["scaling sales", "organizing messy leads", "CRM chaos", "losing track of prospects", "manual follow-ups"],
-    key_features: "automated lead management and sales pipeline tracking",
-    positioning: "a platform that organizes your entire sales pipeline and automates follow-ups",
-    competitors: ["pipedrive", "salesforce", "close.com"],
-    displacement_hook: "HubSpot's free CRM tier gives you pipeline visibility without the enterprise price tag",
+  "adturbo ai": {
+    pain_points: ["ad spend optimization", "ROAS", "facebook ads", "google ads", "paid media", "ad campaign management", "PPC", "advertising budget", "ad fatigue", "creative testing"],
+    key_features: "AI-powered ad optimization that automates campaign management, creative testing, and budget allocation across platforms",
+    positioning: "an AI advertising platform that maximizes ROAS by automatically optimizing ad spend and creatives across channels",
+    competitors: ["revealbot", "adroll", "madgicx", "smartly.io", "adespresso"],
+    displacement_hook: "AdTurbo's AI analyzes creative performance in real-time and reallocates budget to top performers before you waste ad spend",
   },
-  "monday.com": {
-    pain_points: ["workflow bottlenecks", "team visibility", "project tracking", "task management", "cross-team coordination"],
-    key_features: "visual workflow automation and team collaboration",
-    positioning: "a tool that gives your team full visibility on every project with automated workflows",
-    competitors: ["asana", "clickup", "notion"],
-    displacement_hook: "Monday.com's visual automations let you build workflows without writing a single line of code",
+  "lucro crm": {
+    pain_points: ["CRM chaos", "losing track of leads", "sales pipeline", "deal tracking", "follow-up management", "contact management", "sales funnel", "closing deals", "lead organization"],
+    key_features: "streamlined CRM with visual pipeline management, automated follow-ups, and deal intelligence",
+    positioning: "a modern CRM that helps sales teams close more deals with less manual work through smart automation and pipeline visibility",
+    competitors: ["hubspot", "pipedrive", "salesforce", "close.com", "freshsales"],
+    displacement_hook: "Lucro CRM gives you enterprise-grade pipeline management without the enterprise price tag or setup complexity",
   },
-  pinecone: {
-    pain_points: ["vector search latency", "embedding cost", "RAG pipeline", "similarity search at scale", "chromadb limitations"],
-    key_features: "managed vector database with sub-millisecond search at any scale",
-    positioning: "the industry-standard vector database for production AI applications",
-    competitors: ["chromadb", "weaviate", "qdrant", "milvus"],
-    displacement_hook: "Pinecone handles the infrastructure so you can focus on your AI product, not database operations",
+  easyfund: {
+    pain_points: ["fundraising", "nonprofit funding", "donations", "crowdfunding", "grant applications", "charity management", "community funding", "social impact", "NGO operations"],
+    key_features: "all-in-one fundraising platform for nonprofits with donor management, campaign tools, and payment processing",
+    positioning: "a fundraising platform that helps nonprofits and community organizations raise more with less effort",
+    competitors: ["gofundme", "donorbox", "classy", "givebutter", "fundly"],
+    displacement_hook: "EasyFund combines donor CRM, campaign pages, and payment processing in one tool — no integrations needed",
   },
   emaillistverify: {
     pain_points: ["email bounce rate", "invalid emails", "email list cleaning", "hard bounces", "spam traps", "catch-all detection", "disposable emails", "email verification", "list hygiene", "email deliverability", "cold outreach", "marketing emails"],
@@ -178,7 +178,7 @@ serve(async (req) => {
     }
 
     // SELECTIVE OUTREACH: Only dispatch for approved partners
-    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify', 'compass'];
+    const OUTREACH_ENABLED_PARTNERS = ['woodpecker', 'emaillistverify', 'compass', 'adturbo ai', 'lucro crm', 'easyfund'];
     const outreachPartners = partners.filter(p =>
       OUTREACH_ENABLED_PARTNERS.includes(p.name.toLowerCase())
     );
