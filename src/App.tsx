@@ -31,6 +31,7 @@ import AgentMarketplace from "./pages/AgentMarketplace";
 import AffiliateAdmin from "./pages/AffiliateAdmin";
 import DigitalProducts from "./pages/DigitalProducts";
 import PartnerLanding from "./pages/PartnerLanding";
+import LeadMarketplace from "./pages/LeadMarketplace";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -55,6 +56,7 @@ const App = () => (
             <Route path="/agents" element={<AgentMarketplace />} />
             <Route path="/products" element={<DigitalProducts />} />
             <Route path="/micro" element={<MicroLanding />} />
+            <Route path="/leads" element={<LeadMarketplace />} />
             
             {/* Protected Routes - Auth Required */}
             <Route path="/console" element={<AuthGuard><MoneyMachine /></AuthGuard>} />

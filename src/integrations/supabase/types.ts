@@ -2143,6 +2143,115 @@ export type Database = {
           },
         ]
       }
+      lead_marketplace: {
+        Row: {
+          buyer_email: string | null
+          created_at: string
+          full_data: Json | null
+          id: string
+          lead_id: string | null
+          niche: string
+          pain_description: string
+          price_usd: number
+          purchased_at: string | null
+          smart_score: number
+          status: string
+          teaser: string
+          tech_stack: string[] | null
+          tier: string
+          updated_at: string
+        }
+        Insert: {
+          buyer_email?: string | null
+          created_at?: string
+          full_data?: Json | null
+          id?: string
+          lead_id?: string | null
+          niche: string
+          pain_description: string
+          price_usd: number
+          purchased_at?: string | null
+          smart_score: number
+          status?: string
+          teaser: string
+          tech_stack?: string[] | null
+          tier?: string
+          updated_at?: string
+        }
+        Update: {
+          buyer_email?: string | null
+          created_at?: string
+          full_data?: Json | null
+          id?: string
+          lead_id?: string | null
+          niche?: string
+          pain_description?: string
+          price_usd?: number
+          purchased_at?: string | null
+          smart_score?: number
+          status?: string
+          teaser?: string
+          tech_stack?: string[] | null
+          tier?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_marketplace_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_purchases: {
+        Row: {
+          amount_usd: number
+          buyer_email: string
+          created_at: string
+          delivered_at: string | null
+          delivery_method: string | null
+          delivery_status: string
+          id: string
+          listing_id: string
+          payment_intent_id: string | null
+          webhook_url: string | null
+        }
+        Insert: {
+          amount_usd: number
+          buyer_email: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_method?: string | null
+          delivery_status?: string
+          id?: string
+          listing_id: string
+          payment_intent_id?: string | null
+          webhook_url?: string | null
+        }
+        Update: {
+          amount_usd?: number
+          buyer_email?: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_method?: string | null
+          delivery_status?: string
+          id?: string
+          listing_id?: string
+          payment_intent_id?: string | null
+          webhook_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_purchases_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "lead_marketplace"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           acquisition_campaign: string | null
