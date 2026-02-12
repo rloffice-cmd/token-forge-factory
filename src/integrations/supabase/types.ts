@@ -710,6 +710,66 @@ export type Database = {
           },
         ]
       }
+      auto_leads: {
+        Row: {
+          company: string | null
+          confidence: number | null
+          created_at: string
+          delivered_at: string | null
+          dry_run: boolean | null
+          email: string
+          id: string
+          lead_category: string
+          matched_partner: string | null
+          metadata: Json | null
+          name: string | null
+          opened_at: string | null
+          sent_at: string | null
+          source: string
+          source_url: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          company?: string | null
+          confidence?: number | null
+          created_at?: string
+          delivered_at?: string | null
+          dry_run?: boolean | null
+          email: string
+          id?: string
+          lead_category: string
+          matched_partner?: string | null
+          metadata?: Json | null
+          name?: string | null
+          opened_at?: string | null
+          sent_at?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          company?: string | null
+          confidence?: number | null
+          created_at?: string
+          delivered_at?: string | null
+          dry_run?: boolean | null
+          email?: string
+          id?: string
+          lead_category?: string
+          matched_partner?: string | null
+          metadata?: Json | null
+          name?: string | null
+          opened_at?: string | null
+          sent_at?: string | null
+          source?: string
+          source_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       auto_offer_rules: {
         Row: {
           created_at: string
@@ -2026,6 +2086,83 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      hunter_activity_log: {
+        Row: {
+          action: string
+          created_at: string
+          details: string | null
+          dry_run: boolean | null
+          id: string
+          lead_id: string | null
+          partner_name: string | null
+          status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: string | null
+          dry_run?: boolean | null
+          id?: string
+          lead_id?: string | null
+          partner_name?: string | null
+          status?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: string | null
+          dry_run?: boolean | null
+          id?: string
+          lead_id?: string | null
+          partner_name?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hunter_activity_log_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "auto_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hunter_settings: {
+        Row: {
+          daily_limit: number
+          domain: string
+          dry_run_mode: boolean
+          id: boolean
+          last_reset_at: string
+          last_run_at: string | null
+          monster_mode: boolean
+          sends_today: number
+          updated_at: string
+        }
+        Insert: {
+          daily_limit?: number
+          domain?: string
+          dry_run_mode?: boolean
+          id?: boolean
+          last_reset_at?: string
+          last_run_at?: string | null
+          monster_mode?: boolean
+          sends_today?: number
+          updated_at?: string
+        }
+        Update: {
+          daily_limit?: number
+          domain?: string
+          dry_run_mode?: boolean
+          id?: boolean
+          last_reset_at?: string
+          last_run_at?: string | null
+          monster_mode?: boolean
+          sends_today?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       improvement_suggestions: {
         Row: {
