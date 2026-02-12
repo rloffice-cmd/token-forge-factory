@@ -33,6 +33,7 @@ import DigitalProducts from "./pages/DigitalProducts";
 import PartnerLanding from "./pages/PartnerLanding";
 import LeadMarketplace from "./pages/LeadMarketplace";
 import AffiliateRedirect from "./pages/AffiliateRedirect";
+import ManualOutreach from "./pages/ManualOutreach";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 
@@ -78,6 +79,7 @@ const App = () => (
             <Route path="/admin/security" element={<AuthGuard><AdminSecurity /></AuthGuard>} />
             <Route path="/admin/api-keys" element={<AuthGuard><AdminApiKeys /></AuthGuard>} />
             <Route path="/admin/affiliates" element={<AuthGuard><AffiliateAdmin /></AuthGuard>} />
+            <Route path="/admin/manual-outreach" element={<AuthGuard><ManualOutreach /></AuthGuard>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>

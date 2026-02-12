@@ -39,10 +39,16 @@ serve(async (req) => {
   }
 
   try {
+    // Auth: Accept EITHER ADMIN_API_TOKEN or x-cron-secret
     const adminToken = Deno.env.get("ADMIN_API_TOKEN") || "";
+    const cronSecret = Deno.env.get("CRON_SECRET") || "";
     const authHeader = req.headers.get("authorization") || "";
+    const cronHeader = req.headers.get("x-cron-secret") || "";
 
-    if (!adminToken || !authHeader.includes(adminToken)) {
+    const isAdminAuth = adminToken && authHeader.includes(adminToken);
+    const isCronAuth = cronSecret && cronHeader === cronSecret;
+
+    if (!isAdminAuth && !isCronAuth) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
