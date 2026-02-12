@@ -76,6 +76,17 @@ const EMAIL_TEMPLATES: Record<string, { subject: string; body: string }> = {
   },
 };
 
+// ContentForge social templates per partner (LinkedIn-style for high-value leads)
+const SOCIAL_TEMPLATES: Record<string, string> = {
+  'Woodpecker': `🚀 מאבקים בדליברביליטי של מיילים קרים?\n\nWoodpecker מאפשר שליחה חכמה עם דפוסים אנושיים — שיעור תגובות x3.\n\n✅ סבב חשבונות אוטומטי\n✅ A/B testing בזמן אמת\n✅ עקיפת מסנני ספאם\n\n{{LINK}}`,
+  'EmailListVerify': `📧 שיעור הבאונס שלך הורס את המוניטין.\n\nEmailListVerify מסנן מיילים מזויפים, מלכודות ספאם וכתובות חד-פעמיות.\n\nתוצאה: 98%+ דליברביליטי.\n\n{{LINK}}`,
+  'Compass': `📊 רוב חנויות ה-eCommerce טובעות בדאטה בלי תובנות.\n\nCompass נותן אנליטיקס ברמת מוצר + ייחוס הכנסות לפי ערוץ.\n\n{{LINK}}`,
+  'AdTurbo AI': `💰 תפסיקו לשרוף תקציב פרסום.\n\nAdTurbo AI מייעל ROAS אוטומטית בכל הערוצים — הורדנו CPA ב-40%.\n\n{{LINK}}`,
+  'Lucro CRM': `🎯 ה-CRM שלכם צריך לסגור עסקאות, לא רק לאחסן אנשי קשר.\n\nLucro CRM = ניקוד לידים חכם + מעקבים אוטומטיים + תחזיות הכנסה.\n\nשיעור סגירה: +25%.\n\n{{LINK}}`,
+  'EasyFund': `💸 גיוס הון לא חייב להיות כאוטי.\n\nEasyFund מסדר את פייפליין המשקיעים, מעקב מסמכים ואנליטיקס בזמן אמת.\n\n{{LINK}}`,
+  'WebinarGeek': `🎥 וובינרים עדיין ממירים הכי טוב ב-B2B.\n\nWebinarGeek = פלטפורמת וובינר אמיתית עם דפי נחיתה, הקלטות אוטומטיות ואנליטיקס.\n\n{{LINK}}`,
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -174,6 +185,24 @@ Deno.serve(async (req) => {
       .from('hunter_settings')
       .update({ last_run_at: now.toISOString() })
       .eq('id', true);
+
+    // Send Hebrew hunt summary via Telegram
+    if (action === 'full_cycle' && (results.discovered > 0 || results.sent > 0)) {
+      await sendHuntSummaryTelegram(supabase, results);
+    }
+
+    // Auto-enable Monster Mode once DNS is verified (domain active check)
+    if (!settings.monster_mode && settings.domain) {
+      try {
+        const dnsCheck = await fetch(`https://${settings.domain}`, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
+        if (dnsCheck.ok) {
+          await supabase.from('hunter_settings').update({ monster_mode: true, dry_run_mode: false }).eq('id', true);
+          results.auto_enabled = true;
+          await logActivity(supabase, 'auto_enable', null, null,
+            `DNS מאומת עבור ${settings.domain} — Monster Mode הופעל אוטומטית`, 'success', false);
+        }
+      } catch { /* DNS not ready yet */ }
+    }
 
     return new Response(JSON.stringify({ ok: true, ...results }), {
       status: 200,
@@ -326,9 +355,15 @@ async function sendOutreach(supabase: any, settings: any, isDryRun: boolean, rem
       continue;
     }
 
+    // Use ContentForge social template for high-confidence leads
+    const socialSnippet = SOCIAL_TEMPLATES[partnerName];
+    const socialBlock = socialSnippet && lead.confidence >= 0.8
+      ? `\n\n---\n📣 Ready-to-post social content:\n\n${socialSnippet.replace('{{LINK}}', affiliateLink)}`
+      : '';
+
     const personalizedBody = template.body
       .replace('{{NAME}}', lead.name || 'there')
-      .replace('{{LINK}}', affiliateLink);
+      .replace('{{LINK}}', affiliateLink) + socialBlock;
 
     if (isDryRun) {
       // Dry run: log without sending
@@ -417,4 +452,59 @@ async function logActivity(
     status,
     dry_run: dryRun,
   });
+}
+
+// Send Hebrew hunt summary via Telegram
+async function sendHuntSummaryTelegram(supabase: any, results: any) {
+  try {
+    // Get partner breakdown from recent activity
+    const { data: recentActivity } = await supabase
+      .from('hunter_activity_log')
+      .select('partner_name, action, status')
+      .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    const partnerBreakdown: Record<string, { discovered: number; sent: number }> = {};
+    (recentActivity || []).forEach((a: any) => {
+      if (!a.partner_name) return;
+      if (!partnerBreakdown[a.partner_name]) partnerBreakdown[a.partner_name] = { discovered: 0, sent: 0 };
+      if (a.action === 'lead_discovered') partnerBreakdown[a.partner_name].discovered++;
+      if (a.action === 'email_sent' || a.action === 'dry_run_send') partnerBreakdown[a.partner_name].sent++;
+    });
+
+    const lines = [
+      `🎯 <b>דוח ציד יומי — Autonomous Hunter</b>`,
+      ``,
+      `🔍 לידים שהתגלו: <b>${results.discovered}</b>`,
+      `📤 הודעות שנשלחו: <b>${results.sent}</b>`,
+      `⏭️ דולגו: <b>${results.skipped || 0}</b>`,
+      `🧪 מצב יבש: <b>${results.dry_run ? 'כן' : 'לא'}</b>`,
+    ];
+
+    if (Object.keys(partnerBreakdown).length > 0) {
+      lines.push(``);
+      lines.push(`📊 <b>פירוט לפי שותף:</b>`);
+      for (const [partner, stats] of Object.entries(partnerBreakdown)) {
+        lines.push(`  • ${partner}: ${stats.discovered} התגלו / ${stats.sent} נשלחו`);
+      }
+    }
+
+    if (results.auto_enabled) {
+      lines.push(``);
+      lines.push(`🟢 <b>Monster Mode הופעל אוטומטית — DNS מאומת!</b>`);
+    }
+
+    lines.push(``);
+    lines.push(`⏰ ${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })}`);
+
+    await supabase.functions.invoke('telegram-notify', {
+      body: {
+        type: 'daily_report',
+        message: lines.join('\n'),
+      },
+    });
+  } catch (err) {
+    console.error('Failed to send hunt summary telegram:', err);
+  }
 }
