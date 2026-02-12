@@ -2566,15 +2566,21 @@ export type Database = {
         Row: {
           affiliate_base_url: string
           api_key_encrypted: string | null
+          avg_conv_rate: number | null
           category_tags: string[]
           commission_rate: number
           commission_type: string
+          commission_value_usd: number | null
           created_at: string
+          ev_score: number | null
           id: string
           is_active: boolean
           keyword_triggers: string[]
           name: string
+          niche_winner: boolean | null
           postback_url: string | null
+          testing_leads_sent: number | null
+          testing_phase: boolean | null
           total_conversions: number
           total_dispatches: number
           total_revenue_usd: number
@@ -2583,15 +2589,21 @@ export type Database = {
         Insert: {
           affiliate_base_url: string
           api_key_encrypted?: string | null
+          avg_conv_rate?: number | null
           category_tags?: string[]
           commission_rate?: number
           commission_type?: string
+          commission_value_usd?: number | null
           created_at?: string
+          ev_score?: number | null
           id?: string
           is_active?: boolean
           keyword_triggers?: string[]
           name: string
+          niche_winner?: boolean | null
           postback_url?: string | null
+          testing_leads_sent?: number | null
+          testing_phase?: boolean | null
           total_conversions?: number
           total_dispatches?: number
           total_revenue_usd?: number
@@ -2600,15 +2612,21 @@ export type Database = {
         Update: {
           affiliate_base_url?: string
           api_key_encrypted?: string | null
+          avg_conv_rate?: number | null
           category_tags?: string[]
           commission_rate?: number
           commission_type?: string
+          commission_value_usd?: number | null
           created_at?: string
+          ev_score?: number | null
           id?: string
           is_active?: boolean
           keyword_triggers?: string[]
           name?: string
+          niche_winner?: boolean | null
           postback_url?: string | null
+          testing_leads_sent?: number | null
+          testing_phase?: boolean | null
           total_conversions?: number
           total_dispatches?: number
           total_revenue_usd?: number

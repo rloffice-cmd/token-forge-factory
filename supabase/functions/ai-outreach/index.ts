@@ -308,40 +308,44 @@ Competitor Mentioned: ${lead.competitor_displacement || 'None'}`
   }
 });
 
-/** V3.0 — Enhanced partner matching with competitor displacement detection */
+/** V4.2 — Greedy EV-based partner matching with competitor displacement */
 function matchPartner(lead: SignalLead, partners: MatchedPartner[]): MatchedPartner | null {
   const text = `${lead.title || ''} ${lead.content || ''} ${lead.category || ''} ${lead.niche_category || ''}`.toLowerCase();
-  let bestMatch: MatchedPartner | null = null;
-  let bestScore = 0;
 
-  for (const p of partners) {
-    let score = 0;
+  const scored = partners.map(p => {
+    let techScore = 0;
     for (const kw of (p.keyword_triggers || [])) {
-      if (text.includes(kw.toLowerCase())) score += 3;
+      if (text.includes(kw.toLowerCase())) techScore += 3;
     }
     for (const tag of (p.category_tags || [])) {
-      if (text.includes(tag.toLowerCase())) score += 2;
+      if (text.includes(tag.toLowerCase())) techScore += 2;
     }
-    if (text.includes(p.name.toLowerCase())) score += 5;
+    if (text.includes(p.name.toLowerCase())) techScore += 5;
 
-    // V3.0 — Competitor displacement bonus
+    // Competitor displacement bonus
     const ctx = PARTNER_CONTEXTS[p.name.toLowerCase()];
     if (ctx?.competitors) {
       for (const comp of ctx.competitors) {
-        if (text.includes(comp.toLowerCase())) score += 4; // Competitor mention = strong signal
+        if (text.includes(comp.toLowerCase())) techScore += 4;
       }
     }
 
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = p;
-    }
-  }
+    // EV = (Tech * 0.3) + (Commission * 0.5) + (CTR * 0.2)
+    const commission = p.commission_rate || 0;
+    let ev = (Math.min(techScore / 10, 1) * 0.3) + (commission * 0.5) + (0.03 * 100 * 0.2);
+    
+    // Woodpecker +25% boost
+    if (p.name.toLowerCase() === 'woodpecker') ev *= 1.25;
+
+    return { partner: p, ev, techScore };
+  });
+
+  scored.sort((a, b) => b.ev - a.ev);
+  if (scored.length > 0 && scored[0].techScore > 0) return scored[0].partner;
 
   // Fallback: highest commission partner
-  if (!bestMatch && partners.length > 0) {
-    bestMatch = partners.reduce((a, b) => a.commission_rate > b.commission_rate ? a : b);
+  if (partners.length > 0) {
+    return partners.reduce((a, b) => a.commission_rate > b.commission_rate ? a : b);
   }
-
-  return bestMatch;
+  return null;
 }
