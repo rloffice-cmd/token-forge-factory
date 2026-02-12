@@ -154,11 +154,15 @@ Deno.serve(async (req) => {
 
     // ========== AUTO-DISPATCH LOOP ==========
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || "";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const results: Array<{ signal_id: string; partner: string; dispatched: boolean }> = [];
     let dispatched = 0;
 
     for (const signal of (signals as Signal[]).slice(0, remaining)) {
       const matched = matchPartner(signal, partners as Partner[]);
+      if (!matched) continue;
+
+      const partnerSlug = matched.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
       if (!matched) continue;
 
       // Generate Value-Bridge outreach via AI
@@ -176,14 +180,19 @@ Deno.serve(async (req) => {
             messages: [
               {
                 role: "system",
-                content: `You write technical outreach using the VALUE-BRIDGE framework. Structure:
-1. THE MIRROR — Acknowledge their exact pain using THEIR terminology
-2. THE INSIGHT — One genuinely useful technical nugget they can act on immediately
-3. THE BRIDGE — Connect your insight to ${matched.name}'s capability
-4. THE CTA — Place the affiliate link naturally
+                content: `You write technical outreach using the VALUE-BRIDGE V4.0 framework. Structure:
 
-Rules: Max 5 sentences + link. Sound like a peer. NEVER mention affiliates/commissions. Detect language → write in that language.
-Return plain text (the outreach message). End with the link on its own line.`,
+Phase 1 — THE MIRROR: Acknowledge the EXACT technical pain using THEIR terminology. Show you understand deeply.
+Phase 2 — THE INSIGHT: Provide ONE genuinely useful, actionable technical tip they can implement immediately. This builds trust.
+Phase 3 — THE RECOMMENDATION: Connect the insight to ${matched.name} naturally. Example: "To automate this at scale, I've been using ${matched.name} because it handles [specific feature] natively."
+Phase 4 — THE LINK: End with the internal tracking link on its own line. No "click here" — just the URL.
+
+Rules:
+- Max 5 sentences + link. Sound like a senior peer.
+- NEVER mention affiliates, commissions, bots, or AI.
+- Detect the lead's language → write in THAT language exactly.
+- Use forensic technical proof (specific config details, version numbers, etc.).
+- Return plain text only.`,
               },
               {
                 role: "user",
@@ -192,7 +201,7 @@ Source: ${signal.source_url || "forum"}
 Category: ${signal.category || "general"}
 Details: ${JSON.stringify(signal.payload_json).slice(0, 600)}
 Partner: ${matched.name} (${matched.category_tags?.join(", ")})
-Link: ${matched.affiliate_base_url}`,
+Link: ${supabaseUrl}/functions/v1/affiliate-redirect?partner=${partnerSlug}&lead=${signal.id}&src=${signal.category || "auto"}`,
               },
             ],
           }),
