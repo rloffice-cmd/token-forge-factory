@@ -202,15 +202,19 @@ serve(async (req) => {
       );
     }
 
-    // ========== ACTIVE MODE: Send Hot Leads to Telegram ==========
-    console.log(`📤 Processing hot lead job ${jobId}`);
-    console.log(`   Source: ${job.source}, Topic: ${job.intent_topic}, Confidence: ${conf}`);
+     // ========== ACTIVE MODE: Send Hot Leads with Trackable Link ==========
+     console.log(`📤 Processing hot lead job ${jobId}`);
+     console.log(`   Source: ${job.source}, Topic: ${job.intent_topic}, Confidence: ${conf}`);
 
-    // Build Telegram message with lead details and AI-drafted response
-    const leadTitle = lead.title || lead.author || lead.username || "Unknown Lead";
-    const aiDraft = job.ai_draft || job.message_draft || job.draft_text || "No draft available";
-    
-    const telegramMessage = `🎯 <b>Hot Lead Alert!</b>
+     // Generate trackable redirect link
+     const leadSourceId = lead.source_id || job.source_id || 'direct';
+     const trackableLink = `https://truthtoken.io/go/${leadSourceId}/${job.id}`;
+
+     // Build Telegram message with trackable link
+     const leadTitle = lead.title || lead.author || lead.username || "Unknown Lead";
+     const aiDraft = job.ai_draft || job.message_draft || job.draft_text || "No draft available";
+     
+     const telegramMessage = `🎯 <b>Hot Lead Alert!</b>
 
 <b>Source:</b> ${job.source || "Unknown"}
 <b>Topic:</b> ${job.intent_topic || "General"}
@@ -221,7 +225,8 @@ serve(async (req) => {
 <b>AI Draft Response:</b>
 <i>${String(aiDraft).slice(0, 500)}${String(aiDraft).length > 500 ? "..." : ""}</i>
 
-🔗 <a href="${threadUrl}">View Original Post</a>`;
+🔗 <a href="${trackableLink}">👉 Click to engage</a>
+📖 <a href="${threadUrl}">View Original Post</a>`;
 
     // Send to Telegram
     let telegramSent = false;
