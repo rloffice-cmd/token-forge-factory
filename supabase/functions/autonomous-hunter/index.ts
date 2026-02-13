@@ -60,39 +60,39 @@ const CATEGORY_KEYWORDS: Record<string, { keywords: string[]; partner: string }>
 const EMAIL_TEMPLATES: Record<string, { subject: string; body: string }> = {
   'Woodpecker': {
     subject: 'Quick tip on improving cold email deliverability',
-    body: `Hi {{NAME}},\n\nI noticed you might be working on scaling outreach — one thing that made a huge difference for teams I've seen is using smart sending patterns instead of generic blasts.\n\nWoodpecker automates this with human-like sequences that bypass spam filters and auto-rotate sending accounts.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nI noticed you might be working on scaling outreach — one thing that made a huge difference for teams I've seen is using smart sending patterns instead of generic blasts.\n\nWoodpecker automates this with human-like sequences that bypass spam filters and auto-rotate sending accounts.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'EmailListVerify': {
     subject: 'Your bounce rate might be hurting deliverability',
-    body: `Hi {{NAME}},\n\nHigh bounce rates are a silent reputation killer. Before your next campaign, running your list through EmailListVerify catches invalid emails, spam traps, and disposable addresses.\n\nTeams using it consistently see 98%+ deliverability.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nHigh bounce rates are a silent reputation killer. Before your next campaign, running your list through EmailListVerify catches invalid emails, spam traps, and disposable addresses.\n\nTeams using it consistently see 98%+ deliverability.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'Compass': {
     subject: 'Are you tracking the right eCommerce metrics?',
-    body: `Hi {{NAME}},\n\nMost eCommerce teams drown in data but miss the insights that drive revenue. Compass gives you product-level analytics and channel attribution out of the box.\n\n👉 Worth exploring: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nMost eCommerce teams drown in data but miss the insights that drive revenue. Compass gives you product-level analytics and channel attribution out of the box.\n\n👉 Worth exploring: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'AdTurbo AI': {
     subject: 'Cut your ad CPA by 40% — here\'s how',
-    body: `Hi {{NAME}},\n\nIf you\'re running paid campaigns, AdTurbo AI optimizes your ROAS across all channels automatically. Teams I've seen cut their CPA by 40% in the first quarter.\n\n👉 Take a look: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nIf you\'re running paid campaigns, AdTurbo AI optimizes your ROAS across all channels automatically. Teams I've seen cut their CPA by 40% in the first quarter.\n\n👉 Take a look: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'Lucro CRM': {
     subject: 'Your CRM should be closing deals, not just storing contacts',
-    body: `Hi {{NAME}},\n\nLucro CRM brings intelligent deal scoring, automated follow-ups, and revenue forecasting that actually works. Teams see 25%+ improvement in close rates.\n\n👉 Worth trying: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nLucro CRM brings intelligent deal scoring, automated follow-ups, and revenue forecasting that actually works. Teams see 25%+ improvement in close rates.\n\n👉 Worth trying: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'EasyFund': {
     subject: 'Simplify your fundraising process',
-    body: `Hi {{NAME}},\n\nIf you're raising capital, EasyFund streamlines your investor pipeline, document sharing, and fundraising analytics in one place.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nIf you're raising capital, EasyFund streamlines your investor pipeline, document sharing, and fundraising analytics in one place.\n\n👉 Check it out: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'WebinarGeek': {
     subject: 'Webinars still convert better than anything in B2B',
-    body: `Hi {{NAME}},\n\nWebinarGeek gives you a real webinar platform with registration funnels, automated replays, and engagement analytics — way beyond a basic video call.\n\n👉 Take a look: {{TRACKABLE_LINK}}\n\nBest,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nWebinarGeek gives you a real webinar platform with registration funnels, automated replays, and engagement analytics — way beyond a basic video call.\n\n👉 Take a look: {{TRACKABLE_LINK}}\n\nBest,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'TravelAffiliate': {
     subject: 'Found a flight deal that might interest you',
-    body: `Hi {{NAME}},\n\nI spotted some travel deals that match what you were looking for — budget-friendly options with solid reviews.\n\n👉 See the deals: {{TRACKABLE_LINK}}\n\n✅ Verified Review: 9.2/10 Rating based on recent traveler sentiment analysis.\n\nHappy travels,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nI spotted some travel deals that match what you were looking for — budget-friendly options with solid reviews.\n\n👉 See the deals: {{TRACKABLE_LINK}}\n\n✅ Verified Review: 9.2/10 Rating based on recent traveler sentiment analysis.\n\nHappy travels,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
   'TravelPremium': {
     subject: 'Your personalized travel itinerary is ready',
-    body: `Hi {{NAME}},\n\nBased on your travel interests, we've put together a curated recommendation that includes route planning, accommodation picks, and insider tips.\n\n👉 View your itinerary: {{TRACKABLE_LINK}}\n\n✅ Verified Review: 9.2/10 Rating based on recent traveler sentiment analysis.\n\nBon voyage,\nSignalForge Team\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
+    body: `Hi {{NAME}},\n\nBased on your travel interests, we've put together a curated recommendation that includes route planning, accommodation picks, and insider tips.\n\n👉 View your itinerary: {{TRACKABLE_LINK}}\n\n✅ Verified Review: 9.2/10 Rating based on recent traveler sentiment analysis.\n\nBon voyage,\nitay\n\n---\nTo stop receiving updates: {{UNSUBSCRIBE_LINK}}`,
   },
 };
 
