@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
+import { ForensicHealthCard } from '@/components/ForensicHealthCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -259,6 +260,11 @@ export default function SystemDashboard() {
             <RefreshCw className="w-4 h-4 ml-2" />
             רענן
           </Button>
+        </div>
+
+        {/* Forensic Health Card */}
+        <div className="mb-8">
+          <ForensicHealthCard />
         </div>
 
         {/* Status Cards */}
