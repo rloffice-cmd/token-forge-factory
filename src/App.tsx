@@ -40,8 +40,10 @@ import DomainManager from "./pages/DomainManager";
 import HunterDashboard from "./pages/HunterDashboard";
 import SystemDiagnosticReport from "./pages/SystemDiagnosticReport";
 import NotFound from "./pages/NotFound";
+import ResearchFindingPage from "./pages/ResearchFindingPage";
 
 const queryClient = new QueryClient();
+
 
 const App = () => (
   <Web3Provider>
@@ -64,6 +66,7 @@ const App = () => (
             <Route path="/micro" element={<MicroLanding />} />
             <Route path="/leads" element={<LeadMarketplace />} />
             <Route path="/go/:partnerSlug/:leadId?" element={<AffiliateRedirect />} />
+            <Route path="/research/:slug" element={<ResearchFindingPage />} />
             
             {/* Protected Routes - Auth Required */}
             <Route path="/console" element={<AuthGuard><MoneyMachine /></AuthGuard>} />
