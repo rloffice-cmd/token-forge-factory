@@ -15,12 +15,11 @@ serve(async (req) => {
   }
 
   try {
-    // Auth: admin token or session
-    const adminToken = req.headers.get("x-admin-token") || "";
-    const authHeader = req.headers.get("authorization") || "";
-    const expectedAdmin = Deno.env.get("ADMIN_API_TOKEN") || "";
+    // Auth: strict admin token only — any other value is rejected
+    const adminToken = req.headers.get("x-admin-token");
+    const expectedAdmin = Deno.env.get("ADMIN_API_TOKEN");
 
-    if (adminToken !== expectedAdmin && !authHeader.includes("Bearer ")) {
+    if (!adminToken || !expectedAdmin || adminToken !== expectedAdmin) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
