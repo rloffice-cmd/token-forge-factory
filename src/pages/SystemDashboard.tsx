@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { ForensicHealthCard } from '@/components/ForensicHealthCard';
+import { AutonomousActivityLog } from '@/components/AutonomousActivityLog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -263,8 +264,13 @@ export default function SystemDashboard() {
         </div>
 
         {/* Forensic Health Card */}
-        <div className="mb-8">
+        <div className="mb-6">
           <ForensicHealthCard />
+        </div>
+
+        {/* Autonomous Activity Log */}
+        <div className="mb-8">
+          <AutonomousActivityLog />
         </div>
 
         {/* Status Cards */}
