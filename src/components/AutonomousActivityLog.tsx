@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { RefreshCw, Terminal, ExternalLink, X, ChevronRight } from 'lucide-react';
+import { RefreshCw, Terminal, ExternalLink, X, ChevronRight, TrendingUp, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { resolveAffiliate, commissionBadgeStyle, type AffiliatePartner } from '@/lib/affiliatePartners';
 
 interface DecisionTrace {
   id: string;
@@ -24,6 +25,19 @@ interface DecisionTrace {
   dna_score: number | null;
   platform: string | null;
   interaction_count: number | null;
+}
+
+// Build a single haystack string from a trace for affiliate matching
+function buildHaystack(trace: DecisionTrace): string {
+  return [
+    trace.entity_type,
+    trace.intent,
+    trace.source_url,
+    trace.platform,
+    ...(trace.reason_codes ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 // Map raw decision + intent to a terminal-style status label
@@ -59,14 +73,41 @@ function truncate(str: string | null | undefined, max = 48) {
   return str.length > max ? str.slice(0, max) + '…' : str;
 }
 
+// ─── Earnings Potential Badge ────────────────────────────────────────────────
+
+function EarningsBadge({ partner }: { partner: AffiliatePartner }) {
+  const style = commissionBadgeStyle(partner.commissionValue);
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border',
+        style.bg,
+        style.text,
+      )}
+      style={{
+        textShadow: style.glow,
+        borderColor: `hsl(var(--border) / 0.4)`,
+      }}
+      title={`${partner.name} — ${partner.commission}`}
+    >
+      <TrendingUp className="w-2 h-2 flex-shrink-0" />
+      {partner.commission}
+    </span>
+  );
+}
+
+// ─── Forensic Evidence Modal ─────────────────────────────────────────────────
+
 function JsonModal({
   open,
   onClose,
   trace,
+  partner,
 }: {
   open: boolean;
   onClose: () => void;
   trace: DecisionTrace | null;
+  partner: AffiliatePartner | null;
 }) {
   if (!trace) return null;
   const json = JSON.stringify(trace, null, 2);
@@ -85,10 +126,7 @@ function JsonModal({
         </DialogHeader>
 
         {/* Scanline overlay */}
-        <div
-          className="relative overflow-hidden"
-          style={{ maxHeight: '60vh' }}
-        >
+        <div className="relative overflow-hidden" style={{ maxHeight: '52vh' }}>
           <div
             className="absolute inset-0 pointer-events-none z-10 opacity-[0.03]"
             style={{
@@ -99,13 +137,45 @@ function JsonModal({
           <pre
             className="overflow-auto p-5 text-xs font-mono text-[hsl(160_84%_39%)] leading-relaxed"
             style={{
-              maxHeight: '60vh',
+              maxHeight: '52vh',
               textShadow: '0 0 6px hsl(160 84% 39% / 0.5)',
             }}
           >
             {json}
           </pre>
         </div>
+
+        {/* ACTION PANEL */}
+        {partner && (
+          <div
+            className="px-5 py-4 border-t border-[hsl(160_84%_39%/0.2)] bg-[hsl(160_84%_39%/0.06)]"
+          >
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="min-w-0">
+                <p className="font-mono text-[10px] text-muted-foreground tracking-widest mb-0.5">
+                  OPPORTUNITY_DETECTED
+                </p>
+                <p className="font-mono text-xs text-[hsl(160_84%_39%)] truncate">
+                  {partner.category} · {partner.commission}
+                </p>
+              </div>
+              <a
+                href={partner.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  'inline-flex items-center gap-2 px-4 py-2 rounded font-mono text-xs font-bold tracking-wider',
+                  'bg-[hsl(160_84%_39%)] text-[hsl(222_47%_6%)]',
+                  'hover:bg-[hsl(160_84%_46%)] transition-colors',
+                  'shadow-[0_0_16px_hsl(160_84%_39%/0.5)]',
+                )}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                Get Started via {partner.name}
+              </a>
+            </div>
+          </div>
+        )}
 
         <div className="px-5 py-3 border-t border-border/40 flex justify-end">
           <Button variant="outline" size="sm" className="font-mono text-xs" onClick={onClose}>
@@ -117,6 +187,8 @@ function JsonModal({
     </Dialog>
   );
 }
+
+// ─── Main Component ──────────────────────────────────────────────────────────
 
 export function AutonomousActivityLog() {
   const [selectedTrace, setSelectedTrace] = useState<DecisionTrace | null>(null);
@@ -137,6 +209,9 @@ export function AutonomousActivityLog() {
   });
 
   const entries = data ?? [];
+  const selectedPartner = selectedTrace
+    ? resolveAffiliate(buildHaystack(selectedTrace))
+    : null;
 
   return (
     <>
@@ -157,7 +232,6 @@ export function AutonomousActivityLog() {
         {/* Header bar */}
         <div className="relative z-10 flex items-center justify-between px-4 py-3 border-b border-[hsl(160_84%_39%/0.15)] bg-[hsl(222_47%_5%)]">
           <div className="flex items-center gap-2">
-            {/* Traffic lights */}
             <span className="w-3 h-3 rounded-full bg-destructive/60" />
             <span className="w-3 h-3 rounded-full bg-warning/60" />
             <span className="w-3 h-3 rounded-full bg-success/60" />
@@ -199,6 +273,7 @@ export function AutonomousActivityLog() {
                 : 'ANON';
               const url = truncate(trace.source_url, 36);
               const reasons = (trace.reason_codes ?? []).join(', ') || null;
+              const affiliate = resolveAffiliate(buildHaystack(trace));
 
               return (
                 <div
@@ -212,8 +287,8 @@ export function AutonomousActivityLog() {
                     </span>
 
                     <div className="flex-1 min-w-0 space-y-0.5">
-                      {/* Row 1: timestamp + status */}
-                      <div className="flex items-center gap-3 flex-wrap">
+                      {/* Row 1: timestamp + status + earnings badge */}
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-muted-foreground text-[10px] tracking-wide">
                           {formatTs(trace.created_at)}
                         </span>
@@ -227,6 +302,8 @@ export function AutonomousActivityLog() {
                         <span className="text-muted-foreground/60 text-[10px]">
                           {trace.entity_type?.toUpperCase()}
                         </span>
+                        {/* Earnings Potential Badge */}
+                        {affiliate && <EarningsBadge partner={affiliate} />}
                       </div>
 
                       {/* Row 2: actor + source */}
@@ -256,7 +333,7 @@ export function AutonomousActivityLog() {
                         'flex-shrink-0 flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded',
                         'border border-[hsl(160_84%_39%/0.2)] text-[hsl(160_84%_39%/0.7)]',
                         'hover:border-[hsl(160_84%_39%/0.6)] hover:text-[hsl(160_84%_39%)]',
-                        'transition-all opacity-0 group-hover:opacity-100'
+                        'transition-all opacity-0 group-hover:opacity-100',
                       )}
                       style={{ textShadow: '0 0 4px hsl(160 84% 39% / 0.4)' }}
                     >
@@ -284,6 +361,7 @@ export function AutonomousActivityLog() {
         open={!!selectedTrace}
         onClose={() => setSelectedTrace(null)}
         trace={selectedTrace}
+        partner={selectedPartner}
       />
     </>
   );
