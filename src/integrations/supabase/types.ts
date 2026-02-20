@@ -3937,6 +3937,66 @@ export type Database = {
           },
         ]
       }
+      research_findings: {
+        Row: {
+          affiliate_commission: string | null
+          affiliate_partner: string | null
+          affiliate_url: string | null
+          confidence: number
+          created_at: string
+          entity_type: string | null
+          evidence: Json
+          id: string
+          is_published: boolean
+          meta_description: string | null
+          platform: string | null
+          slug: string
+          source_url: string | null
+          summary: string
+          title: string
+          updated_at: string
+          verdict: string
+        }
+        Insert: {
+          affiliate_commission?: string | null
+          affiliate_partner?: string | null
+          affiliate_url?: string | null
+          confidence?: number
+          created_at?: string
+          entity_type?: string | null
+          evidence?: Json
+          id?: string
+          is_published?: boolean
+          meta_description?: string | null
+          platform?: string | null
+          slug: string
+          source_url?: string | null
+          summary: string
+          title: string
+          updated_at?: string
+          verdict: string
+        }
+        Update: {
+          affiliate_commission?: string | null
+          affiliate_partner?: string | null
+          affiliate_url?: string | null
+          confidence?: number
+          created_at?: string
+          entity_type?: string | null
+          evidence?: Json
+          id?: string
+          is_published?: boolean
+          meta_description?: string | null
+          platform?: string | null
+          slug?: string
+          source_url?: string | null
+          summary?: string
+          title?: string
+          updated_at?: string
+          verdict?: string
+        }
+        Relationships: []
+      }
       scaling_rules: {
         Row: {
           action_config: Json

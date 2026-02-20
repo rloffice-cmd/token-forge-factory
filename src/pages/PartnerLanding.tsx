@@ -1,6 +1,8 @@
 import { Globe, Radio, Shield, ArrowRight, Linkedin, Clock, Layers, BarChart3, Zap, CheckCircle2, Brain, Target, Sparkles, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { VaultTicker } from '@/components/VaultTicker';
+
 
 const PARTNERS = [
   { name: 'HubSpot', category: 'CRM & Sales' },
@@ -113,6 +115,9 @@ export default function PartnerLanding() {
           </div>
         </div>
       </section>
+
+      {/* Live from the Vault Ticker */}
+      <VaultTicker />
 
       {/* Metrics bar */}
       <section className="border-y border-border/30 bg-card/30 backdrop-blur-sm py-10">

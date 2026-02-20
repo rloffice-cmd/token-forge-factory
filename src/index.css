@@ -156,3 +156,10 @@
     @apply bg-primary/10 text-primary;
   }
 }
+
+/* Vault Ticker scroll animation */
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
