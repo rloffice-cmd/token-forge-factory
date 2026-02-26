@@ -39,6 +39,7 @@ import SystemAudit from "./pages/SystemAudit";
 import DomainManager from "./pages/DomainManager";
 import HunterDashboard from "./pages/HunterDashboard";
 import SystemDiagnosticReport from "./pages/SystemDiagnosticReport";
+import Rmint from "./pages/Rmint";
 import NotFound from "./pages/NotFound";
 import ResearchFindingPage from "./pages/ResearchFindingPage";
 
@@ -91,6 +92,7 @@ const App = () => (
             <Route path="/admin/domain-manager" element={<AuthGuard><DomainManager /></AuthGuard>} />
             <Route path="/forge/hunter" element={<AuthGuard><HunterDashboard /></AuthGuard>} />
             <Route path="/admin/diagnostic-report" element={<AuthGuard><SystemDiagnosticReport /></AuthGuard>} />
+            <Route path="/rmint" element={<AuthGuard><Rmint /></AuthGuard>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>

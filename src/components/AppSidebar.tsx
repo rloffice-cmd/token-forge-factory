@@ -17,6 +17,7 @@ import {
   Compass,
   Rss,
   Radio,
+  BarChart2,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -128,12 +129,25 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
           })}
         </div>
         
+        {/* RMINT – External Link */}
+        <a
+          href="http://localhost:3000"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="nav-link text-muted-foreground hover:text-foreground mt-4"
+          onClick={handleNavClick}
+        >
+          <BarChart2 className="w-5 h-5 flex-shrink-0" />
+          <span className="flex-1 truncate">RMINT</span>
+          <ExternalLink className="w-3 h-3 opacity-50 flex-shrink-0" />
+        </a>
+
         {/* Quick link to landing page */}
         <a
           href="/landing"
           target="_blank"
           rel="noopener noreferrer"
-          className="nav-link text-muted-foreground hover:text-foreground mt-4"
+          className="nav-link text-muted-foreground hover:text-foreground"
           onClick={handleNavClick}
         >
           <ExternalLink className="w-5 h-5 flex-shrink-0" />
