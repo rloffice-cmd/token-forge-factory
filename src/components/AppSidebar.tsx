@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Shield,
   Key,
+  Lock,
   Brain,
   Compass,
   Rss,
@@ -38,6 +39,7 @@ const navItems = [
 ];
 
 const adminItems = [
+  { icon: Lock, label: 'Vault', href: '/vault', gold: true },
   { icon: Shield, label: 'אבטחה', href: '/admin/security' },
   { icon: Key, label: 'API Keys', href: '/admin/api-keys' },
   { icon: FileCode2, label: 'דוח אבחון', href: '/admin/diagnostic-report' },
@@ -109,6 +111,7 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
           <p className="px-3 text-xs font-semibold text-muted-foreground mb-2">ADMIN</p>
           {adminItems.map((item) => {
             const isActive = location.pathname === item.href;
+            const isGold = 'gold' in item && item.gold;
             return (
               <Link
                 key={item.href}
@@ -116,10 +119,12 @@ export function AppSidebar({ onClose }: AppSidebarProps) {
                 onClick={handleNavClick}
                 className={cn(
                   'nav-link group',
-                  isActive && 'active'
+                  isActive && 'active',
+                  isGold && !isActive && 'text-[#c9a84c]/80 hover:text-[#c9a84c]',
+                  isGold && isActive && 'text-[#c9a84c] border-r-2 border-[#c9a84c]/50',
                 )}
               >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <item.icon className={cn("w-5 h-5 flex-shrink-0", isGold && "text-[#c9a84c]")} />
                 <span className="flex-1 truncate">{item.label}</span>
                 {isActive && (
                   <ChevronRight className="w-4 h-4 opacity-50 flex-shrink-0" />

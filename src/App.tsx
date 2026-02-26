@@ -40,6 +40,7 @@ import DomainManager from "./pages/DomainManager";
 import HunterDashboard from "./pages/HunterDashboard";
 import SystemDiagnosticReport from "./pages/SystemDiagnosticReport";
 import Rmint from "./pages/Rmint";
+import Vault from "./pages/Vault";
 import NotFound from "./pages/NotFound";
 import ResearchFindingPage from "./pages/ResearchFindingPage";
 
@@ -93,6 +94,7 @@ const App = () => (
             <Route path="/forge/hunter" element={<AuthGuard><HunterDashboard /></AuthGuard>} />
             <Route path="/admin/diagnostic-report" element={<AuthGuard><SystemDiagnosticReport /></AuthGuard>} />
             <Route path="/rmint" element={<AuthGuard><Rmint /></AuthGuard>} />
+            <Route path="/vault" element={<AuthGuard><Vault /></AuthGuard>} />
             
             <Route path="*" element={<NotFound />} />
           </Routes>
