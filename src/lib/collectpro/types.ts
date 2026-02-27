@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// CollectPro — TypeScript types (Layer 1 & 2 contracts)
+// CollectPro — TypeScript types (Layer 1 & 2 contracts + UI)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Layer 2: Definitions ────────────────────────────────────────────────────
@@ -38,9 +38,10 @@ export interface Knowledge {
 // ── Layer 1: Core data ───────────────────────────────────────────────────────
 
 export type ItemStatus = "active" | "grading" | "sold";
-export type AIMode = "brain" | "market" | "arbitrage";
-export type SortDir = "asc" | "desc";
-export type Tab = "brain" | "inventory" | "roi" | "market" | "partners";
+export type AIMode     = "brain" | "market" | "arbitrage";
+export type SortDir    = "asc" | "desc";
+export type Tab        = "brain" | "inventory" | "roi" | "arena" | "market" | "partners";
+export type ViewMode   = "table" | "cards";
 
 export interface Partner {
   id: string;
@@ -110,7 +111,7 @@ export interface PortfolioStats {
   totalCost: number;
   /** Market estimate for ACTIVE items only (market_price ?? buy_price) */
   estimatedValue: number;
-  /** estimatedValue - cost of active items = unrealised gain/loss */
+  /** estimatedValue - cost of active items */
   unrealisedPnL: number;
   /** Sum of sell_price for SOLD items */
   realisedRevenue: number;
@@ -123,7 +124,14 @@ export interface PortfolioStats {
   soldCount: number;
 }
 
+// ── Price history point (for Evolution Chart) ────────────────────────────────
+
+export interface PricePoint {
+  month: string;
+  value: number;
+}
+
 export interface UndoBuffer {
   item: CollectionItem;
-  at: number; // timestamp
+  at: number;
 }
