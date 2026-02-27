@@ -1,40 +1,28 @@
 /**
- * CollectPro — TCG card portfolio manager
+ * CollectPro — TCG Card Portfolio Manager
  *
- * CTO-review fixes implemented here:
- *  Bug 1 & 2  — AI system prompts are now proxied through an edge function that
- *               NEVER deletes the system prompt when web-search is enabled.
- *  Bug 3      — Dashboard "שווי מלאי" now shows market_price estimates only,
- *               clearly labelled as "הערכה" — not mixed with buy_price.
- *  Bug 4      — ROI includes grading_cost in cost basis.
- *  Bug 5      — market_price (estimate) and sell_price (confirmed sale) are
- *               separate fields. No dual-purpose confusion.
- *  Security   — Anthropic key lives only in the edge function; never in the browser.
- *  Security   — Rate limiting handled server-side.
- *  Delete     — Confirmation dialog + 30-second undo (soft-delete window).
- *  State      — All state lives in this component; switching tabs loses nothing.
- *  Validation — toast() replaces every alert().
- *  Sorting    — Inventory table has clickable sort headers.
- *  Performance— useMemo on all computed stats; CSS injected once via useEffect.
- *  Images     — Canvas compression before storage (target ≤ 120 KB).
- *  AI         — AbortController, exponential-backoff retry (3 attempts), streaming-ready.
- *  Data       — grading_cost, buy_date, sold_at fields added.
- *  IDs        — crypto.randomUUID() replaces Math.random() uid.
- *  Export     — CSV export of full inventory.
- *  Search     — Global search across name / card_set / franchise.
- *  Duplicates — Duplicate name warning on form submit.
- *  Undo       — 30-second undo for accidental deletes.
+ * Layer architecture:
+ *   Knowledge   → coll_items, coll_partners, cp_knowledge  (Supabase)
+ *   Definitions → cp_instructions, cp_instruction_patches  (Supabase)
+ *   Logic       → this file + src/lib/collectpro/*         (client)
+ *
+ * Event bus → Supabase Realtime channels
+ *   Any mutation by any client is automatically broadcast to all others.
+ *
+ * State management → useReducer (single source of truth, predictable mutations)
  */
 
 import React, {
-  useState,
+  useReducer,
   useEffect,
   useMemo,
-  useCallback,
   useRef,
+  useCallback,
 } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+
+// Shadcn UI
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,1565 +33,1032 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+
+// Domain lib
+import type {
   CollectionItem,
   Partner,
   ChatMessage,
   SortConfig,
-  PortfolioStats,
-  ItemFormData,
+  ItemForm,
   ItemStatus,
   AIMode,
-  DeletedItem,
-} from "@/types/collectpro";
+  Tab,
+  UndoBuffer,
+} from "@/lib/collectpro/types";
+import { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
+import { callAI } from "@/lib/collectpro/ai";
+import { compressImage } from "@/lib/collectpro/image";
+import { exportCSV } from "@/lib/collectpro/export";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// State shape & reducer
 // ─────────────────────────────────────────────────────────────────────────────
 
-const fmt$ = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+type State = {
+  items:    CollectionItem[];
+  partners: Partner[];
+  loading:  boolean;
+  tab:      Tab;
+  franchise: boolean; // franchise-only filter toggle
 
-const today = () => new Date().toISOString().slice(0, 10);
+  // Tab-level state — all persisted, never lost on tab switch
+  chat: { messages: ChatMessage[]; input: string; busy: boolean };
+  market: { mode: AIMode; query: string; result: string; busy: boolean };
+  inv: {
+    search:    string;
+    sort:      SortConfig;
+    page:      number;
+    showForm:  boolean;
+    editId:    string | null;
+    form:      ItemForm;
+  };
+  partnerForm: { name: string; email: string };
+  addingPartner: boolean;
 
-/** Compress an image file using canvas — target ≤ targetKB KB */
-async function compressImage(file: File, targetKB = 120): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        let quality = 0.85;
-        const canvas = document.createElement("canvas");
-        const maxDim = 800;
-        let w = img.width;
-        let h = img.height;
-        if (w > maxDim || h > maxDim) {
-          const ratio = Math.min(maxDim / w, maxDim / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
-        }
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0, w, h);
-        const tryCompress = () => {
-          const dataUrl = canvas.toDataURL("image/jpeg", quality);
-          const sizeKB = Math.round((dataUrl.length * 3) / 4 / 1024);
-          if (sizeKB > targetKB && quality > 0.2) {
-            quality -= 0.1;
-            tryCompress();
-          } else {
-            resolve(dataUrl);
-          }
-        };
-        tryCompress();
-      };
-      img.onerror = reject;
-      img.src = e.target!.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  deleteTarget: string | null;
+  undo:         UndoBuffer | null;
+};
+
+type Action =
+  | { t: "LOAD_OK";    items: CollectionItem[]; partners: Partner[] }
+  | { t: "RT_ITEM";    event: string; item: CollectionItem }
+  | { t: "RT_PARTNER"; event: string; partner: Partner }
+  | { t: "SET_TAB";    tab: Tab }
+  | { t: "TOGGLE_FRANCHISE" }
+  | { t: "CHAT_INPUT"; v: string }
+  | { t: "CHAT_MSG";   m: ChatMessage }
+  | { t: "CHAT_BUSY";  v: boolean }
+  | { t: "MKT_MODE";   v: AIMode }
+  | { t: "MKT_QUERY";  v: string }
+  | { t: "MKT_RESULT"; v: string }
+  | { t: "MKT_BUSY";   v: boolean }
+  | { t: "INV_SEARCH"; v: string }
+  | { t: "INV_SORT";   s: SortConfig }
+  | { t: "INV_PAGE";   n: number }
+  | { t: "INV_FORM_SHOW"; show: boolean }
+  | { t: "INV_FORM_EDIT"; id: string | null; form: ItemForm }
+  | { t: "INV_FORM_PATCH"; p: Partial<ItemForm> }
+  | { t: "PF_PATCH";   p: Partial<State["partnerForm"]> }
+  | { t: "PF_BUSY";    v: boolean }
+  | { t: "DEL_TARGET"; id: string | null }
+  | { t: "UNDO_SET";   u: UndoBuffer | null };
+
+function today() { return new Date().toISOString().slice(0, 10); }
+
+function emptyForm(partnerId: string): ItemForm {
+  return {
+    name: "", card_set: "", franchise: "", condition: "NM",
+    buy_price: "", grading_cost: "0", market_price: "",
+    buy_date: today(), status: "active", partner_id: partnerId,
+    notes: "", image_url: "", psa_grade: "",
+  };
 }
 
-/** Call the CollectPro AI edge function with exponential-backoff retry */
-async function callAI(
-  messages: ChatMessage[],
-  mode: AIMode,
-  signal?: AbortSignal,
-  attempt = 0
-): Promise<string> {
-  const maxAttempts = 3;
-  try {
-    const { data, error } = await supabase.functions.invoke("collectpro-ai", {
-      body: { messages, mode },
-    });
-    if (error) throw new Error(error.message);
-    // Extract text from Anthropic response structure
-    const content = data?.content;
-    if (Array.isArray(content)) {
-      const text = content
-        .filter((b: { type: string }) => b.type === "text")
-        .map((b: { text: string }) => b.text)
-        .join("\n");
-      return text || "לא התקבלה תשובה.";
-    }
-    return String(data?.content ?? "לא התקבלה תשובה.");
-  } catch (err: unknown) {
-    if (signal?.aborted) throw new Error("בוטל");
-    if (attempt < maxAttempts - 1) {
-      const delay = Math.pow(2, attempt) * 1000;
-      await new Promise((res) => setTimeout(res, delay));
-      return callAI(messages, mode, signal, attempt + 1);
-    }
-    throw err;
+const INIT: State = {
+  items: [], partners: [], loading: true,
+  tab: "brain", franchise: false,
+  chat:   { messages: [], input: "", busy: false },
+  market: { mode: "market", query: "", result: "", busy: false },
+  inv: {
+    search: "", sort: { field: "buy_date", dir: "desc" },
+    page: 1, showForm: false, editId: null, form: emptyForm(""),
+  },
+  partnerForm: { name: "", email: "" }, addingPartner: false,
+  deleteTarget: null, undo: null,
+};
+
+function reducer(s: State, a: Action): State {
+  switch (a.t) {
+    case "LOAD_OK":
+      return { ...s, loading: false, items: a.items, partners: a.partners };
+
+    case "RT_ITEM":
+      switch (a.event) {
+        case "INSERT": return { ...s, items: [a.item, ...s.items.filter(i => i.id !== a.item.id)] };
+        case "UPDATE": return { ...s, items: s.items.map(i => i.id === a.item.id ? a.item : i) };
+        case "DELETE": return { ...s, items: s.items.filter(i => i.id !== a.item.id) };
+        default: return s;
+      }
+
+    case "RT_PARTNER":
+      switch (a.event) {
+        case "INSERT":
+          return { ...s, partners: [...s.partners, a.partner].sort((a, b) => a.name.localeCompare(b.name, "he")) };
+        case "UPDATE":
+          return { ...s, partners: s.partners.map(p => p.id === a.partner.id ? a.partner : p) };
+        case "DELETE":
+          return { ...s, partners: s.partners.filter(p => p.id !== a.partner.id) };
+        default: return s;
+      }
+
+    case "SET_TAB":          return { ...s, tab: a.tab };
+    case "TOGGLE_FRANCHISE": return { ...s, franchise: !s.franchise };
+
+    case "CHAT_INPUT": return { ...s, chat: { ...s.chat, input: a.v } };
+    case "CHAT_MSG":   return { ...s, chat: { ...s.chat, messages: [...s.chat.messages, a.m] } };
+    case "CHAT_BUSY":  return { ...s, chat: { ...s.chat, busy: a.v } };
+
+    case "MKT_MODE":   return { ...s, market: { ...s.market, mode: a.v } };
+    case "MKT_QUERY":  return { ...s, market: { ...s.market, query: a.v } };
+    case "MKT_RESULT": return { ...s, market: { ...s.market, result: a.v } };
+    case "MKT_BUSY":   return { ...s, market: { ...s.market, busy: a.v } };
+
+    case "INV_SEARCH":    return { ...s, inv: { ...s.inv, search: a.v, page: 1 } };
+    case "INV_SORT":      return { ...s, inv: { ...s.inv, sort: a.s } };
+    case "INV_PAGE":      return { ...s, inv: { ...s.inv, page: a.n } };
+    case "INV_FORM_SHOW": return { ...s, inv: { ...s.inv, showForm: a.show } };
+    case "INV_FORM_EDIT": return { ...s, inv: { ...s.inv, editId: a.id, form: a.form, showForm: true } };
+    case "INV_FORM_PATCH": return { ...s, inv: { ...s.inv, form: { ...s.inv.form, ...a.p } } };
+
+    case "PF_PATCH": return { ...s, partnerForm: { ...s.partnerForm, ...a.p } };
+    case "PF_BUSY":  return { ...s, addingPartner: a.v };
+
+    case "DEL_TARGET": return { ...s, deleteTarget: a.id };
+    case "UNDO_SET":   return { ...s, undo: a.u };
+
+    default: return s;
   }
 }
 
-/** Compute portfolio statistics — Bug fix: uses correct fields and cost basis */
-function computeStats(items: CollectionItem[]): PortfolioStats {
-  const active = items.filter((i) => i.status === "active");
-  const grading = items.filter((i) => i.status === "grading");
-  const sold = items.filter((i) => i.status === "sold");
-
-  const totalInvestment = items.reduce(
-    (s, i) => s + Number(i.buy_price) + Number(i.grading_cost || 0),
-    0
-  );
-
-  // Bug fix: portfolioEstimatedValue uses market_price (estimate) for active items,
-  // falls back to buy_price if no estimate has been entered — NEVER mixes with sell_price
-  const portfolioEstimatedValue = active.reduce(
-    (s, i) => s + Number(i.market_price ?? i.buy_price),
-    0
-  );
-
-  const activeCostBasis = active.reduce(
-    (s, i) => s + Number(i.buy_price) + Number(i.grading_cost || 0),
-    0
-  );
-  const unrealisedGain = portfolioEstimatedValue - activeCostBasis;
-
-  const realisedRevenue = sold.reduce((s, i) => s + Number(i.sell_price || 0), 0);
-
-  // Bug fix: cost of sold items includes grading_cost
-  const soldCostBasis = sold.reduce(
-    (s, i) => s + Number(i.buy_price) + Number(i.grading_cost || 0),
-    0
-  );
-  const realisedProfit = realisedRevenue - soldCostBasis;
-  const realisedROI = soldCostBasis > 0 ? (realisedProfit / soldCostBasis) * 100 : 0;
-
-  return {
-    totalInvestment,
-    portfolioEstimatedValue,
-    unrealisedGain,
-    realisedRevenue,
-    realisedProfit,
-    realisedROI,
-    activeCount: active.length,
-    gradingCount: grading.length,
-    soldCount: sold.length,
-  };
-}
-
-/** Export items to CSV */
-function exportCSV(items: CollectionItem[], partners: Partner[]) {
-  const partnerName = (id: string) => partners.find((p) => p.id === id)?.name ?? id;
-  const headers = [
-    "שם",
-    "סט",
-    "פרנצ'ייז",
-    "מצב קלף",
-    "סטטוס",
-    "שותף",
-    "תאריך קנייה",
-    "מחיר קנייה",
-    "עלות גריידינג",
-    "הערכת שוק",
-    "מחיר מכירה",
-    "תאריך מכירה",
-    "ציון PSA",
-    "הערות",
-  ];
-  const rows = items.map((i) => [
-    i.name,
-    i.card_set ?? "",
-    i.franchise ?? "",
-    i.condition ?? "",
-    i.status,
-    partnerName(i.partner_id),
-    i.buy_date,
-    i.buy_price,
-    i.grading_cost,
-    i.market_price ?? "",
-    i.sell_price ?? "",
-    i.sold_at ?? "",
-    i.psa_grade ?? "",
-    (i.notes ?? "").replace(/,/g, ";"),
-  ]);
-  const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `collectpro-export-${today()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Empty form factory
+// Page size
 // ─────────────────────────────────────────────────────────────────────────────
 
-function emptyForm(partnerId: string): ItemFormData {
-  return {
-    name: "",
-    card_set: "",
-    franchise: "",
-    condition: "NM",
-    buy_price: "",
-    grading_cost: "0",
-    market_price: "",
-    buy_date: today(),
-    status: "active",
-    partner_id: partnerId,
-    notes: "",
-    image_url: "",
-    psa_grade: "",
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tabs
-// ─────────────────────────────────────────────────────────────────────────────
-
-type Tab = "brain" | "inventory" | "roi" | "market" | "partners";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "brain", label: "🧠 מוח" },
-  { id: "inventory", label: "📦 מלאי" },
-  { id: "roi", label: "📈 ROI" },
-  { id: "market", label: "🌐 שוק" },
-  { id: "partners", label: "🤝 שותפים" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// CSS (injected once via useEffect — not on every render)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const CSS = `
-.cp-root {
-  font-family: 'Segoe UI', system-ui, sans-serif;
-  direction: rtl;
-  background: #0a0a0f;
-  min-height: 100vh;
-  color: #e2e8f0;
-  padding: 0;
-}
-.cp-header {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #2d3748;
-}
-.cp-title { font-size: 1.5rem; font-weight: 800; color: #e2e8f0; margin: 0; }
-.cp-subtitle { font-size: 0.8rem; color: #718096; margin: 2px 0 0; }
-.cp-stats-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
-.cp-stat-card {
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 12px 16px;
-  min-width: 130px;
-  flex: 1;
-}
-.cp-stat-label { font-size: 0.7rem; color: #718096; margin-bottom: 4px; }
-.cp-stat-value { font-size: 1.1rem; font-weight: 700; }
-.cp-stat-estimate { font-size: 0.65rem; color: #f6ad55; margin-top: 2px; }
-.cp-green { color: #48bb78; }
-.cp-red { color: #fc8181; }
-.cp-gold { color: #f6ad55; }
-.cp-blue { color: #63b3ed; }
-.cp-tabs { display: flex; background: #111827; border-bottom: 1px solid #2d3748; overflow-x: auto; }
-.cp-tab {
-  padding: 12px 18px; font-size: 0.85rem; cursor: pointer; border: none;
-  background: transparent; color: #718096; white-space: nowrap; transition: all 0.15s;
-}
-.cp-tab:hover { color: #e2e8f0; background: rgba(255,255,255,0.04); }
-.cp-tab.active { color: #63b3ed; border-bottom: 2px solid #63b3ed; font-weight: 600; }
-.cp-body { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
-.cp-card {
-  background: #1a1a2e;
-  border: 1px solid #2d3748;
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-}
-.cp-card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 12px; }
-.cp-input, .cp-select, .cp-textarea {
-  background: #111827; border: 1px solid #2d3748; border-radius: 8px;
-  color: #e2e8f0; padding: 8px 12px; font-size: 0.85rem; width: 100%;
-  box-sizing: border-box; outline: none; transition: border-color 0.15s;
-}
-.cp-input:focus, .cp-select:focus, .cp-textarea:focus { border-color: #4299e1; }
-.cp-label { font-size: 0.75rem; color: #718096; margin-bottom: 4px; display: block; }
-.cp-row { display: flex; gap: 12px; flex-wrap: wrap; }
-.cp-col { flex: 1; min-width: 120px; }
-.cp-btn {
-  padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
-  cursor: pointer; border: none; transition: all 0.15s;
-}
-.cp-btn-primary { background: #3182ce; color: #fff; }
-.cp-btn-primary:hover { background: #2b6cb0; }
-.cp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.cp-btn-success { background: #276749; color: #9ae6b4; }
-.cp-btn-success:hover { background: #22543d; }
-.cp-btn-danger { background: #742a2a; color: #fc8181; }
-.cp-btn-danger:hover { background: #63171b; }
-.cp-btn-ghost { background: transparent; color: #718096; border: 1px solid #2d3748; }
-.cp-btn-ghost:hover { color: #e2e8f0; border-color: #4a5568; }
-.cp-btn-sm { padding: 4px 10px; font-size: 0.75rem; }
-.cp-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-.cp-table th {
-  text-align: right; padding: 8px 10px; color: #718096; font-weight: 600;
-  border-bottom: 1px solid #2d3748; cursor: pointer; user-select: none;
-  white-space: nowrap;
-}
-.cp-table th:hover { color: #e2e8f0; }
-.cp-table td { padding: 8px 10px; border-bottom: 1px solid #1e2533; vertical-align: middle; }
-.cp-table tr:hover td { background: rgba(255,255,255,0.02); }
-.cp-badge {
-  display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 600;
-}
-.cp-badge-active { background: #1c4532; color: #9ae6b4; }
-.cp-badge-grading { background: #744210; color: #fbd38d; }
-.cp-badge-sold { background: #1a365d; color: #90cdf4; }
-.cp-chat-messages { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.cp-msg-user { align-self: flex-start; background: #2d3748; border-radius: 12px 12px 12px 2px; padding: 10px 14px; max-width: 80%; font-size: 0.85rem; }
-.cp-msg-ai { align-self: flex-end; background: #1a365d; border-radius: 12px 12px 2px 12px; padding: 10px 14px; max-width: 85%; font-size: 0.85rem; white-space: pre-wrap; line-height: 1.5; }
-.cp-search { position: relative; }
-.cp-search-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: #718096; pointer-events: none; }
-.cp-search .cp-input { padding-right: 32px; }
-.cp-pagination { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; font-size: 0.8rem; color: #718096; }
-.cp-img-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; cursor: pointer; }
-.cp-franchise-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #718096; }
-.cp-switch { position: relative; width: 36px; height: 20px; }
-.cp-switch input { opacity: 0; width: 0; height: 0; }
-.cp-slider {
-  position: absolute; cursor: pointer; inset: 0; background: #2d3748;
-  border-radius: 20px; transition: 0.2s;
-}
-.cp-slider::before {
-  content: ""; position: absolute; height: 14px; width: 14px;
-  right: 3px; bottom: 3px; background: #718096; border-radius: 50%; transition: 0.2s;
-}
-input:checked + .cp-slider { background: #3182ce; }
-input:checked + .cp-slider::before { transform: translateX(-16px); background: #fff; }
-.cp-undo-bar {
-  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-  background: #2d3748; border: 1px solid #4a5568; border-radius: 10px;
-  padding: 10px 20px; display: flex; align-items: center; gap: 12px;
-  font-size: 0.85rem; z-index: 9999; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-`;
+const PAGE = 25;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 25;
-
 export default function CollectPro() {
-  // ── Core data ────────────────────────────────────────────────────────────────
-  const [items, setItems] = useState<CollectionItem[]>([]);
-  const [partners, setPartners] = useState<Partner[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [s, d] = useReducer(reducer, INIT);
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<Tab>("brain");
-  const [showFranchise, setShowFranchise] = useState(false);
-
-  // ── Brain tab state (persists between tab switches) ──────────────────────────
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatLoading, setChatLoading] = useState(false);
-
-  // ── Market tab state (persists between tab switches) ─────────────────────────
-  const [marketInput, setMarketInput] = useState("");
-  const [marketResult, setMarketResult] = useState("");
-  const [marketLoading, setMarketLoading] = useState(false);
-  const [marketMode, setMarketMode] = useState<AIMode>("market");
-
-  // ── Inventory tab state ──────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: "buy_date", direction: "desc" });
-  const [page, setPage] = useState(1);
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<ItemFormData>(() => emptyForm(""));
-
-  // ── Partners tab state ───────────────────────────────────────────────────────
-  const [partnerForm, setPartnerForm] = useState({ name: "", email: "" });
-  const [addingPartner, setAddingPartner] = useState(false);
-
-  // ── Delete confirmation & undo ───────────────────────────────────────────────
-  const [itemToDelete, setItemToDelete] = useState<string | null>(null);
-  const [deletedItem, setDeletedItem] = useState<DeletedItem | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── AI abort ─────────────────────────────────────────────────────────────────
-  const aiAbortRef = useRef<AbortController | null>(null);
+  const aiAbort    = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // CSS injection — done once, not on every render
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const style = document.createElement("style");
-    style.id = "collectpro-styles";
-    if (!document.getElementById("collectpro-styles")) {
-      style.textContent = CSS;
-      document.head.appendChild(style);
-    }
-    return () => {
-      document.getElementById("collectpro-styles")?.remove();
-    };
-  }, []);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Data fetching
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ── Initial data load ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      const [{ data: itemData }, { data: partnerData }] = await Promise.all([
-        supabase
-          .from("coll_items")
-          .select("*")
-          .order("buy_date", { ascending: false }),
+    (async () => {
+      const [{ data: items }, { data: partners }] = await Promise.all([
+        supabase.from("coll_items").select("*").order("buy_date", { ascending: false }),
         supabase.from("coll_partners").select("*").order("name"),
       ]);
-      setItems((itemData as CollectionItem[]) ?? []);
-      setPartners((partnerData as Partner[]) ?? []);
-      setLoading(false);
-    }
-    load();
+      d({ t: "LOAD_OK", items: (items as CollectionItem[]) ?? [], partners: (partners as Partner[]) ?? [] });
+    })();
+  }, []);
+
+  // ── Event bus — Supabase Realtime ──────────────────────────────────────────
+  // Any client mutation is broadcast here automatically (no manual sync needed)
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("collectpro-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "coll_items" },
+        (payload) => {
+          d({ t: "RT_ITEM", event: payload.eventType, item: (payload.new ?? payload.old) as CollectionItem });
+        })
+      .on("postgres_changes", { event: "*", schema: "public", table: "coll_partners" },
+        (payload) => {
+          d({ t: "RT_PARTNER", event: payload.eventType, partner: (payload.new ?? payload.old) as Partner });
+        })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+  }, [s.chat.messages]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Computed stats — useMemo prevents recalculation on every keystroke in chat
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ── Derived data (useMemo — not recomputed on every keystroke) ─────────────
 
-  const stats = useMemo(() => computeStats(items), [items]);
+  const stats = useMemo(() => computeStats(s.items), [s.items]);
 
   const filteredItems = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return items.filter(
-      (i) =>
-        (!q ||
-          i.name.toLowerCase().includes(q) ||
-          (i.card_set ?? "").toLowerCase().includes(q) ||
-          (i.franchise ?? "").toLowerCase().includes(q)) &&
-        (!showFranchise || true) // franchise filter is additive; the toggle is per-tab
+    const q = s.inv.search.toLowerCase();
+    return s.items.filter((i) =>
+      (!q || i.name.toLowerCase().includes(q) ||
+       (i.card_set ?? "").toLowerCase().includes(q) ||
+       (i.franchise ?? "").toLowerCase().includes(q)) &&
+      (!s.franchise || !!i.franchise)
     );
-  }, [items, searchQuery, showFranchise]);
+  }, [s.items, s.inv.search, s.franchise]);
 
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
-    const { field, direction } = sortConfig;
+    const { field, dir } = s.inv.sort;
     arr.sort((a, b) => {
       const av = a[field] ?? "";
       const bv = b[field] ?? "";
-      let cmp = 0;
-      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
-      else cmp = String(av).localeCompare(String(bv), "he");
-      return direction === "asc" ? cmp : -cmp;
+      const cmp = typeof av === "number" && typeof bv === "number"
+        ? av - bv
+        : String(av).localeCompare(String(bv), "he");
+      return dir === "asc" ? cmp : -cmp;
     });
     return arr;
-  }, [filteredItems, sortConfig]);
+  }, [filteredItems, s.inv.sort]);
 
   const pagedItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return sortedItems.slice(start, start + PAGE_SIZE);
-  }, [sortedItems, page]);
+    const start = (s.inv.page - 1) * PAGE;
+    return sortedItems.slice(start, start + PAGE);
+  }, [sortedItems, s.inv.page]);
 
-  const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE_SIZE));
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Sorting
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const toggleSort = useCallback((field: SortConfig["field"]) => {
-    setSortConfig((prev) =>
-      prev.field === field
-        ? { field, direction: prev.direction === "asc" ? "desc" : "asc" }
-        : { field, direction: "asc" }
-    );
-    setPage(1);
-  }, []);
-
-  const sortIcon = (field: SortConfig["field"]) =>
-    sortConfig.field !== field ? " ↕" : sortConfig.direction === "asc" ? " ↑" : " ↓";
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // CRUD — Items
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const saveItem = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-
-      // Validation — toast, not alert()
-      if (!form.name.trim()) {
-        toast.error("נדרש שם לפריט");
-        return;
-      }
-      if (!form.buy_price || isNaN(Number(form.buy_price))) {
-        toast.error("נדרש מחיר קנייה תקין");
-        return;
-      }
-      if (!form.partner_id) {
-        toast.error("נדרש לבחור שותף");
-        return;
-      }
-
-      // Duplicate detection
-      const isDuplicate = items.some(
-        (i) =>
-          i.id !== editingId &&
-          i.name.trim().toLowerCase() === form.name.trim().toLowerCase() &&
-          i.partner_id === form.partner_id
-      );
-      if (isDuplicate) {
-        toast.warning(`אזהרה: פריט בשם "${form.name}" כבר קיים עבור שותף זה. ממשיך בכל זאת.`);
-      }
-
-      const payload = {
-        name: form.name.trim(),
-        card_set: form.card_set.trim() || null,
-        franchise: form.franchise.trim() || null,
-        condition: form.condition || null,
-        buy_price: Number(form.buy_price),
-        grading_cost: Number(form.grading_cost) || 0,
-        market_price: form.market_price ? Number(form.market_price) : null,
-        sell_price: null as number | null, // only set when marking sold
-        buy_date: form.buy_date || today(),
-        status: form.status as ItemStatus,
-        partner_id: form.partner_id,
-        notes: form.notes.trim() || null,
-        image_url: form.image_url || null,
-        psa_grade: form.psa_grade ? Number(form.psa_grade) : null,
-      };
-
-      try {
-        if (editingId) {
-          const { error } = await supabase
-            .from("coll_items")
-            .update(payload)
-            .eq("id", editingId);
-          if (error) throw error;
-          setItems((prev) =>
-            prev.map((i) => (i.id === editingId ? { ...i, ...payload } : i))
-          );
-          toast.success("פריט עודכן");
-        } else {
-          const id = crypto.randomUUID();
-          const newItem = { ...payload, id, created_at: new Date().toISOString() };
-          const { error } = await supabase.from("coll_items").insert(newItem);
-          if (error) throw error;
-          setItems((prev) => [newItem as CollectionItem, ...prev]);
-          toast.success("פריט נוסף");
-        }
-        setShowForm(false);
-        setEditingId(null);
-        setForm(emptyForm(form.partner_id));
-      } catch (err: unknown) {
-        toast.error(`שגיאה בשמירה: ${(err as Error).message}`);
-      }
-    },
-    [form, editingId, items]
-  );
-
-  const startEdit = useCallback((item: CollectionItem) => {
-    setEditingId(item.id);
-    setForm({
-      name: item.name,
-      card_set: item.card_set ?? "",
-      franchise: item.franchise ?? "",
-      condition: item.condition ?? "NM",
-      buy_price: String(item.buy_price),
-      grading_cost: String(item.grading_cost ?? 0),
-      market_price: item.market_price != null ? String(item.market_price) : "",
-      buy_date: item.buy_date,
-      status: item.status,
-      partner_id: item.partner_id,
-      notes: item.notes ?? "",
-      image_url: item.image_url ?? "",
-      psa_grade: item.psa_grade != null ? String(item.psa_grade) : "",
-    });
-    setShowForm(true);
-  }, []);
-
-  /** Request delete — shows confirmation dialog instead of deleting immediately */
-  const requestDelete = useCallback((id: string) => {
-    setItemToDelete(id);
-  }, []);
-
-  /** Confirmed delete — with undo window */
-  const confirmDelete = useCallback(async () => {
-    if (!itemToDelete) return;
-    const target = items.find((i) => i.id === itemToDelete);
-    if (!target) { setItemToDelete(null); return; }
-
-    try {
-      const { error } = await supabase
-        .from("coll_items")
-        .delete()
-        .eq("id", itemToDelete);
-      if (error) throw error;
-
-      setItems((prev) => prev.filter((i) => i.id !== itemToDelete));
-
-      // Set undo window
-      setDeletedItem({ item: target, deletedAt: Date.now() });
-      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-      undoTimerRef.current = setTimeout(() => setDeletedItem(null), 30_000);
-
-      toast("פריט נמחק", {
-        description: "ניתן לשחזר תוך 30 שניות",
-        action: { label: "בטל", onClick: () => undoDelete(target) },
-      });
-    } catch (err: unknown) {
-      toast.error(`שגיאה במחיקה: ${(err as Error).message}`);
-    }
-    setItemToDelete(null);
-  }, [itemToDelete, items]);
-
-  /** Undo delete — re-inserts the item */
-  const undoDelete = useCallback(
-    async (item: CollectionItem) => {
-      try {
-        const { error } = await supabase.from("coll_items").insert(item);
-        if (error) throw error;
-        setItems((prev) => [item, ...prev]);
-        setDeletedItem(null);
-        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-        toast.success("פריט שוחזר");
-      } catch (err: unknown) {
-        toast.error(`שגיאה בשחזור: ${(err as Error).message}`);
-      }
-    },
-    []
-  );
-
-  /** Mark item as sold */
-  const markSold = useCallback(
-    async (item: CollectionItem) => {
-      const priceStr = window.prompt(
-        `מחיר מכירה עבור "${item.name}" (בדולרים):`,
-        String(item.market_price ?? "")
-      );
-      if (priceStr === null) return; // user cancelled
-      const sellPrice = Number(priceStr);
-      if (isNaN(sellPrice) || sellPrice < 0) {
-        toast.error("מחיר מכירה לא תקין");
-        return;
-      }
-      const soldAt = new Date().toISOString();
-      try {
-        const { error } = await supabase
-          .from("coll_items")
-          .update({ status: "sold", sell_price: sellPrice, sold_at: soldAt })
-          .eq("id", item.id);
-        if (error) throw error;
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === item.id
-              ? { ...i, status: "sold", sell_price: sellPrice, sold_at: soldAt }
-              : i
-          )
-        );
-        const profit = sellPrice - Number(item.buy_price) - Number(item.grading_cost || 0);
-        toast.success(
-          `מכירה נרשמה! רווח: ${fmt$(profit)} (${profit >= 0 ? "+" : ""}${((profit / (Number(item.buy_price) + Number(item.grading_cost || 0))) * 100).toFixed(1)}%)`
-        );
-      } catch (err: unknown) {
-        toast.error(`שגיאה ברישום מכירה: ${(err as Error).message}`);
-      }
-    },
-    []
-  );
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Image upload with compression
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const handleImageUpload = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      try {
-        const compressed = await compressImage(file);
-        setForm((prev) => ({ ...prev, image_url: compressed }));
-        toast.success("תמונה דחוסה ומוכנה");
-      } catch {
-        toast.error("שגיאה בעיבוד התמונה");
-      }
-    },
-    []
-  );
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // AI — Brain chat
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const portfolioContext = useMemo(() => {
-    const summary = {
-      סטטיסטיקות: stats,
-      פריטים: items.map((i) => ({
-        שם: i.name,
-        סט: i.card_set,
-        מצב: i.condition,
-        סטטוס: i.status,
-        "מחיר קנייה": i.buy_price,
-        "עלות גריידינג": i.grading_cost,
-        "הערכת שוק": i.market_price,
-        "מחיר מכירה": i.sell_price,
-        "תאריך קנייה": i.buy_date,
-        "תאריך מכירה": i.sold_at,
-        שותף: partners.find((p) => p.id === i.partner_id)?.name,
-      })),
-    };
-    return JSON.stringify(summary, null, 2);
-  }, [items, partners, stats]);
-
-  const sendChat = useCallback(async () => {
-    const text = chatInput.trim();
-    if (!text || chatLoading) return;
-
-    const userMsg: ChatMessage = { role: "user", content: text };
-    setChatMessages((prev) => [...prev, userMsg]);
-    setChatInput("");
-    setChatLoading(true);
-
-    // Build context-rich user message — only attach portfolio to first message or every 5th
-    const contextMsg: ChatMessage = {
-      role: "user",
-      content: `=== נתוני פורטפוליו ===\n${portfolioContext}\n\n=== שאלה ===\n${text}`,
-    };
-
-    // Keep last 6 messages to manage context window; first message always carries portfolio
-    const history = chatMessages.slice(-6);
-    const messages: ChatMessage[] =
-      history.length === 0
-        ? [contextMsg]
-        : [...history, userMsg];
-
-    aiAbortRef.current = new AbortController();
-
-    try {
-      const reply = await callAI(messages, "brain", aiAbortRef.current.signal);
-      setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-    } catch (err: unknown) {
-      if ((err as Error).message !== "בוטל") {
-        toast.error(`שגיאת AI: ${(err as Error).message}`);
-      }
-    } finally {
-      setChatLoading(false);
-    }
-  }, [chatInput, chatLoading, chatMessages, portfolioContext]);
-
-  const cancelChat = useCallback(() => {
-    aiAbortRef.current?.abort();
-    setChatLoading(false);
-    toast("ניתוח בוטל");
-  }, []);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // AI — Market scan
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const runMarketScan = useCallback(async () => {
-    const query = marketInput.trim();
-    if (!query || marketLoading) return;
-
-    setMarketLoading(true);
-    setMarketResult("");
-
-    aiAbortRef.current = new AbortController();
-
-    const messages: ChatMessage[] = [
-      { role: "user", content: query },
-    ];
-
-    try {
-      // Bug fix: SYSTEM_PROMPT_MARKET is now applied server-side in the edge function.
-      // The mode parameter ("market" or "arbitrage") controls which prompt is used.
-      const result = await callAI(messages, marketMode, aiAbortRef.current.signal);
-      setMarketResult(result);
-    } catch (err: unknown) {
-      if ((err as Error).message !== "בוטל") {
-        toast.error(`שגיאת סריקה: ${(err as Error).message}`);
-      }
-    } finally {
-      setMarketLoading(false);
-    }
-  }, [marketInput, marketLoading, marketMode]);
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Partners CRUD
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const addPartner = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!partnerForm.name.trim()) {
-        toast.error("נדרש שם שותף");
-        return;
-      }
-      setAddingPartner(true);
-      try {
-        const newPartner: Partner = {
-          id: crypto.randomUUID(),
-          name: partnerForm.name.trim(),
-          email: partnerForm.email.trim() || undefined,
-          created_at: new Date().toISOString(),
-        };
-        const { error } = await supabase.from("coll_partners").insert(newPartner);
-        if (error) throw error;
-        setPartners((prev) => [...prev, newPartner].sort((a, b) => a.name.localeCompare(b.name, "he")));
-        setPartnerForm({ name: "", email: "" });
-        toast.success(`שותף "${newPartner.name}" נוסף`);
-      } catch (err: unknown) {
-        toast.error(`שגיאה בהוספת שותף: ${(err as Error).message}`);
-      } finally {
-        setAddingPartner(false);
-      }
-    },
-    [partnerForm]
-  );
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Partner stats — includes grading_cost in ROI (Bug 4 fix)
-  // ─────────────────────────────────────────────────────────────────────────────
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE));
 
   const partnerStats = useMemo(
-    () =>
-      partners.map((p) => {
-        const pItems = items.filter((i) => i.partner_id === p.id);
-        return { partner: p, items: pItems, stats: computeStats(pItems) };
-      }),
-    [partners, items]
+    () => s.partners.map((p) => ({ partner: p, stats: computeStats(s.items.filter((i) => i.partner_id === p.id)) })),
+    [s.partners, s.items]
   );
+
+  // ── Portfolio context for AI (truncated to last 8 items for context window) ─
+
+  const portfolioCtx = useMemo(() => JSON.stringify({
+    stats,
+    items: s.items.slice(0, 80).map((i) => ({
+      name: i.name, set: i.card_set, status: i.status,
+      buy: i.buy_price, grading: i.grading_cost,
+      market: i.market_price, sold: i.sell_price,
+      buy_date: i.buy_date, partner: s.partners.find((p) => p.id === i.partner_id)?.name,
+    })),
+  }), [s.items, s.partners, stats]);
+
+  // ── Sort toggle ────────────────────────────────────────────────────────────
+
+  const toggleSort = useCallback((field: SortConfig["field"]) => {
+    d({
+      t: "INV_SORT",
+      s: s.inv.sort.field === field
+        ? { field, dir: s.inv.sort.dir === "asc" ? "desc" : "asc" }
+        : { field, dir: "asc" },
+    });
+  }, [s.inv.sort]);
+
+  const sortArrow = (field: SortConfig["field"]) =>
+    s.inv.sort.field !== field ? " ↕" : s.inv.sort.dir === "asc" ? " ↑" : " ↓";
+
+  // ── Item CRUD ──────────────────────────────────────────────────────────────
+
+  const saveItem = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    const f = s.inv.form;
+    if (!f.name.trim()) { toast.error("נדרש שם"); return; }
+    if (!f.buy_price || isNaN(+f.buy_price)) { toast.error("נדרש מחיר קנייה תקין"); return; }
+    if (!f.partner_id) { toast.error("נדרש שותף"); return; }
+
+    const dup = s.items.some(
+      (i) => i.id !== s.inv.editId &&
+             i.name.toLowerCase() === f.name.toLowerCase() &&
+             i.partner_id === f.partner_id
+    );
+    if (dup) toast.warning(`"${f.name}" כבר קיים עבור שותף זה`);
+
+    const payload = {
+      name: f.name.trim(), card_set: f.card_set || null, franchise: f.franchise || null,
+      condition: f.condition, buy_price: +f.buy_price, grading_cost: +(f.grading_cost) || 0,
+      market_price: f.market_price ? +f.market_price : null,
+      sell_price: null as number | null,
+      buy_date: f.buy_date || today(), status: f.status as ItemStatus,
+      partner_id: f.partner_id, notes: f.notes || null,
+      image_url: f.image_url || null,
+      psa_grade: f.psa_grade ? +f.psa_grade : null,
+    };
+
+    try {
+      if (s.inv.editId) {
+        const { error } = await supabase.from("coll_items").update(payload).eq("id", s.inv.editId);
+        if (error) throw error;
+        // Realtime will update state automatically
+        toast.success("פריט עודכן");
+      } else {
+        const id = crypto.randomUUID();
+        const { error } = await supabase.from("coll_items").insert({ ...payload, id });
+        if (error) throw error;
+        toast.success("פריט נוסף");
+      }
+      d({ t: "INV_FORM_SHOW", show: false });
+      d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(f.partner_id) });
+    } catch (err: unknown) {
+      toast.error(`שגיאה: ${(err as Error).message}`);
+    }
+  }, [s.inv.form, s.inv.editId, s.items]);
+
+  const startEdit = useCallback((item: CollectionItem) => {
+    d({
+      t: "INV_FORM_EDIT", id: item.id, form: {
+        name: item.name, card_set: item.card_set ?? "", franchise: item.franchise ?? "",
+        condition: item.condition, buy_price: String(item.buy_price),
+        grading_cost: String(item.grading_cost ?? 0),
+        market_price: item.market_price != null ? String(item.market_price) : "",
+        buy_date: item.buy_date, status: item.status, partner_id: item.partner_id,
+        notes: item.notes ?? "", image_url: item.image_url ?? "",
+        psa_grade: item.psa_grade != null ? String(item.psa_grade) : "",
+      },
+    });
+  }, []);
+
+  const confirmDelete = useCallback(async () => {
+    if (!s.deleteTarget) return;
+    const target = s.items.find((i) => i.id === s.deleteTarget);
+    if (!target) { d({ t: "DEL_TARGET", id: null }); return; }
+
+    const { error } = await supabase.from("coll_items").delete().eq("id", s.deleteTarget);
+    if (error) { toast.error(`שגיאה: ${error.message}`); d({ t: "DEL_TARGET", id: null }); return; }
+
+    // Realtime handles state update; set undo buffer
+    d({ t: "UNDO_SET", u: { item: target, at: Date.now() } });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => d({ t: "UNDO_SET", u: null }), 30_000);
+    d({ t: "DEL_TARGET", id: null });
+    toast("פריט נמחק — ניתן לשחזר תוך 30 שניות");
+  }, [s.deleteTarget, s.items]);
+
+  const undoDelete = useCallback(async (item: CollectionItem) => {
+    const { error } = await supabase.from("coll_items").insert(item);
+    if (error) { toast.error(`שגיאת שחזור: ${error.message}`); return; }
+    d({ t: "UNDO_SET", u: null });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    toast.success("פריט שוחזר");
+  }, []);
+
+  const markSold = useCallback(async (item: CollectionItem) => {
+    const raw = window.prompt(`מחיר מכירה עבור "${item.name}":`, String(item.market_price ?? ""));
+    if (raw === null) return;
+    const price = +raw;
+    if (isNaN(price) || price < 0) { toast.error("מחיר לא תקין"); return; }
+    const soldAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("coll_items")
+      .update({ status: "sold", sell_price: price, sold_at: soldAt })
+      .eq("id", item.id);
+    if (error) { toast.error(error.message); return; }
+    const profit = price - (+item.buy_price) - (+(item.grading_cost ?? 0));
+    toast.success(`מכירה נרשמה · רווח: ${fmt$(profit)} (${fmtPct((profit / (+item.buy_price + +(item.grading_cost ?? 0))) * 100)})`);
+  }, []);
+
+  // ── Image upload ───────────────────────────────────────────────────────────
+
+  const handleImage = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const compressed = await compressImage(file).catch(() => null);
+    if (!compressed) { toast.error("שגיאה בעיבוד תמונה"); return; }
+    d({ t: "INV_FORM_PATCH", p: { image_url: compressed } });
+  }, []);
+
+  // ── AI — Brain chat ────────────────────────────────────────────────────────
+
+  const sendChat = useCallback(async () => {
+    const text = s.chat.input.trim();
+    if (!text || s.chat.busy) return;
+
+    const userMsg: ChatMessage = { role: "user", content: text };
+    d({ t: "CHAT_MSG", m: userMsg });
+    d({ t: "CHAT_INPUT", v: "" });
+    d({ t: "CHAT_BUSY", v: true });
+
+    // First message carries full portfolio context; subsequent carry last 6 messages
+    const history = s.chat.messages.slice(-6);
+    const messages: ChatMessage[] = history.length === 0
+      ? [{ role: "user", content: `=== פורטפוליו ===\n${portfolioCtx}\n\n=== שאלה ===\n${text}` }]
+      : [...history, userMsg];
+
+    aiAbort.current = new AbortController();
+    try {
+      const reply = await callAI(messages, "brain", { signal: aiAbort.current.signal });
+      d({ t: "CHAT_MSG", m: { role: "assistant", content: reply } });
+    } catch (err: unknown) {
+      if ((err as Error).message !== "ABORTED") toast.error(`AI: ${(err as Error).message}`);
+    } finally {
+      d({ t: "CHAT_BUSY", v: false });
+    }
+  }, [s.chat.input, s.chat.busy, s.chat.messages, portfolioCtx]);
+
+  // ── AI — Market scan ───────────────────────────────────────────────────────
+
+  const runScan = useCallback(async () => {
+    const query = s.market.query.trim();
+    if (!query || s.market.busy) return;
+    d({ t: "MKT_RESULT", v: "" });
+    d({ t: "MKT_BUSY", v: true });
+    aiAbort.current = new AbortController();
+    try {
+      const result = await callAI(
+        [{ role: "user", content: query }],
+        s.market.mode,
+        { signal: aiAbort.current.signal, cacheKey: query }
+      );
+      d({ t: "MKT_RESULT", v: result });
+    } catch (err: unknown) {
+      if ((err as Error).message !== "ABORTED") toast.error(`סריקה: ${(err as Error).message}`);
+    } finally {
+      d({ t: "MKT_BUSY", v: false });
+    }
+  }, [s.market.query, s.market.busy, s.market.mode]);
+
+  const cancelAI = useCallback(() => {
+    aiAbort.current?.abort();
+    d({ t: "CHAT_BUSY", v: false });
+    d({ t: "MKT_BUSY", v: false });
+  }, []);
+
+  // ── Partner CRUD ───────────────────────────────────────────────────────────
+
+  const addPartner = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!s.partnerForm.name.trim()) { toast.error("נדרש שם"); return; }
+    d({ t: "PF_BUSY", v: true });
+    const { error } = await supabase.from("coll_partners").insert({
+      id: crypto.randomUUID(),
+      name: s.partnerForm.name.trim(),
+      email: s.partnerForm.email.trim() || null,
+    });
+    d({ t: "PF_BUSY", v: false });
+    if (error) { toast.error(error.message); return; }
+    d({ t: "PF_PATCH", p: { name: "", email: "" } });
+    toast.success("שותף נוסף");
+  }, [s.partnerForm]);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Render helpers
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const statusBadge = (s: ItemStatus) => {
-    const map = { active: "cp-badge-active", grading: "cp-badge-grading", sold: "cp-badge-sold" };
-    const label = { active: "פעיל", grading: "גריידינג", sold: "נמכר" };
-    return (
-      <span className={`cp-badge ${map[s]}`}>{label[s]}</span>
-    );
+  const StatusBadge = ({ status }: { status: ItemStatus }) => {
+    const map: Record<ItemStatus, string> = {
+      active: "bg-emerald-900 text-emerald-300",
+      grading: "bg-yellow-900 text-yellow-300",
+      sold: "bg-blue-900 text-blue-300",
+    };
+    const label: Record<ItemStatus, string> = { active: "פעיל", grading: "גריידינג", sold: "נמכר" };
+    return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${map[status]}`}>{label[status]}</span>;
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Render
+  // Loading state
   // ─────────────────────────────────────────────────────────────────────────────
 
-  if (loading) {
+  if (s.loading) {
     return (
-      <div className="cp-root" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
-        <p style={{ color: "#718096" }}>טוען נתונים…</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-950 text-gray-400">
+        טוען…
       </div>
     );
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Main render
+  // ─────────────────────────────────────────────────────────────────────────────
+
   return (
-    <div className="cp-root">
-      {/* ── Delete confirmation dialog ────────────────────────────────────────── */}
-      <AlertDialog open={!!itemToDelete} onOpenChange={() => setItemToDelete(null)}>
-        <AlertDialogContent>
+    <div dir="rtl" className="min-h-screen bg-gray-950 text-gray-100 font-sans">
+
+      {/* ── Delete confirmation ──────────────────────────────────────────────── */}
+      <AlertDialog open={!!s.deleteTarget} onOpenChange={() => d({ t: "DEL_TARGET", id: null })}>
+        <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>אישור מחיקה</AlertDialogTitle>
+            <AlertDialogTitle>מחיקה בלתי הפיכה</AlertDialogTitle>
             <AlertDialogDescription>
-              פריט זה יימחק לצמיתות ממסד הנתונים. פעולה זו בלתי הפיכה (למעט ה-30 שניות הקרובות).
-              האם להמשיך?
+              פריט זה יימחק לצמיתות ממסד הנתונים. יש לך 30 שניות לשחזור לאחר המחיקה.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>בטל</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-red-700 hover:bg-red-800">
+            <AlertDialogCancel>ביטול</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={confirmDelete}>
               מחק
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Undo bar ─────────────────────────────────────────────────────────── */}
-      {deletedItem && (
-        <div className="cp-undo-bar">
-          <span>"{deletedItem.item.name}" נמחק</span>
-          <button
-            className="cp-btn cp-btn-primary cp-btn-sm"
-            onClick={() => undoDelete(deletedItem.item)}
-          >
-            בטל מחיקה
-          </button>
-          <button
-            className="cp-btn cp-btn-ghost cp-btn-sm"
-            onClick={() => { setDeletedItem(null); if (undoTimerRef.current) clearTimeout(undoTimerRef.current); }}
-          >
-            ×
-          </button>
+      {/* ── Undo toast bar ───────────────────────────────────────────────────── */}
+      {s.undo && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-800 border border-gray-600 rounded-xl px-5 py-3 shadow-2xl text-sm">
+          <span>"{s.undo.item.name}" נמחק</span>
+          <Button size="sm" onClick={() => undoDelete(s.undo!.item)}>בטל מחיקה</Button>
+          <button className="text-gray-400 hover:text-white" onClick={() => { d({ t: "UNDO_SET", u: null }); if (undoTimer.current) clearTimeout(undoTimer.current); }}>✕</button>
         </div>
       )}
 
-      {/* ── Header & Stats ────────────────────────────────────────────────────── */}
-      <div className="cp-header">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <div className="bg-gradient-to-r from-gray-900 via-blue-950 to-gray-900 border-b border-gray-800 px-6 py-4">
+        <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="cp-title">CollectPro</h1>
-            <p className="cp-subtitle">ניהול פורטפוליו קלפים מסחריים</p>
+            <h1 className="text-xl font-extrabold text-white">CollectPro</h1>
+            <p className="text-xs text-gray-500 mt-0.5">ניהול פורטפוליו קלפים מסחריים</p>
           </div>
-          <div className="cp-franchise-toggle">
-            <span>פופולריים בלבד</span>
-            <label className="cp-switch">
-              <input
-                type="checkbox"
-                checked={showFranchise}
-                onChange={(e) => setShowFranchise(e.target.checked)}
+          <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
+            <span>פרנצ'ייז בלבד</span>
+            <div
+              onClick={() => d({ t: "TOGGLE_FRANCHISE" })}
+              className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${s.franchise ? "bg-blue-600" : "bg-gray-700"}`}
+            >
+              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${s.franchise ? "right-0.5" : "right-4"}`} />
+            </div>
+          </label>
+        </div>
+
+        {/* Stats row */}
+        <div className="flex flex-wrap gap-3 mt-4">
+          {[
+            { label: "השקעה כוללת (כולל גריידינג)", value: fmt$(stats.totalCost), color: "text-amber-400" },
+            { label: "הערכת שוק פעיל ⚠", value: fmt$(stats.estimatedValue), sub: "הערכה בלבד — לא ממומש", color: "text-blue-400" },
+            { label: "רווח/הפסד לא ממומש", value: fmt$(stats.unrealisedPnL), color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "רווח ממומש נטו", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "ROI ממומש", value: fmtPct(stats.roiPct), sub: `${stats.soldCount} עסקאות`, color: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
+          ].map((st) => (
+            <div key={st.label} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 flex-1 min-w-[130px]">
+              <div className="text-xs text-gray-500 mb-1">{st.label}</div>
+              <div className={`text-base font-bold ${st.color}`}>{st.value}</div>
+              {st.sub && <div className="text-xs text-amber-600 mt-0.5">{st.sub}</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
+      <div className="flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
+        {(["brain", "inventory", "roi", "market", "partners"] as Tab[]).map((tab) => {
+          const labels: Record<Tab, string> = {
+            brain: "🧠 מוח", inventory: "📦 מלאי", roi: "📈 ROI",
+            market: "🌐 שוק", partners: "🤝 שותפים",
+          };
+          return (
+            <button
+              key={tab}
+              onClick={() => d({ t: "SET_TAB", tab })}
+              className={`px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                s.tab === tab
+                  ? "text-blue-400 border-b-2 border-blue-400"
+                  : "text-gray-500 hover:text-gray-200"
+              }`}
+            >
+              {labels[tab]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Tab content ─────────────────────────────────────────────────────── */}
+      <div className="max-w-5xl mx-auto px-4 py-5">
+
+        {/* ══ BRAIN ══════════════════════════════════════════════════════════ */}
+        {s.tab === "brain" && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <h2 className="font-bold mb-1">🧠 יועץ אמת פורנזי</h2>
+            <p className="text-xs text-gray-500 mb-4">הניתוח מבוסס על נתוני הפורטפוליו שלך. שאל כל שאלה — כולל שאלות לא נוחות.</p>
+
+            <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-3 p-1">
+              {s.chat.messages.length === 0 && (
+                <p className="text-center text-gray-600 text-sm mt-10">התחל לשאול…</p>
+              )}
+              {s.chat.messages.map((m, i) => (
+                <div key={i} className={`max-w-[82%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
+                  m.role === "user"
+                    ? "self-start bg-gray-700 rounded-tl-sm"
+                    : "self-end bg-blue-900/60 rounded-tr-sm"
+                }`}>
+                  {m.content}
+                </div>
+              ))}
+              {s.chat.busy && <div className="self-end text-sm text-gray-500 italic">מנתח…</div>}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                dir="rtl"
+                value={s.chat.input}
+                onChange={(e) => d({ t: "CHAT_INPUT", v: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
+                placeholder="שאל שאלה על הפורטפוליו…"
+                disabled={s.chat.busy}
+                className="bg-gray-800 border-gray-700"
               />
-              <span className="cp-slider" />
-            </label>
-          </div>
-        </div>
-
-        {/* Stats — Bug 3 fix: clear labels, honest metrics */}
-        <div className="cp-stats-row">
-          <div className="cp-stat-card">
-            <div className="cp-stat-label">השקעה כוללת</div>
-            <div className="cp-stat-value cp-gold">{fmt$(stats.totalInvestment)}</div>
-            <div className="cp-stat-estimate">קנייה + גריידינג</div>
-          </div>
-          <div className="cp-stat-card">
-            <div className="cp-stat-label">הערכת שוק (פעיל)</div>
-            <div className="cp-stat-value cp-blue">{fmt$(stats.portfolioEstimatedValue)}</div>
-            <div className="cp-stat-estimate">⚠ הערכה בלבד — לא ממומש</div>
-          </div>
-          <div className="cp-stat-card">
-            <div className="cp-stat-label">רווח לא ממומש</div>
-            <div className={`cp-stat-value ${stats.unrealisedGain >= 0 ? "cp-green" : "cp-red"}`}>
-              {fmt$(stats.unrealisedGain)}
-            </div>
-            <div className="cp-stat-estimate">על בסיס הערכות שוק</div>
-          </div>
-          <div className="cp-stat-card">
-            <div className="cp-stat-label">רווח ממומש</div>
-            <div className={`cp-stat-value ${stats.realisedProfit >= 0 ? "cp-green" : "cp-red"}`}>
-              {fmt$(stats.realisedProfit)}
-            </div>
-            <div className="cp-stat-estimate">נטו לאחר גריידינג</div>
-          </div>
-          <div className="cp-stat-card">
-            <div className="cp-stat-label">ROI ממומש</div>
-            <div className={`cp-stat-value ${stats.realisedROI >= 0 ? "cp-green" : "cp-red"}`}>
-              {stats.realisedROI.toFixed(1)}%
-            </div>
-            <div className="cp-stat-estimate">{stats.soldCount} עסקאות</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Tabs ─────────────────────────────────────────────────────────────── */}
-      <div className="cp-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`cp-tab ${activeTab === t.id ? "active" : ""}`}
-            onClick={() => setActiveTab(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="cp-body">
-        {/* ════════════════════════════════════════════════════════════════════
-            TAB: BRAIN
-            ════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "brain" && (
-          <div>
-            <div className="cp-card">
-              <div className="cp-card-title">🧠 מוח — יועץ אמת פורנזי</div>
-              <p style={{ fontSize: "0.8rem", color: "#718096", marginBottom: 12 }}>
-                הניתוח כולל את כל נתוני הפורטפוליו שלך. שאל כל שאלה — גם אם התשובה לא נוחה.
-              </p>
-
-              <div className="cp-chat-messages">
-                {chatMessages.length === 0 && (
-                  <p style={{ color: "#4a5568", fontSize: "0.8rem", textAlign: "center", marginTop: 40 }}>
-                    התחל לשאול…
-                  </p>
-                )}
-                {chatMessages.map((m, i) => (
-                  <div key={i} className={m.role === "user" ? "cp-msg-user" : "cp-msg-ai"}>
-                    {m.content}
-                  </div>
-                ))}
-                {chatLoading && (
-                  <div className="cp-msg-ai" style={{ opacity: 0.6 }}>
-                    מנתח…
-                  </div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  className="cp-input"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
-                  placeholder="שאל שאלה על הפורטפוליו…"
-                  disabled={chatLoading}
-                />
-                {chatLoading ? (
-                  <button className="cp-btn cp-btn-danger" onClick={cancelChat}>
-                    בטל
-                  </button>
-                ) : (
-                  <button className="cp-btn cp-btn-primary" onClick={sendChat} disabled={!chatInput.trim()}>
-                    שלח
-                  </button>
-                )}
-              </div>
+              {s.chat.busy
+                ? <Button variant="destructive" onClick={cancelAI}>בטל</Button>
+                : <Button onClick={sendChat} disabled={!s.chat.input.trim()}>שלח</Button>
+              }
             </div>
           </div>
         )}
 
-        {/* ════════════════════════════════════════════════════════════════════
-            TAB: INVENTORY
-            ════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "inventory" && (
+        {/* ══ INVENTORY ══════════════════════════════════════════════════════ */}
+        {s.tab === "inventory" && (
           <div>
             {/* Toolbar */}
-            <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-              <div className="cp-search" style={{ flex: 1, minWidth: 200 }}>
-                <span className="cp-search-icon">🔍</span>
-                <input
-                  className="cp-input"
-                  value={searchQuery}
-                  onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
-                  placeholder="חיפוש לפי שם, סט, פרנצ'ייז…"
-                />
-              </div>
-              <button
-                className="cp-btn cp-btn-primary"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(emptyForm(partners[0]?.id ?? ""));
-                  setShowForm(true);
-                }}
-              >
+            <div className="flex flex-wrap gap-2 mb-4 items-center">
+              <Input
+                dir="rtl"
+                className="flex-1 min-w-[180px] bg-gray-800 border-gray-700"
+                value={s.inv.search}
+                onChange={(e) => d({ t: "INV_SEARCH", v: e.target.value })}
+                placeholder="🔍 חיפוש לפי שם, סט, פרנצ'ייז…"
+              />
+              <Button onClick={() => { d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(s.partners[0]?.id ?? "") }); }}>
                 + הוסף פריט
-              </button>
-              <button
-                className="cp-btn cp-btn-ghost"
-                onClick={() => exportCSV(sortedItems, partners)}
-              >
+              </Button>
+              <Button variant="outline" onClick={() => exportCSV(sortedItems, s.partners)}>
                 ⬇ CSV
-              </button>
+              </Button>
             </div>
 
-            {/* Add/Edit form */}
-            {showForm && (
-              <div className="cp-card" style={{ marginBottom: 16 }}>
-                <div className="cp-card-title">{editingId ? "✏️ עריכת פריט" : "➕ פריט חדש"}</div>
-                <form onSubmit={saveItem}>
-                  <div className="cp-row" style={{ marginBottom: 10 }}>
-                    <div className="cp-col">
-                      <label className="cp-label">שם פריט *</label>
-                      <input className="cp-input" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} required />
-                    </div>
-                    <div className="cp-col">
-                      <label className="cp-label">סט</label>
-                      <input className="cp-input" value={form.card_set} onChange={(e) => setForm((f) => ({ ...f, card_set: e.target.value }))} />
-                    </div>
-                    <div className="cp-col">
-                      <label className="cp-label">פרנצ'ייז</label>
-                      <input className="cp-input" value={form.franchise} onChange={(e) => setForm((f) => ({ ...f, franchise: e.target.value }))} />
-                    </div>
+            {/* Form */}
+            {s.inv.showForm && (
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4">
+                <h3 className="font-bold mb-4">{s.inv.editId ? "✏ עריכת פריט" : "➕ פריט חדש"}</h3>
+                <form onSubmit={saveItem} className="space-y-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {[
+                      { label: "שם *", key: "name", type: "text" },
+                      { label: "סט", key: "card_set", type: "text" },
+                      { label: "פרנצ'ייז", key: "franchise", type: "text" },
+                    ].map(({ label, key, type }) => (
+                      <div key={key}>
+                        <label className="text-xs text-gray-400 block mb-1">{label}</label>
+                        <Input
+                          type={type}
+                          dir="rtl"
+                          className="bg-gray-800 border-gray-700"
+                          value={s.inv.form[key as keyof ItemForm]}
+                          onChange={(e) => d({ t: "INV_FORM_PATCH", p: { [key]: e.target.value } })}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <div className="cp-row" style={{ marginBottom: 10 }}>
-                    <div className="cp-col">
-                      <label className="cp-label">מצב</label>
-                      <select className="cp-select" value={form.condition} onChange={(e) => setForm((f) => ({ ...f, condition: e.target.value }))}>
-                        {["M", "NM", "LP", "MP", "HP", "D", "PSA"].map((c) => (
-                          <option key={c}>{c}</option>
-                        ))}
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">מצב</label>
+                      <select
+                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100"
+                        value={s.inv.form.condition}
+                        onChange={(e) => d({ t: "INV_FORM_PATCH", p: { condition: e.target.value } })}
+                      >
+                        {["M","NM","LP","MP","HP","D","PSA"].map((c) => <option key={c}>{c}</option>)}
                       </select>
                     </div>
-                    <div className="cp-col">
-                      <label className="cp-label">סטטוס</label>
-                      <select className="cp-select" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ItemStatus }))}>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">סטטוס</label>
+                      <select
+                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100"
+                        value={s.inv.form.status}
+                        onChange={(e) => d({ t: "INV_FORM_PATCH", p: { status: e.target.value as ItemStatus } })}
+                      >
                         <option value="active">פעיל</option>
                         <option value="grading">גריידינג</option>
                         <option value="sold">נמכר</option>
                       </select>
                     </div>
-                    <div className="cp-col">
-                      <label className="cp-label">שותף *</label>
-                      <select className="cp-select" value={form.partner_id} onChange={(e) => setForm((f) => ({ ...f, partner_id: e.target.value }))} required>
-                        <option value="">בחר שותף</option>
-                        {partners.map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">שותף *</label>
+                      <select
+                        className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100"
+                        value={s.inv.form.partner_id}
+                        onChange={(e) => d({ t: "INV_FORM_PATCH", p: { partner_id: e.target.value } })}
+                        required
+                      >
+                        <option value="">בחר…</option>
+                        {s.partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                       </select>
                     </div>
-                  </div>
-                  <div className="cp-row" style={{ marginBottom: 10 }}>
-                    <div className="cp-col">
-                      <label className="cp-label">מחיר קנייה ($) *</label>
-                      <input className="cp-input" type="number" min="0" step="0.01" value={form.buy_price} onChange={(e) => setForm((f) => ({ ...f, buy_price: e.target.value }))} required />
-                    </div>
-                    <div className="cp-col">
-                      <label className="cp-label">עלות גריידינג ($)</label>
-                      <input className="cp-input" type="number" min="0" step="0.01" value={form.grading_cost} onChange={(e) => setForm((f) => ({ ...f, grading_cost: e.target.value }))} />
-                    </div>
-                    <div className="cp-col">
-                      <label className="cp-label">הערכת שוק ($) — לא מחיר מכירה</label>
-                      <input className="cp-input" type="number" min="0" step="0.01" value={form.market_price} onChange={(e) => setForm((f) => ({ ...f, market_price: e.target.value }))} placeholder="הערכה בלבד" />
-                    </div>
-                    <div className="cp-col">
-                      <label className="cp-label">תאריך קנייה</label>
-                      <input className="cp-input" type="date" value={form.buy_date} onChange={(e) => setForm((f) => ({ ...f, buy_date: e.target.value }))} />
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">תאריך קנייה</label>
+                      <Input
+                        type="date"
+                        className="bg-gray-800 border-gray-700"
+                        value={s.inv.form.buy_date}
+                        onChange={(e) => d({ t: "INV_FORM_PATCH", p: { buy_date: e.target.value } })}
+                      />
                     </div>
                   </div>
-                  <div className="cp-row" style={{ marginBottom: 10 }}>
-                    <div className="cp-col">
-                      <label className="cp-label">ציון PSA</label>
-                      <input className="cp-input" type="number" min="1" max="10" step="0.5" value={form.psa_grade} onChange={(e) => setForm((f) => ({ ...f, psa_grade: e.target.value }))} placeholder="1–10" />
-                    </div>
-                    <div className="cp-col" style={{ flex: 2 }}>
-                      <label className="cp-label">הערות</label>
-                      <input className="cp-input" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} />
-                    </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { label: "מחיר קנייה ($) *", key: "buy_price" },
+                      { label: "עלות גריידינג ($)", key: "grading_cost" },
+                      { label: "הערכת שוק ($) — לא מחיר מכירה", key: "market_price" },
+                      { label: "ציון PSA", key: "psa_grade" },
+                    ].map(({ label, key }) => (
+                      <div key={key}>
+                        <label className="text-xs text-gray-400 block mb-1">{label}</label>
+                        <Input
+                          type="number" min="0" step="0.01"
+                          className="bg-gray-800 border-gray-700"
+                          value={s.inv.form[key as keyof ItemForm]}
+                          onChange={(e) => d({ t: "INV_FORM_PATCH", p: { [key]: e.target.value } })}
+                        />
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ marginBottom: 12 }}>
-                    <label className="cp-label">תמונה (דחוסה אוטומטית)</label>
-                    <input type="file" accept="image/*" onChange={handleImageUpload} style={{ color: "#e2e8f0", fontSize: "0.8rem" }} />
-                    {form.image_url && (
-                      <img src={form.image_url} alt="preview" className="cp-img-thumb" style={{ marginTop: 6 }} />
+
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">הערות</label>
+                    <Input
+                      dir="rtl"
+                      className="bg-gray-800 border-gray-700"
+                      value={s.inv.form.notes}
+                      onChange={(e) => d({ t: "INV_FORM_PATCH", p: { notes: e.target.value } })}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">תמונה (דחוסה אוטומטית)</label>
+                    <input type="file" accept="image/*" onChange={handleImage} className="text-sm text-gray-300" />
+                    {s.inv.form.image_url && (
+                      <img src={s.inv.form.image_url} alt="preview" className="mt-2 w-16 h-16 object-cover rounded-lg" />
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="submit" className="cp-btn cp-btn-primary">
-                      {editingId ? "עדכן" : "הוסף"}
-                    </button>
-                    <button
-                      type="button"
-                      className="cp-btn cp-btn-ghost"
-                      onClick={() => { setShowForm(false); setEditingId(null); }}
-                    >
-                      בטל
-                    </button>
+
+                  <div className="flex gap-2 pt-1">
+                    <Button type="submit">{s.inv.editId ? "עדכן" : "הוסף"}</Button>
+                    <Button type="button" variant="outline" onClick={() => d({ t: "INV_FORM_SHOW", show: false })}>ביטול</Button>
                   </div>
                 </form>
               </div>
             )}
 
             {/* Table */}
-            <div className="cp-card" style={{ padding: 0, overflow: "auto" }}>
-              <table className="cp-table">
+            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr>
-                    <th onClick={() => toggleSort("name")}>פריט{sortIcon("name")}</th>
-                    <th onClick={() => toggleSort("status")}>סטטוס{sortIcon("status")}</th>
-                    <th onClick={() => toggleSort("buy_date")}>תאריך קנייה{sortIcon("buy_date")}</th>
-                    <th onClick={() => toggleSort("buy_price")}>קנייה{sortIcon("buy_price")}</th>
-                    <th onClick={() => toggleSort("grading_cost")}>גריידינג{sortIcon("grading_cost")}</th>
-                    <th onClick={() => toggleSort("market_price")}>הערכה{sortIcon("market_price")}</th>
-                    <th onClick={() => toggleSort("sell_price")}>מכירה{sortIcon("sell_price")}</th>
-                    <th style={{ cursor: "default" }}>פעולות</th>
+                  <tr className="border-b border-gray-800">
+                    {[
+                      { label: "פריט",       field: "name"         as const },
+                      { label: "סטטוס",      field: "status"       as const },
+                      { label: "תאריך",      field: "buy_date"     as const },
+                      { label: "קנייה",      field: "buy_price"    as const },
+                      { label: "גריידינג",   field: "grading_cost" as const },
+                      { label: "הערכה",      field: "market_price" as const },
+                      { label: "מכירה",      field: "sell_price"   as const },
+                    ].map(({ label, field }) => (
+                      <th
+                        key={field}
+                        className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 cursor-pointer hover:text-white whitespace-nowrap select-none"
+                        onClick={() => toggleSort(field)}
+                      >
+                        {label}{sortArrow(field)}
+                      </th>
+                    ))}
+                    <th className="px-3 py-2.5 text-xs font-semibold text-gray-400 text-right">פעולות</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedItems.map((item) => {
-                    const profit = item.status === "sold"
-                      ? (item.sell_price ?? 0) - item.buy_price - (item.grading_cost ?? 0)
-                      : null;
+                    const cost   = +item.buy_price + +(item.grading_cost ?? 0);
+                    const profit = item.status === "sold" ? +(item.sell_price ?? 0) - cost : null;
                     return (
-                      <tr key={item.id}>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <tr key={item.id} className="border-b border-gray-800/50 hover:bg-white/[0.02]">
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2">
                             {item.image_url && (
-                              <img src={item.image_url} alt={item.name} className="cp-img-thumb" />
+                              <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-md object-cover flex-shrink-0" />
                             )}
                             <div>
-                              <div style={{ fontWeight: 600 }}>{item.name}</div>
-                              <div style={{ fontSize: "0.7rem", color: "#718096" }}>
+                              <div className="font-semibold">{item.name}</div>
+                              <div className="text-xs text-gray-500">
                                 {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
                               </div>
                             </div>
                           </div>
                         </td>
-                        <td>{statusBadge(item.status)}</td>
-                        <td style={{ color: "#718096", fontSize: "0.8rem" }}>{item.buy_date}</td>
-                        <td>{fmt$(item.buy_price)}</td>
-                        <td style={{ color: item.grading_cost ? "#f6ad55" : "#4a5568" }}>
-                          {item.grading_cost ? fmt$(item.grading_cost) : "—"}
-                        </td>
-                        <td style={{ color: "#63b3ed" }}>
-                          {item.market_price != null ? fmt$(item.market_price) : "—"}
-                        </td>
-                        <td>
+                        <td className="px-3 py-2.5"><StatusBadge status={item.status} /></td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{item.buy_date}</td>
+                        <td className="px-3 py-2.5">{fmt$(item.buy_price)}</td>
+                        <td className="px-3 py-2.5 text-amber-400">{item.grading_cost ? fmt$(item.grading_cost) : <span className="text-gray-600">—</span>}</td>
+                        <td className="px-3 py-2.5 text-blue-400">{item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600">—</span>}</td>
+                        <td className="px-3 py-2.5">
                           {item.status === "sold" && item.sell_price != null ? (
                             <div>
-                              <div style={{ color: "#e2e8f0" }}>{fmt$(item.sell_price)}</div>
-                              <div style={{ fontSize: "0.7rem", color: profit! >= 0 ? "#48bb78" : "#fc8181" }}>
+                              <div>{fmt$(item.sell_price)}</div>
+                              <div className={`text-xs ${profit! >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                                 {profit! >= 0 ? "+" : ""}{fmt$(profit!)}
                               </div>
                             </div>
-                          ) : "—"}
+                          ) : <span className="text-gray-600">—</span>}
                         </td>
-                        <td>
-                          <div style={{ display: "flex", gap: 4 }}>
+                        <td className="px-3 py-2.5">
+                          <div className="flex gap-1.5">
                             {item.status !== "sold" && (
-                              <button
-                                className="cp-btn cp-btn-success cp-btn-sm"
-                                onClick={() => markSold(item)}
-                                title="רשום מכירה"
-                              >
-                                ✓
-                              </button>
+                              <button onClick={() => markSold(item)} className="text-xs px-2 py-1 bg-emerald-900/60 text-emerald-300 rounded hover:bg-emerald-800 transition-colors" title="רשום מכירה">✓</button>
                             )}
-                            <button
-                              className="cp-btn cp-btn-ghost cp-btn-sm"
-                              onClick={() => startEdit(item)}
-                            >
-                              ✏
-                            </button>
-                            <button
-                              className="cp-btn cp-btn-danger cp-btn-sm"
-                              onClick={() => requestDelete(item.id)}
-                              title="מחק פריט"
-                            >
-                              ✕
-                            </button>
+                            <button onClick={() => startEdit(item)} className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors">✏</button>
+                            <button onClick={() => d({ t: "DEL_TARGET", id: item.id })} className="text-xs px-2 py-1 bg-red-900/60 text-red-300 rounded hover:bg-red-800 transition-colors">✕</button>
                           </div>
                         </td>
                       </tr>
                     );
                   })}
                   {pagedItems.length === 0 && (
-                    <tr>
-                      <td colSpan={8} style={{ textAlign: "center", color: "#4a5568", padding: 32 }}>
-                        {searchQuery ? "לא נמצאו תוצאות לחיפוש" : "אין פריטים עדיין — הוסף את הפריט הראשון"}
-                      </td>
-                    </tr>
+                    <tr><td colSpan={8} className="text-center py-10 text-gray-600">
+                      {s.inv.search ? "לא נמצאו תוצאות" : "אין פריטים — לחץ על הוסף פריט"}
+                    </td></tr>
                   )}
                 </tbody>
               </table>
 
-              {/* Pagination */}
               {totalPages > 1 && (
-                <div className="cp-pagination" style={{ padding: "8px 16px" }}>
-                  <span>{sortedItems.length} פריטים סה"כ</span>
-                  <button
-                    className="cp-btn cp-btn-ghost cp-btn-sm"
-                    disabled={page === 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    ◀
-                  </button>
-                  <span>עמוד {page} מתוך {totalPages}</span>
-                  <button
-                    className="cp-btn cp-btn-ghost cp-btn-sm"
-                    disabled={page === totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    ▶
-                  </button>
+                <div className="flex items-center justify-end gap-3 px-4 py-2.5 text-sm text-gray-500 border-t border-gray-800">
+                  <span>{sortedItems.length} פריטים</span>
+                  <button disabled={s.inv.page === 1} onClick={() => d({ t: "INV_PAGE", n: s.inv.page - 1 })} className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700">◀</button>
+                  <span>עמוד {s.inv.page} / {totalPages}</span>
+                  <button disabled={s.inv.page === totalPages} onClick={() => d({ t: "INV_PAGE", n: s.inv.page + 1 })} className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700">▶</button>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* ════════════════════════════════════════════════════════════════════
-            TAB: ROI
-            ════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "roi" && (
-          <div>
-            <div className="cp-card">
-              <div className="cp-card-title">📈 ROI — ניתוח רווחיות</div>
-              <p style={{ fontSize: "0.75rem", color: "#718096", marginBottom: 16 }}>
-                כל החישובים כוללים עלות גריידינג בבסיס ההשקעה. רווח = הכנסה − (קנייה + גריידינג).
-              </p>
-
-              {/* Overall */}
-              <div className="cp-row" style={{ marginBottom: 16 }}>
-                {[
-                  { label: "השקעה כוללת (כולל גריידינג)", value: fmt$(stats.totalInvestment), cls: "cp-gold" },
-                  { label: "הכנסות ממכירות", value: fmt$(stats.realisedRevenue), cls: "cp-blue" },
-                  { label: "רווח ממומש נטו", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "cp-green" : "cp-red" },
-                  { label: "ROI ממומש", value: `${stats.realisedROI.toFixed(1)}%`, cls: stats.realisedROI >= 0 ? "cp-green" : "cp-red" },
-                ].map((s) => (
-                  <div key={s.label} className="cp-stat-card">
-                    <div className="cp-stat-label">{s.label}</div>
-                    <div className={`cp-stat-value ${s.cls}`}>{s.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Per-item breakdown for sold items */}
-              <div className="cp-card-title" style={{ marginBottom: 8 }}>פירוט עסקאות שנמכרו</div>
-              <div style={{ overflowX: "auto" }}>
-                <table className="cp-table">
-                  <thead>
-                    <tr>
-                      <th>פריט</th>
-                      <th>קנייה</th>
-                      <th>גריידינג</th>
-                      <th>עלות בסיס</th>
-                      <th>מכירה</th>
-                      <th>רווח נטו</th>
-                      <th>ROI</th>
-                      <th>שותף</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items
-                      .filter((i) => i.status === "sold" && i.sell_price != null)
-                      .map((i) => {
-                        const costBasis = Number(i.buy_price) + Number(i.grading_cost || 0);
-                        const profit = Number(i.sell_price) - costBasis;
-                        const roi = costBasis > 0 ? (profit / costBasis) * 100 : 0;
-                        return (
-                          <tr key={i.id}>
-                            <td style={{ fontWeight: 600 }}>{i.name}</td>
-                            <td>{fmt$(i.buy_price)}</td>
-                            <td>{i.grading_cost ? fmt$(i.grading_cost) : "—"}</td>
-                            <td style={{ color: "#f6ad55" }}>{fmt$(costBasis)}</td>
-                            <td>{fmt$(i.sell_price!)}</td>
-                            <td className={profit >= 0 ? "cp-green" : "cp-red"}>
-                              {profit >= 0 ? "+" : ""}{fmt$(profit)}
-                            </td>
-                            <td className={roi >= 0 ? "cp-green" : "cp-red"}>
-                              {roi.toFixed(1)}%
-                            </td>
-                            <td style={{ color: "#718096", fontSize: "0.8rem" }}>
-                              {partners.find((p) => p.id === i.partner_id)?.name ?? "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    {items.filter((i) => i.status === "sold").length === 0 && (
-                      <tr>
-                        <td colSpan={8} style={{ textAlign: "center", color: "#4a5568", padding: 24 }}>
-                          עדיין אין עסקאות שנמכרו
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════════
-            TAB: MARKET
-            ════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "market" && (
-          <div>
-            <div className="cp-card">
-              <div className="cp-card-title">🌐 סריקת שוק — אמת פורנזית</div>
-              <p style={{ fontSize: "0.75rem", color: "#718096", marginBottom: 12 }}>
-                AI עם חיפוש אינטרנט בזמן אמת. ה-AI מחפש ב-eBay, TCGPlayer, PSA Registry ומציין מקורות.
-              </p>
-
-              <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", gap: 4 }}>
-                  {(["market", "arbitrage"] as const).map((m) => (
-                    <button
-                      key={m}
-                      className={`cp-btn ${marketMode === m ? "cp-btn-primary" : "cp-btn-ghost"} cp-btn-sm`}
-                      onClick={() => setMarketMode(m)}
-                    >
-                      {m === "market" ? "🔍 מחירים" : "⚡ ארביטראז׳"}
-                    </button>
-                  ))}
+        {/* ══ ROI ════════════════════════════════════════════════════════════ */}
+        {s.tab === "roi" && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "השקעה כוללת (קנייה + גריידינג)", value: fmt$(stats.totalCost), cls: "text-amber-400" },
+                { label: "הכנסות מכירות", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
+                { label: "רווח נטו ממומש", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "ROI ממומש", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
+              ].map((st) => (
+                <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                  <div className="text-xs text-gray-500 mb-1">{st.label}</div>
+                  <div className={`text-lg font-bold ${st.cls}`}>{st.value}</div>
                 </div>
-              </div>
-
-              <textarea
-                className="cp-textarea"
-                rows={3}
-                value={marketInput}
-                onChange={(e) => setMarketInput(e.target.value)}
-                placeholder={
-                  marketMode === "market"
-                    ? "לדוגמה: מה מחיר PSA 10 של Charizard Base Set 1st Edition כיום?"
-                    : "לדוגמה: מצא הזדמנויות ארביטראז׳ בקלפי One Piece Paramount War"
-                }
-                style={{ marginBottom: 10, resize: "vertical" }}
-              />
-
-              <div style={{ display: "flex", gap: 8 }}>
-                {marketLoading ? (
-                  <button
-                    className="cp-btn cp-btn-danger"
-                    onClick={() => { aiAbortRef.current?.abort(); setMarketLoading(false); }}
-                  >
-                    בטל סריקה
-                  </button>
-                ) : (
-                  <button
-                    className="cp-btn cp-btn-primary"
-                    onClick={runMarketScan}
-                    disabled={!marketInput.trim()}
-                  >
-                    🔍 הפעל סריקה
-                  </button>
-                )}
-              </div>
-
-              {marketLoading && (
-                <p style={{ color: "#718096", fontSize: "0.8rem", marginTop: 10 }}>
-                  סורק את השוק… (עשוי לקחת 15-30 שניות)
-                </p>
-              )}
-
-              {marketResult && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    background: "#111827",
-                    border: "1px solid #2d3748",
-                    borderRadius: 10,
-                    padding: "14px 16px",
-                    whiteSpace: "pre-wrap",
-                    fontSize: "0.85rem",
-                    lineHeight: 1.6,
-                    maxHeight: 500,
-                    overflowY: "auto",
-                  }}
-                >
-                  {marketResult}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════════
-            TAB: PARTNERS
-            ════════════════════════════════════════════════════════════════════ */}
-        {activeTab === "partners" && (
-          <div>
-            {/* Add partner form */}
-            <div className="cp-card">
-              <div className="cp-card-title">➕ הוסף שותף</div>
-              <form onSubmit={addPartner}>
-                <div className="cp-row">
-                  <div className="cp-col">
-                    <label className="cp-label">שם *</label>
-                    <input
-                      className="cp-input"
-                      value={partnerForm.name}
-                      onChange={(e) => setPartnerForm((f) => ({ ...f, name: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="cp-col">
-                    <label className="cp-label">אימייל</label>
-                    <input
-                      className="cp-input"
-                      type="email"
-                      value={partnerForm.email}
-                      onChange={(e) => setPartnerForm((f) => ({ ...f, email: e.target.value }))}
-                    />
-                  </div>
-                  <div style={{ alignSelf: "flex-end" }}>
-                    <button type="submit" className="cp-btn cp-btn-primary" disabled={addingPartner}>
-                      {addingPartner ? "מוסיף…" : "הוסף"}
-                    </button>
-                  </div>
-                </div>
-              </form>
+              ))}
             </div>
 
-            {/* Partner cards with stats */}
-            {partnerStats.map(({ partner, stats: ps }) => (
-              <div key={partner.id} className="cp-card">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: "1rem" }}>{partner.name}</div>
-                    {partner.email && <div style={{ fontSize: "0.75rem", color: "#718096" }}>{partner.email}</div>}
-                    <div style={{ fontSize: "0.75rem", color: "#4a5568", marginTop: 2 }}>
-                      {ps.activeCount} פעיל · {ps.gradingCount} גריידינג · {ps.soldCount} נמכר
-                    </div>
-                  </div>
-                  <button
-                    className="cp-btn cp-btn-ghost cp-btn-sm"
-                    onClick={() => exportCSV(
-                      items.filter((i) => i.partner_id === partner.id),
-                      partners
-                    )}
-                  >
-                    ⬇ CSV
-                  </button>
-                </div>
-
-                <div className="cp-row">
-                  {[
-                    { label: "השקעה (כולל גריידינג)", value: fmt$(ps.totalInvestment), cls: "cp-gold" },
-                    { label: "הערכת שוק פעיל", value: fmt$(ps.portfolioEstimatedValue), cls: "cp-blue" },
-                    { label: "הכנסות מכירות", value: fmt$(ps.realisedRevenue), cls: "cp-green" },
-                    {
-                      label: "רווח נטו + ROI",
-                      value: `${fmt$(ps.realisedProfit)} (${ps.realisedROI.toFixed(1)}%)`,
-                      cls: ps.realisedProfit >= 0 ? "cp-green" : "cp-red",
-                    },
-                  ].map((s) => (
-                    <div key={s.label} className="cp-stat-card">
-                      <div className="cp-stat-label">{s.label}</div>
-                      <div className={`cp-stat-value ${s.cls}`} style={{ fontSize: "0.95rem" }}>{s.value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Per-partner top items */}
-                {items
-                  .filter((i) => i.partner_id === partner.id)
-                  .slice(0, 5)
-                  .map((i) => {
-                    const costBasis = Number(i.buy_price) + Number(i.grading_cost || 0);
-                    const value = i.status === "sold" ? (i.sell_price ?? 0) : (i.market_price ?? i.buy_price);
-                    const profit = value - costBasis;
+            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
+              <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm">פירוט עסקאות שנמכרו</div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    {["פריט","קנייה","גריידינג","עלות בסיס","מכירה","רווח נטו","ROI","שותף"].map((h) => (
+                      <th key={h} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {s.items.filter((i) => i.status === "sold" && i.sell_price != null).map((i) => {
+                    const base   = +i.buy_price + +(i.grading_cost ?? 0);
+                    const profit = +(i.sell_price ?? 0) - base;
+                    const roi    = base > 0 ? (profit / base) * 100 : 0;
                     return (
-                      <div
-                        key={i.id}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "6px 0",
-                          borderTop: "1px solid #1e2533",
-                          fontSize: "0.82rem",
-                        }}
-                      >
-                        <div>
-                          <span style={{ fontWeight: 600 }}>{i.name}</span>
-                          <span style={{ color: "#718096", marginRight: 6 }}>{statusBadge(i.status)}</span>
-                        </div>
-                        <div style={{ textAlign: "left" }}>
-                          <span style={{ color: profit >= 0 ? "#48bb78" : "#fc8181" }}>
-                            {profit >= 0 ? "+" : ""}{fmt$(profit)}
-                          </span>
-                        </div>
-                      </div>
+                      <tr key={i.id} className="border-b border-gray-800/40 hover:bg-white/[0.02]">
+                        <td className="px-3 py-2.5 font-semibold">{i.name}</td>
+                        <td className="px-3 py-2.5">{fmt$(i.buy_price)}</td>
+                        <td className="px-3 py-2.5 text-amber-400">{i.grading_cost ? fmt$(i.grading_cost) : "—"}</td>
+                        <td className="px-3 py-2.5 text-amber-300 font-medium">{fmt$(base)}</td>
+                        <td className="px-3 py-2.5">{fmt$(i.sell_price!)}</td>
+                        <td className={`px-3 py-2.5 font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                        </td>
+                        <td className={`px-3 py-2.5 ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</td>
+                        <td className="px-3 py-2.5 text-gray-400 text-xs">{s.partners.find((p) => p.id === i.partner_id)?.name ?? "—"}</td>
+                      </tr>
                     );
                   })}
-              </div>
-            ))}
+                  {s.items.filter((i) => i.status === "sold").length === 0 && (
+                    <tr><td colSpan={8} className="text-center py-8 text-gray-600">אין עסקאות שנמכרו עדיין</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
-            {partners.length === 0 && (
-              <div className="cp-card" style={{ textAlign: "center", color: "#4a5568", padding: 32 }}>
-                אין שותפים עדיין — הוסף שותף ראשון למעלה
+        {/* ══ MARKET ═════════════════════════════════════════════════════════ */}
+        {s.tab === "market" && (
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            <h2 className="font-bold mb-1">🌐 סריקת שוק — אמת פורנזית</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              AI עם חיפוש אינטרנט. מחפש ב-eBay, TCGPlayer, PSA Registry ומציין מקורות.
+              תוצאות נשמרות אוטומטית לבסיס הידע.
+            </p>
+
+            <div className="flex gap-2 mb-3">
+              {(["market", "arbitrage"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => d({ t: "MKT_MODE", v: m })}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    s.market.mode === m ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {m === "market" ? "🔍 מחירים" : "⚡ ארביטראז׳"}
+                </button>
+              ))}
+            </div>
+
+            <Textarea
+              dir="rtl"
+              className="bg-gray-800 border-gray-700 mb-3 resize-y"
+              rows={3}
+              value={s.market.query}
+              onChange={(e) => d({ t: "MKT_QUERY", v: e.target.value })}
+              placeholder={
+                s.market.mode === "market"
+                  ? "לדוגמה: מה מחיר PSA 10 Charizard Base Set 1st Edition?"
+                  : "לדוגמה: הזדמנויות ארביטראז׳ בקלפי One Piece Paramount War"
+              }
+            />
+
+            <div className="flex gap-2">
+              {s.market.busy
+                ? <Button variant="destructive" onClick={cancelAI}>בטל סריקה</Button>
+                : <Button onClick={runScan} disabled={!s.market.query.trim()}>🔍 הפעל סריקה</Button>
+              }
+            </div>
+
+            {s.market.busy && (
+              <p className="text-sm text-gray-500 mt-3">סורק… (15–30 שניות)</p>
+            )}
+
+            {s.market.result && (
+              <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
+                {s.market.result}
               </div>
             )}
           </div>
         )}
+
+        {/* ══ PARTNERS ═══════════════════════════════════════════════════════ */}
+        {s.tab === "partners" && (
+          <div className="space-y-4">
+            {/* Add partner */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <h3 className="font-bold mb-3">➕ הוסף שותף</h3>
+              <form onSubmit={addPartner} className="flex flex-wrap gap-2 items-end">
+                <div className="flex-1 min-w-[150px]">
+                  <label className="text-xs text-gray-400 block mb-1">שם *</label>
+                  <Input dir="rtl" className="bg-gray-800 border-gray-700" value={s.partnerForm.name} onChange={(e) => d({ t: "PF_PATCH", p: { name: e.target.value } })} required />
+                </div>
+                <div className="flex-1 min-w-[150px]">
+                  <label className="text-xs text-gray-400 block mb-1">אימייל</label>
+                  <Input type="email" className="bg-gray-800 border-gray-700" value={s.partnerForm.email} onChange={(e) => d({ t: "PF_PATCH", p: { email: e.target.value } })} />
+                </div>
+                <Button type="submit" disabled={s.addingPartner}>{s.addingPartner ? "מוסיף…" : "הוסף"}</Button>
+              </form>
+            </div>
+
+            {/* Partner cards */}
+            {partnerStats.map(({ partner, stats: ps }) => (
+              <div key={partner.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <div className="font-bold text-base">{partner.name}</div>
+                    {partner.email && <div className="text-xs text-gray-500">{partner.email}</div>}
+                    <div className="text-xs text-gray-600 mt-0.5">
+                      {ps.activeCount} פעיל · {ps.gradingCount} גריידינג · {ps.soldCount} נמכר
+                    </div>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => exportCSV(s.items.filter((i) => i.partner_id === partner.id), s.partners, `${partner.name}.csv`)}>
+                    ⬇ CSV
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                  {[
+                    { label: "השקעה (כולל גריידינג)", value: fmt$(ps.totalCost), cls: "text-amber-400" },
+                    { label: "הערכת שוק פעיל", value: fmt$(ps.estimatedValue), cls: "text-blue-400" },
+                    { label: "הכנסות מכירות", value: fmt$(ps.realisedRevenue), cls: "text-emerald-400" },
+                    { label: "רווח נטו + ROI", value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`, cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                  ].map((st) => (
+                    <div key={st.label} className="bg-gray-800 rounded-lg p-3">
+                      <div className="text-xs text-gray-500 mb-1">{st.label}</div>
+                      <div className={`text-sm font-bold ${st.cls}`}>{st.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {s.items.filter((i) => i.partner_id === partner.id).slice(0, 4).map((i) => {
+                  const base   = +i.buy_price + +(i.grading_cost ?? 0);
+                  const value  = i.status === "sold" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
+                  const profit = value - base;
+                  return (
+                    <div key={i.id} className="flex justify-between items-center py-1.5 border-t border-gray-800 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{i.name}</span>
+                        <StatusBadge status={i.status} />
+                      </div>
+                      <span className={profit >= 0 ? "text-emerald-400" : "text-red-400"}>
+                        {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+
+            {s.partners.length === 0 && (
+              <div className="text-center py-12 text-gray-600">אין שותפים — הוסף שותף ראשון למעלה</div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );

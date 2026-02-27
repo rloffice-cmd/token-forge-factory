@@ -1,158 +1,165 @@
 /**
- * CollectPro AI Proxy
+ * collectpro-ai — Layer 3 (Logic): AI proxy for CollectPro
  *
- * Security: Keeps the Anthropic API key on the server side — never exposed to the browser.
- * Fixes Bug 1 & 2: SYSTEM_PROMPT_MARKET is always forwarded; web-search tools
- *                  no longer delete the system prompt.
- * Rate-limits: max 10 calls per minute per IP.
+ * Responsibilities:
+ *  1. Load the merged system prompt from Layer 2 (cp_instructions + cp_instruction_patches)
+ *  2. Call Anthropic API — system prompt is NEVER removed when web-search is added
+ *  3. Cache market results back into Layer 1 (cp_knowledge) — append-only
+ *  4. Rate-limit requests per IP
+ *
+ * The Anthropic API key lives only here — never in the browser.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const MODEL = "claude-opus-4-6";
+// ─── Environment ─────────────────────────────────────────────────────────────
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
+const SUPABASE_URL  = Deno.env.get("SUPABASE_URL") ?? "";
+const SERVICE_KEY   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const MODEL         = "claude-opus-4-6";
+
+const cors = {
+  "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// ─── System prompts ────────────────────────────────────────────────────────────
+// ─── Rate limiter (10 req / min per IP) ──────────────────────────────────────
 
-const SYSTEM_PROMPT_BRAIN = `
-אתה יועץ אמת פורנזי למשקיע קלפים מסחריים (TCG). תפקידך לנתח נתונים ולספק אמת, גם כשהיא לא נוחה.
-
-כללים בלתי ניתנים לפשרה:
-1. לעולם אל תמציא מחירים, מגמות, או ציטוטים — ציין מה ידוע ומה לא
-2. הזהר תמיד לגבי אי-ודאות: "הנתון הזה אינו מדויק כי X"
-3. כשה-ROI נראה טוב — שאל: מה הוצא על גריידינג? מה זמן ההחזקה? מה עמלות המכירה?
-4. הגדר מראש מה נספר: עלות קנייה + עלות גריידינג = בסיס השקעה
-5. "שווי מלאי" = הערכת שוק בלבד, לא רווח ממומש
-
-הנתונים שתקבל הם נתוני הפורטפוליו הממשי של המשתמש.
-ענה בעברית, בצורה ישירה וקצרה.
-`.trim();
-
-const SYSTEM_PROMPT_MARKET = `
-אתה אנליסט שוק קלפים מסחריים (TCG) עם גישה לחיפוש אינטרנט בזמן אמת.
-תפקידך: לספק נתוני שוק עדכניים ואמינים בלבד — לא הערכות מדומיינות.
-
-כללים:
-1. חפש תמיד ב-eBay sold listings, TCGPlayer, PSA Registry — ציין את המקור
-2. הפרד בין "מחיר מוצע" לבין "מחיר מכירה מאומת"
-3. ציין תאריך הנתונים שמצאת
-4. אם לא מצאת נתון — אמור זאת במפורש ואל תמציא
-5. כלול: טווח מחירים, מגמה (עולה/יורד/יציב), נפח מסחר אם ידוע
-6. הזהר לגבי מחירים עם PSA vs ללא PSA — הם שונים מהותית
-
-ענה בעברית, כלול מחירים בדולרים.
-`.trim();
-
-const SYSTEM_PROMPT_ARBITRAGE = `
-אתה מומחה ארביטראז׳ בשוק קלפים מסחריים עם גישה לחיפוש אינטרנט בזמן אמת.
-מטרתך: לזהות הזדמנויות מחיר בין פלטפורמות שונות.
-
-כללים:
-1. חפש מחירי קנייה (Troll & Toad, TCGPlayer, Facebook Groups) ומחירי מכירה (eBay, COMC)
-2. חשב פוטנציאל ארביטראז׳ = מחיר מכירה — מחיר קנייה — עמלות (15% eBay) — גריידינג ($25-50)
-3. ציין את רמת הסיכון: נזילות הקלף, זמן המכירה הממוצע
-4. הדגל אדום: ארביטראז׳ פחות מ-$50 נטו לא שווה בדרך כלל את הזמן
-
-ענה בעברית, כלול חישוב מפורט לכל הזדמנות.
-`.trim();
-
-// ─── In-memory rate limiter (per IP, 10 req/min) ──────────────────────────────
-
-const rateLimitMap = new Map<string, { count: number; reset: number }>();
-
-function isRateLimited(ip: string): boolean {
+const rl = new Map<string, { n: number; reset: number }>();
+function limited(ip: string): boolean {
   const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now > entry.reset) {
-    rateLimitMap.set(ip, { count: 1, reset: now + 60_000 });
-    return false;
-  }
-  if (entry.count >= 10) return true;
-  entry.count++;
+  const e = rl.get(ip);
+  if (!e || now > e.reset) { rl.set(ip, { n: 1, reset: now + 60_000 }); return false; }
+  if (e.n >= 10) return true;
+  e.n++;
   return false;
+}
+
+// ─── Definitions loader (Layer 2) ─────────────────────────────────────────────
+//
+// Merges: base instruction + all active patches in version ASC order.
+// The result is the live system prompt — always current, never hardcoded.
+
+async function loadSystemPrompt(
+  sb: ReturnType<typeof createClient>,
+  key: string
+): Promise<string> {
+  const [{ data: base }, { data: patches }] = await Promise.all([
+    sb.from("cp_instructions")
+      .select("content")
+      .eq("key", key)
+      .single(),
+    sb.from("cp_instruction_patches")
+      .select("patch, version")
+      .eq("instruction_key", key)
+      .eq("active", true)
+      .order("version", { ascending: true }),
+  ]);
+
+  if (!base?.content) return "";
+
+  // Base is immutable; patches are layered on top — never replacing, always extending
+  const layers = [base.content, ...(patches ?? []).map((p: { patch: string }) => p.patch)];
+  return layers.join("\n\n---\n\n");
+}
+
+// ─── Knowledge writer (Layer 1, append-only) ──────────────────────────────────
+
+async function appendKnowledge(
+  sb: ReturnType<typeof createClient>,
+  type: string,
+  key: string,
+  content: string,
+  metadata: Record<string, unknown>
+): Promise<void> {
+  // The cp_knowledge_deactivate_previous trigger will mark old rows inactive
+  await sb.from("cp_knowledge").insert({ type, key, content, metadata });
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  if (isRateLimited(ip)) {
-    return new Response(JSON.stringify({ error: "Rate limit exceeded. Try again in a minute." }), {
-      status: 429,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  if (limited(ip)) {
+    return json({ error: "Rate limit: 10 requests per minute." }, 429);
   }
 
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: "AI service not configured." }), {
-      status: 503,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+  if (!ANTHROPIC_KEY) return json({ error: "AI service not configured." }, 503);
 
-  let body: { messages: unknown[]; mode: "brain" | "market" | "arbitrage" };
+  let body: {
+    messages: Array<{ role: string; content: string }>;
+    mode: "brain" | "market" | "arbitrage";
+    cacheKey?: string;
+  };
+
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body." }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: "Invalid JSON." }, 400);
   }
 
-  const { messages, mode = "brain" } = body;
+  const { messages, mode = "brain", cacheKey } = body;
+  const instructionKey = `collectpro_${mode}`;
 
-  // ── Select system prompt based on mode ──
-  const systemPrompt =
-    mode === "market"
-      ? SYSTEM_PROMPT_MARKET
-      : mode === "arbitrage"
-      ? SYSTEM_PROMPT_ARBITRAGE
-      : SYSTEM_PROMPT_BRAIN;
+  const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-  // ── Build Anthropic request body ──
-  // CRITICAL FIX (Bug 1 & 2): system prompt is NEVER deleted when tools are present.
-  // Previously: `delete body.system` was called when withSearch=true — now fixed.
+  // Load merged system prompt from Layer 2
+  const systemPrompt = await loadSystemPrompt(sb, instructionKey);
+
+  // Build Anthropic request
+  // CRITICAL: system prompt is present regardless of whether tools are added
   const anthropicBody: Record<string, unknown> = {
     model: MODEL,
     max_tokens: 2048,
-    system: systemPrompt, // always present
+    system: systemPrompt || `You are a ${mode} assistant for TCG card portfolio management.`,
     messages,
   };
 
-  if (mode === "market" || mode === "arbitrage") {
-    anthropicBody.tools = [{ type: "web_search_20250305", name: "web_search" }];
-  }
-
-  const anthropicHeaders: Record<string, string> = {
-    "Content-Type": "application/json",
-    "x-api-key": ANTHROPIC_API_KEY,
+  const headers: Record<string, string> = {
+    "Content-Type":     "application/json",
+    "x-api-key":        ANTHROPIC_KEY,
     "anthropic-version": "2023-06-01",
   };
 
   if (mode === "market" || mode === "arbitrage") {
-    anthropicHeaders["anthropic-beta"] = "web-search-2025-03-05";
+    anthropicBody.tools = [{ type: "web_search_20250305", name: "web_search" }];
+    headers["anthropic-beta"] = "web-search-2025-03-05";
   }
 
-  const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: anthropicHeaders,
+    headers,
     body: JSON.stringify(anthropicBody),
   });
 
-  const responseData = await anthropicResp.json();
+  const data = await resp.json();
 
-  return new Response(JSON.stringify(responseData), {
-    status: anthropicResp.status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
+  // Append market results to knowledge layer (Layer 1) — async, non-blocking
+  if (resp.ok && cacheKey && (mode === "market" || mode === "arbitrage")) {
+    const text = (data.content ?? [])
+      .filter((b: { type: string }) => b.type === "text")
+      .map((b: { text: string }) => b.text)
+      .join("\n");
+
+    if (text) {
+      appendKnowledge(sb, mode, cacheKey, text, {
+        query: messages.at(-1)?.content ?? "",
+        model: MODEL,
+        timestamp: new Date().toISOString(),
+      }).catch(console.error); // fire-and-forget; don't fail the response
+    }
+  }
+
+  return json(data, resp.status);
 });
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors, "Content-Type": "application/json" },
+  });
+}
