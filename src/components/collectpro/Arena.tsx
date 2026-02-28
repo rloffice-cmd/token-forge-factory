@@ -77,8 +77,17 @@ function ArenaAICompare({ itemA, itemB }: { itemA: CollectionItem; itemB: Collec
       )}
 
       {result && (
-        <div className="mt-3 bg-gray-800/80 border border-blue-800/40 rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[420px] overflow-y-auto">
-          {result}
+        <div className="mt-3 bg-gray-800/80 border border-blue-800/40 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 border-b border-blue-800/30">
+            <span className="text-xs text-gray-500 font-medium">AI Comparison Result</span>
+            <button
+              onClick={() => navigator.clipboard.writeText(result).catch(() => {})}
+              className="text-xs text-gray-400 hover:text-white px-2 py-0.5 rounded hover:bg-gray-700 transition-colors"
+            >Copy ⎘</button>
+          </div>
+          <div className="p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[420px] overflow-y-auto">
+            {result}
+          </div>
         </div>
       )}
     </div>
@@ -292,9 +301,31 @@ export function ArenaView({
       {itemA && itemB && <ArenaAICompare itemA={itemA} itemB={itemB} />}
 
       {(itemA || itemB) && (
-        <Button variant="outline" size="sm" onClick={() => dispatch({ t: "ARENA_CLEAR" })}>
-          Clear Arena
-        </Button>
+        <div className="flex gap-2">
+          {itemA && itemB && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const lines = [
+                  `Arena Comparison — ${new Date().toLocaleDateString()}`,
+                  ``,
+                  `Slot A: ${itemA.name} (${itemA.condition}${itemA.psa_grade ? ` · PSA ${itemA.psa_grade}` : ""})`,
+                  `  Cost: $${itemCost(itemA)}  Market: ${itemA.market_price != null ? "$" + itemA.market_price : "N/A"}`,
+                  ``,
+                  `Slot B: ${itemB.name} (${itemB.condition}${itemB.psa_grade ? ` · PSA ${itemB.psa_grade}` : ""})`,
+                  `  Cost: $${itemCost(itemB)}  Market: ${itemB.market_price != null ? "$" + itemB.market_price : "N/A"}`,
+                ].join("\n");
+                navigator.clipboard.writeText(lines).catch(() => {});
+              }}
+            >
+              Copy Summary ⎘
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => dispatch({ t: "ARENA_CLEAR" })}>
+            Clear Arena
+          </Button>
+        </div>
       )}
     </div>
   );
