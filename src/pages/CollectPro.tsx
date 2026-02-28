@@ -293,6 +293,45 @@ export default function CollectPro() {
       .map(([month, data]) => ({ month, ...data }));
   }, [s.items]);
 
+  // Sales velocity: avg days between sales, and days since last sale
+  const salesVelocity = useMemo(() => {
+    const sold = s.items
+      .filter(i => i.status === "sold" && i.sold_at)
+      .map(i => new Date(i.sold_at!).getTime())
+      .sort((a, b) => a - b);
+    if (sold.length < 2) return null;
+    const gaps: number[] = [];
+    for (let i = 1; i < sold.length; i++) gaps.push((sold[i] - sold[i - 1]) / 86400000);
+    const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    const daysSinceLast = Math.round((Date.now() - sold[sold.length - 1]) / 86400000);
+    return { avgGapDays: Math.round(avgGap), daysSinceLast };
+  }, [s.items]);
+
+  // Best sale month by average ROI
+  const bestSaleMonth = useMemo(() => {
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const map = new Map<number, { profit: number; cost: number; count: number }>();
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .forEach(i => {
+        const mo   = new Date(i.sold_at!).getMonth(); // 0-11
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const entry = map.get(mo) ?? { profit: 0, cost: 0, count: 0 };
+        map.set(mo, { profit: entry.profit + profit, cost: entry.cost + cost, count: entry.count + 1 });
+      });
+    if (map.size === 0) return null;
+    const months = [...map.entries()]
+      .map(([mo, { profit, cost, count }]) => ({
+        month: MONTHS[mo],
+        roi: cost > 0 ? (profit / cost) * 100 : 0,
+        count,
+        profit,
+      }))
+      .sort((a, b) => b.roi - a.roi);
+    return months[0];
+  }, [s.items]);
+
   const portfolioAlerts = useMemo(() => {
     const alerts: { level: "warn" | "info"; msg: string; filter: "all" | ItemStatus }[] = [];
     const noPrice = s.items.filter(i => i.status === "active" && i.market_price == null);
@@ -552,6 +591,21 @@ export default function CollectPro() {
     return actions
       .sort((a, b) => (a.priority === "high" ? 0 : 1) - (b.priority === "high" ? 0 : 1))
       .slice(0, 8);
+  }, [s.items]);
+
+  // Concentration risk: top items by portfolio weight
+  const concentrationRisk = useMemo(() => {
+    const active = s.items.filter(i => i.status === "active");
+    const totalVal = active.reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
+    if (totalVal <= 0 || active.length < 3) return [];
+    return active
+      .map(i => {
+        const val = i.market_price ?? +i.buy_price;
+        return { item: i, val, pct: (val / totalVal) * 100 };
+      })
+      .filter(x => x.pct >= 5) // only items that are ≥5% of portfolio
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5);
   }, [s.items]);
 
   const conditionBreakdown = useMemo(() => {
@@ -1612,6 +1666,45 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Concentration Risk ───────────────────────────────────────────── */}
+            {concentrationRisk.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>🏦 Concentration Risk</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">items ≥5% of active portfolio</span>
+                </div>
+                <div className="space-y-2">
+                  {concentrationRisk.map(({ item, val, pct }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                        <div className="h-1 bg-gray-800 rounded-full overflow-hidden mt-1.5">
+                          <div
+                            className={`h-full rounded-full ${pct >= 20 ? "bg-red-500" : pct >= 10 ? "bg-amber-500" : "bg-blue-600"}`}
+                            style={{ width: `${Math.min(100, pct)}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-xs font-bold ${pct >= 20 ? "text-red-400" : pct >= 10 ? "text-amber-400" : "text-blue-400"}`}>
+                          {pct.toFixed(0)}%
+                        </span>
+                        <span className="text-xs text-gray-500">{fmt$(val)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {concentrationRisk[0]?.pct >= 20 && (
+                  <p className="text-xs text-amber-600 mt-2">⚠ High concentration — single item represents {concentrationRisk[0].pct.toFixed(0)}% of active portfolio value.</p>
+                )}
+              </div>
+            )}
+
             {/* ── Alerts ──────────────────────────────────────────────────────── */}
             {portfolioAlerts.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
@@ -2403,7 +2496,14 @@ export default function CollectPro() {
                 { label: "Net Realised Profit", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
                 { label: "Realised ROI", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
                 { label: "Avg Hold Time", value: avgHoldDays != null ? `${avgHoldDays}d` : "—", cls: "text-purple-400" },
-              ] as const).map((st) => (
+                ...(salesVelocity ? [
+                  { label: "Avg Days Between Sales", value: `${salesVelocity.avgGapDays}d`, cls: "text-indigo-400" as const },
+                  { label: "Days Since Last Sale",   value: `${salesVelocity.daysSinceLast}d`, cls: salesVelocity.daysSinceLast > salesVelocity.avgGapDays * 1.5 ? "text-amber-400" as const : "text-gray-300" as const },
+                ] : []),
+                ...(bestSaleMonth ? [
+                  { label: "Best Sale Month", value: bestSaleMonth.month, cls: "text-emerald-400" as const },
+                ] : []),
+              ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-500 mb-1">{st.label}</div>
                   <div className={`text-lg font-bold ${st.cls}`}>{st.value}</div>
