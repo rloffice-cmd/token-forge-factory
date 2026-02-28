@@ -2612,6 +2612,7 @@ export default function CollectPro() {
                     arenaSlot={
                       s.arena.a === item.id ? "a" : s.arena.b === item.id ? "b" : null
                     }
+                    sellScore={sellScores.find(x => x.item.id === item.id)?.score ?? null}
                   />
                 ))}
                 {pagedItems.length === 0 && (

@@ -28,6 +28,7 @@ export interface CollectibleCardProps {
   onGrade?: (item: CollectionItem) => void;
   arenaSlot?: "a" | "b" | null;
   compact?: boolean;
+  sellScore?: number | null;
 }
 
 export default function CollectibleCard({
@@ -43,6 +44,7 @@ export default function CollectibleCard({
   onGrade,
   arenaSlot,
   compact,
+  sellScore,
 }: CollectibleCardProps) {
   const cfg = franchiseCfg(item.franchise);
   const cost = itemCost(item);
@@ -61,6 +63,18 @@ export default function CollectibleCard({
       {arenaSlot && (
         <div className={`absolute top-2 left-2 z-20 px-2 py-0.5 rounded-full text-xs font-bold ${arenaSlot === "a" ? "bg-blue-600 text-white" : "bg-purple-600 text-white"}`}>
           {arenaSlot === "a" ? "Slot A" : "Slot B"}
+        </div>
+      )}
+
+      {/* Sell score badge */}
+      {sellScore != null && sellScore >= 60 && !compact && (
+        <div
+          className={`absolute top-2 left-2 z-20 px-1.5 py-0.5 rounded-full text-xs font-bold ${
+            sellScore >= 80 ? "bg-emerald-600 text-white" : "bg-blue-600 text-white"
+          }`}
+          title={`Sell score: ${sellScore}/100`}
+        >
+          💰{sellScore}
         </div>
       )}
 
