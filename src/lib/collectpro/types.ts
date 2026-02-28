@@ -40,7 +40,7 @@ export interface Knowledge {
 export type ItemStatus = "active" | "grading" | "sold";
 export type AIMode     = "brain" | "market" | "arbitrage";
 export type SortDir    = "asc" | "desc";
-export type Tab        = "brain" | "inventory" | "roi" | "arena" | "market" | "partners";
+export type Tab        = "brain" | "inventory" | "roi" | "arena" | "market" | "partners" | "admin";
 export type ViewMode   = "table" | "cards";
 
 export interface Partner {

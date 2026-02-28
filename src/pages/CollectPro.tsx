@@ -147,6 +147,7 @@ type State = {
   addingPartner: boolean;
   deleteTarget: string | null;
   undo:         UndoBuffer | null;
+  isAdmin:      boolean;
 };
 
 type Action =
@@ -179,7 +180,8 @@ type Action =
   | { t: "PF_PATCH";   p: Partial<State["partnerForm"]> }
   | { t: "PF_BUSY";    v: boolean }
   | { t: "DEL_TARGET"; id: string | null }
-  | { t: "UNDO_SET";   u: UndoBuffer | null };
+  | { t: "UNDO_SET";   u: UndoBuffer | null }
+  | { t: "SET_ADMIN";  v: boolean };
 
 function today() { return new Date().toISOString().slice(0, 10); }
 
@@ -204,7 +206,7 @@ const INIT: State = {
     form: emptyForm(""), selected: [],
   },
   partnerForm: { name: "", email: "" }, addingPartner: false,
-  deleteTarget: null, undo: null,
+  deleteTarget: null, undo: null, isAdmin: false,
 };
 
 function reducer(s: State, a: Action): State {
@@ -274,6 +276,7 @@ function reducer(s: State, a: Action): State {
 
     case "DEL_TARGET": return { ...s, deleteTarget: a.id };
     case "UNDO_SET":   return { ...s, undo: a.u };
+    case "SET_ADMIN":  return { ...s, isAdmin: a.v };
 
     default: return s;
   }
@@ -928,6 +931,230 @@ function ArenaAICompare({ itemA, itemB }: { itemA: CollectionItem; itemB: Collec
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AdminPanel — access control UI (visible to admins only)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PublicUser   { id: string; email: string; last_seen: string }
+interface AccessRow    { id: string; user_id: string; partner_id: string; created_at: string }
+interface AdminRow     { user_id: string }
+
+function AdminPanel({ partners }: { partners: Partner[] }) {
+  const [users,   setUsers]   = useState<PublicUser[]>([]);
+  const [access,  setAccess]  = useState<AccessRow[]>([]);
+  const [admins,  setAdmins]  = useState<AdminRow[]>([]);
+  const [busy,    setBusy]    = useState(false);
+
+  // Grant access form
+  const [grantEmail,     setGrantEmail]     = useState("");
+  const [grantPartnerId, setGrantPartnerId] = useState(partners[0]?.id ?? "");
+
+  // Make-admin form
+  const [adminEmail, setAdminEmail] = useState("");
+
+  const load = useCallback(async () => {
+    const [{ data: u }, { data: a }, { data: adm }] = await Promise.all([
+      supabase.from("cp_users_public").select("id, email, last_seen").order("last_seen", { ascending: false }),
+      supabase.from("cp_user_partner_access").select("id, user_id, partner_id, created_at"),
+      supabase.from("cp_admins").select("user_id"),
+    ]);
+    setUsers(u ?? []);
+    setAccess(a ?? []);
+    setAdmins(adm ?? []);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const emailOf  = (uid: string) => users.find((u) => u.id === uid)?.email ?? uid.slice(0, 8) + "…";
+  const partnerOf = (pid: string) => partners.find((p) => p.id === pid)?.name ?? "—";
+
+  const grantAccess = async () => {
+    const user = users.find((u) => u.email.toLowerCase() === grantEmail.toLowerCase().trim());
+    if (!user) { toast.error("User not found — they must log in first"); return; }
+    if (!grantPartnerId) { toast.error("Select a portfolio"); return; }
+    setBusy(true);
+    const { error } = await supabase.from("cp_user_partner_access").insert({
+      user_id: user.id,
+      partner_id: grantPartnerId,
+      granted_by: (await supabase.auth.getUser()).data.user?.id,
+    });
+    setBusy(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Granted ${user.email} access to ${partnerOf(grantPartnerId)}`);
+    setGrantEmail("");
+    load();
+  };
+
+  const revokeAccess = async (id: string) => {
+    const { error } = await supabase.from("cp_user_partner_access").delete().eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Access revoked");
+    load();
+  };
+
+  const makeAdmin = async () => {
+    const user = users.find((u) => u.email.toLowerCase() === adminEmail.toLowerCase().trim());
+    if (!user) { toast.error("User not found — they must log in first"); return; }
+    const { error } = await supabase.from("cp_admins").insert({ user_id: user.id });
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${user.email} is now an admin`);
+    setAdminEmail("");
+    load();
+  };
+
+  const removeAdmin = async (uid: string) => {
+    const { error } = await supabase.from("cp_admins").delete().eq("user_id", uid);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Admin removed");
+    load();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Access table */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+          <span className="font-semibold text-sm">🔑 Portfolio Access</span>
+          <span className="text-xs text-gray-500">{access.length} access rows</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-xs text-gray-400">
+                <th className="px-4 py-2.5 text-right font-medium">User</th>
+                <th className="px-4 py-2.5 text-right font-medium">Portfolio</th>
+                <th className="px-4 py-2.5 text-right font-medium">Granted</th>
+                <th className="px-4 py-2.5 text-right font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {access.map((row) => (
+                <tr key={row.id} className="border-b border-gray-800/40 hover:bg-white/[0.02]">
+                  <td className="px-4 py-2.5 font-mono text-xs">{emailOf(row.user_id)}</td>
+                  <td className="px-4 py-2.5">{partnerOf(row.partner_id)}</td>
+                  <td className="px-4 py-2.5 text-gray-500 text-xs">
+                    {new Date(row.created_at).toLocaleDateString("en-GB")}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <button
+                      onClick={() => revokeAccess(row.id)}
+                      className="text-red-500 hover:text-red-400 text-xs font-medium"
+                    >
+                      Revoke
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {access.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center py-6 text-gray-600 text-sm">No access rows yet</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Grant access form */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="text-sm font-semibold mb-3">➕ Grant Access</div>
+        <div className="flex flex-wrap gap-2">
+          <Input
+            placeholder="user@example.com"
+            value={grantEmail}
+            onChange={(e) => setGrantEmail(e.target.value)}
+            className="flex-1 min-w-[180px] bg-gray-800 border-gray-700 text-sm"
+            list="cp-users-list"
+          />
+          <datalist id="cp-users-list">
+            {users.map((u) => <option key={u.id} value={u.email} />)}
+          </datalist>
+          <select
+            value={grantPartnerId}
+            onChange={(e) => setGrantPartnerId(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+          >
+            {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <Button onClick={grantAccess} disabled={busy || !grantEmail || !grantPartnerId} size="sm">
+            Grant
+          </Button>
+        </div>
+        <p className="text-xs text-gray-600 mt-2">
+          User must have logged in at least once to appear in autocomplete.
+        </p>
+      </div>
+
+      {/* Admins */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+        <div className="text-sm font-semibold mb-3">👑 Admins</div>
+        <div className="space-y-2 mb-4">
+          {admins.map((a) => (
+            <div key={a.user_id} className="flex items-center justify-between bg-gray-800/60 rounded-lg px-3 py-2">
+              <span className="text-sm font-mono">{emailOf(a.user_id)}</span>
+              <button
+                onClick={() => removeAdmin(a.user_id)}
+                className="text-red-500 hover:text-red-400 text-xs"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <Input
+            placeholder="user@example.com"
+            value={adminEmail}
+            onChange={(e) => setAdminEmail(e.target.value)}
+            className="flex-1 bg-gray-800 border-gray-700 text-sm"
+            list="cp-users-list"
+          />
+          <Button variant="outline" onClick={makeAdmin} disabled={!adminEmail} size="sm">
+            Make Admin
+          </Button>
+        </div>
+      </div>
+
+      {/* Known users */}
+      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm">
+          👤 Known Users ({users.length})
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-800 text-xs text-gray-400">
+                <th className="px-4 py-2 text-right font-medium">Email</th>
+                <th className="px-4 py-2 text-right font-medium">Last Seen</th>
+                <th className="px-4 py-2 text-right font-medium">Portfolios</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const userAccess = access.filter((a) => a.user_id === u.id);
+                return (
+                  <tr key={u.id} className="border-b border-gray-800/40 hover:bg-white/[0.02]">
+                    <td className="px-4 py-2.5 font-mono text-xs">{u.email}</td>
+                    <td className="px-4 py-2.5 text-gray-500 text-xs">
+                      {new Date(u.last_seen).toLocaleDateString("en-GB")}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs">
+                      {userAccess.length === 0
+                        ? <span className="text-gray-600">No access</span>
+                        : userAccess.map((a) => partnerOf(a.partner_id)).join(", ")
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BatchBar
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -966,13 +1193,14 @@ function BatchBar({
 // BottomNav
 // ─────────────────────────────────────────────────────────────────────────────
 
-function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+function BottomNav({ tab, setTab, isAdmin }: { tab: Tab; setTab: (t: Tab) => void; isAdmin: boolean }) {
   const tabs: { key: Tab; icon: string; label: string }[] = [
     { key: "brain", icon: "🧠", label: "Brain" },
     { key: "inventory", icon: "📦", label: "Inv" },
     { key: "arena", icon: "⚔️", label: "Arena" },
     { key: "market", icon: "🌐", label: "Market" },
     { key: "partners", icon: "🤝", label: "Partners" },
+    ...(isAdmin ? [{ key: "admin" as Tab, icon: "🔐", label: "Admin" }] : []),
   ];
   return (
     <nav className="fixed bottom-0 inset-x-0 z-40 flex border-t border-gray-800 bg-gray-950/95 backdrop-blur-xl md:hidden bottom-nav-safe">
@@ -1006,10 +1234,25 @@ export default function CollectPro() {
 
   useEffect(() => {
     (async () => {
-      const [{ data: items }, { data: partners }] = await Promise.all([
+      // 1. Identify current user
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 2. Register in public user registry (fire-and-forget)
+      if (user) {
+        supabase.from("cp_users_public").upsert(
+          { id: user.id, email: user.email ?? "", last_seen: new Date().toISOString() },
+          { onConflict: "id" }
+        ).then(() => {});
+      }
+
+      // 3. Check admin status + load data in parallel
+      const [adminResult, { data: items }, { data: partners }] = await Promise.all([
+        supabase.rpc("cp_is_admin"),
         supabase.from("coll_items").select("*").order("buy_date", { ascending: false }),
         supabase.from("coll_partners").select("*").order("name"),
       ]);
+
+      d({ t: "SET_ADMIN",  v: !!adminResult.data });
       d({ t: "LOAD_OK", items: (items as CollectionItem[]) ?? [], partners: (partners as Partner[]) ?? [] });
     })();
   }, []);
@@ -1624,10 +1867,14 @@ export default function CollectPro() {
 
       {/* ── Desktop Tab bar (hidden on mobile) ──────────────────────────────── */}
       <div className="hidden md:flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
-        {(["brain", "inventory", "roi", "arena", "market", "partners"] as Tab[]).map((tab) => {
+        {([
+          "brain", "inventory", "roi", "arena", "market", "partners",
+          ...(s.isAdmin ? ["admin"] : []),
+        ] as Tab[]).map((tab) => {
           const labels: Record<Tab, string> = {
             brain: "🧠 Brain", inventory: "📦 Inventory", roi: "📈 ROI",
             arena: "⚔️ Arena", market: "🌐 Market", partners: "🤝 Partners",
+            admin: "🔐 Admin",
           };
           return (
             <button
@@ -2316,7 +2563,7 @@ export default function CollectPro() {
         {/* ══ PARTNERS ═══════════════════════════════════════════════════════ */}
         {s.tab === "partners" && (
           <div className="space-y-4">
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+            {s.isAdmin && <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h3 className="font-bold mb-3">➕ Add Partner</h3>
               <form onSubmit={addPartner} className="flex flex-wrap gap-2 items-end">
                 <div className="flex-1 min-w-[150px]">
@@ -2342,7 +2589,7 @@ export default function CollectPro() {
                   {s.addingPartner ? "Adding…" : "Add"}
                 </Button>
               </form>
-            </div>
+            </div>}
 
             {partnerStats.map(({ partner, stats: ps }) => (
               <div key={partner.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
@@ -2402,6 +2649,20 @@ export default function CollectPro() {
           </div>
         )}
 
+        {/* ══ ADMIN ═══════════════════════════════════════════════════════════ */}
+        {s.tab === "admin" && s.isAdmin && (
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xl">🔐</span>
+              <div>
+                <h2 className="font-bold">Admin — Access Control</h2>
+                <p className="text-xs text-gray-500">Manage which users can see which portfolios.</p>
+              </div>
+            </div>
+            <AdminPanel partners={s.partners} />
+          </div>
+        )}
+
       </div>
 
       {/* ── Batch bar ────────────────────────────────────────────────────────── */}
@@ -2417,7 +2678,7 @@ export default function CollectPro() {
       )}
 
       {/* ── Mobile bottom nav ────────────────────────────────────────────────── */}
-      <BottomNav tab={s.tab} setTab={(tab) => d({ t: "SET_TAB", tab })} />
+      <BottomNav tab={s.tab} setTab={(tab) => d({ t: "SET_TAB", tab })} isAdmin={s.isAdmin} />
 
     </div>
   );
