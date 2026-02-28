@@ -941,6 +941,39 @@ export default function CollectPro() {
     return buckets.filter(b => b.count > 0);
   }, [s.items]);
 
+  // Underwater items: active items where market_price < cost (currently losing)
+  const underwaterItems = useMemo(() =>
+    s.items
+      .filter(i => i.status === "active" && i.market_price != null)
+      .map(i => {
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const loss = i.market_price! - cost;
+        const ageDays = Math.round((Date.now() - new Date(i.buy_date).getTime()) / 86400000);
+        return { item: i, cost, loss, ageDays, lossRatio: cost > 0 ? loss / cost : 0 };
+      })
+      .filter(x => x.loss < 0)
+      .sort((a, b) => a.loss - b.loss)
+      .slice(0, 5),
+  [s.items]);
+
+  // ROI distribution: sold items bucketed by realized ROI range
+  const roiDistribution = useMemo(() => {
+    const buckets = [
+      { label: "< 0%",    min: -Infinity, max: 0,        count: 0 },
+      { label: "0–25%",   min: 0,         max: 25,       count: 0 },
+      { label: "25–50%",  min: 25,        max: 50,       count: 0 },
+      { label: "50–100%", min: 50,        max: 100,      count: 0 },
+      { label: "100%+",   min: 100,       max: Infinity, count: 0 },
+    ];
+    s.items.filter(i => i.status === "sold" && i.sell_price != null).forEach(i => {
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      const roi = cost > 0 ? ((+(i.sell_price!) - cost) / cost) * 100 : 0;
+      const bucket = buckets.find(b => roi >= b.min && roi < b.max);
+      if (bucket) bucket.count++;
+    });
+    return buckets;
+  }, [s.items]);
+
   // PSA vs Raw ROI: compare realized ROI between PSA-graded and raw sold items
   const psaVsRaw = useMemo(() => {
     const calc = (items: CollectionItem[]) => {
@@ -2502,6 +2535,32 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Underwater Items ─────────────────────────────────────────────── */}
+            {underwaterItems.length > 0 && (
+              <div className="bg-gray-900 border border-red-900/30 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>📉 Underwater Items</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">market &lt; cost · consider action</span>
+                </div>
+                <div className="space-y-1.5">
+                  {underwaterItems.map(({ item, cost, loss, ageDays }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center gap-3 py-1.5 px-3 bg-red-950/20 rounded-lg hover:bg-red-950/40 transition-colors text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">{ageDays}d held · cost {fmt$(cost)}</p>
+                      </div>
+                      <div className="text-xs font-semibold text-red-400 flex-shrink-0">{fmt$(loss)}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Alerts ──────────────────────────────────────────────────────── */}
             {portfolioAlerts.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
@@ -3920,6 +3979,30 @@ export default function CollectPro() {
                       <div className="text-xs text-gray-600 mt-0.5">{stats.count} sales · {fmt$(stats.profit)} profit</div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── ROI Distribution ─────────────────────────────────────── */}
+            {roiDistribution.some(b => b.count > 0) && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Sale ROI Distribution</p>
+                <div className="flex gap-1 items-end h-16">
+                  {roiDistribution.map((b) => {
+                    const maxCount = Math.max(1, ...roiDistribution.map(x => x.count));
+                    const barH = b.count > 0 ? Math.max(6, (b.count / maxCount) * 52) : 3;
+                    const isPositive = !b.label.startsWith("<");
+                    return (
+                      <div key={b.label} className="flex-1 flex flex-col items-center gap-1" title={`${b.label}: ${b.count} sales`}>
+                        {b.count > 0 && <span className="text-[9px] text-gray-500">{b.count}</span>}
+                        <div
+                          className={`w-full rounded-t transition-all ${b.count === 0 ? "bg-gray-800/30" : isPositive ? "bg-emerald-600/80" : "bg-red-600/80"}`}
+                          style={{ height: barH }}
+                        />
+                        <span className="text-[9px] text-gray-600 text-center leading-tight">{b.label}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
