@@ -1509,6 +1509,43 @@ export default function CollectPro() {
         {s.tab === "brain" && (
           <div className="space-y-3">
 
+            {/* ── Quick-Action Toolbar ──────────────────────────────────────────── */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                {
+                  label: "📦 Inventory",
+                  action: () => d({ t: "SET_TAB", tab: "inventory" }),
+                  badge: s.items.filter(i => i.status === "active").length.toString(),
+                },
+                {
+                  label: "📈 ROI",
+                  action: () => d({ t: "SET_TAB", tab: "roi" }),
+                  badge: null,
+                },
+                {
+                  label: "🌐 Market Scan",
+                  action: () => d({ t: "SET_TAB", tab: "market" }),
+                  badge: s.items.filter(i => i.status === "active" && i.market_price == null).length > 0
+                    ? `${s.items.filter(i => i.status === "active" && i.market_price == null).length} unpriced`
+                    : null,
+                },
+                {
+                  label: "⬇ Export CSV",
+                  action: () => exportCSV(s.items, s.partners),
+                  badge: null,
+                },
+              ].map(({ label, action, badge }) => (
+                <button
+                  key={label}
+                  onClick={action}
+                  className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs border border-gray-700 hover:border-gray-500 transition-colors flex items-center gap-1.5"
+                >
+                  {label}
+                  {badge && <span className="text-amber-400 text-xs">{badge}</span>}
+                </button>
+              ))}
+            </div>
+
             {/* ── Next Action Banner ────────────────────────────────────────────── */}
             {(() => {
               // Determine single most important action for the user right now
