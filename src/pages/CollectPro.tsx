@@ -737,13 +737,23 @@ export default function CollectPro() {
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
     const { field, dir } = s.inv.sort;
+    // Compute unrealised P&L for sorting purposes
+    const pnl = (i: CollectionItem) => {
+      const c = +i.buy_price + +(i.grading_cost ?? 0);
+      if (i.status === "sold") return +(i.sell_price ?? 0) - c;
+      return (i.market_price ?? +i.buy_price) - c;
+    };
     arr.sort((a, b) => {
-      const av = a[field] ?? "";
-      const bv = b[field] ?? "";
-      const cmp =
-        typeof av === "number" && typeof bv === "number"
+      let cmp = 0;
+      if ((field as string) === "__pnl__") {
+        cmp = pnl(a) - pnl(b);
+      } else {
+        const av = a[field] ?? "";
+        const bv = b[field] ?? "";
+        cmp = typeof av === "number" && typeof bv === "number"
           ? av - bv
           : String(av).localeCompare(String(bv), "he");
+      }
       return dir === "asc" ? cmp : -cmp;
     });
     return arr;
@@ -2539,6 +2549,7 @@ export default function CollectPro() {
                         { label: "Buy", field: "buy_price" as const },
                         { label: "Grading", field: "grading_cost" as const },
                         { label: "Market", field: "market_price" as const },
+                        { label: "P&L", field: "__pnl__" as const },
                         { label: "Sale", field: "sell_price" as const },
                       ].map(({ label, field }) => (
                         <th
@@ -2647,6 +2658,20 @@ export default function CollectPro() {
                               </div>
                             )}
                           </td>
+                          {/* P&L column */}
+                          <td className="px-3 py-2.5 text-right">
+                            {(() => {
+                              const unrealPnL = item.status !== "sold"
+                                ? (item.market_price ?? +item.buy_price) - cost
+                                : null;
+                              if (unrealPnL == null) return <span className="text-gray-600">—</span>;
+                              return (
+                                <span className={`text-xs font-semibold ${unrealPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {unrealPnL >= 0 ? "+" : ""}{fmt$(unrealPnL)}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="px-3 py-2.5">
                             {item.status === "sold" && item.sell_price != null ? (
                               <div>
@@ -2712,7 +2737,7 @@ export default function CollectPro() {
                     })}
                     {pagedItems.length === 0 && (
                       <tr>
-                        <td colSpan={9} className="text-center py-10 text-gray-600">
+                        <td colSpan={10} className="text-center py-10 text-gray-600">
                           {s.inv.search ? "No results" : "No items — click Add"}
                         </td>
                       </tr>
@@ -2740,6 +2765,7 @@ export default function CollectPro() {
                           <td className={`px-3 py-2 text-right font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                             {totalPnL >= 0 ? "+" : ""}{fmt$(totalPnL)}
                           </td>
+                          <td /> {/* Sale */}
                           <td /> {/* Actions */}
                         </tr>
                       </tfoot>
