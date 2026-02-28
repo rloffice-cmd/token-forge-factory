@@ -1471,24 +1471,28 @@ export default function CollectPro() {
                 </div>
                 <div className="space-y-2">
                   {bestUpside.map(({ item, upside, profit }, idx) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
-                      className="w-full flex items-center justify-between gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-gray-600 text-xs w-4 text-center">{idx + 1}</span>
+                    <div key={item.id} className="flex items-center justify-between gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors">
+                      <button
+                        type="button"
+                        onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                        className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                      >
+                        <span className="text-gray-600 text-xs w-4 text-center flex-shrink-0">{idx + 1}</span>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{item.name}</p>
                           <p className="text-xs text-gray-500">{item.condition}{item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}</p>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
+                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-xs text-emerald-400">+{fmt$(profit)}</span>
                         <span className="text-sm font-bold text-emerald-400">{upside.toFixed(2)}×</span>
+                        <button
+                          onClick={() => markSold(item)}
+                          className="text-xs px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 hover:bg-emerald-800 transition-colors"
+                          title="Mark sold"
+                        >✓ Sell</button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -2198,7 +2202,12 @@ export default function CollectPro() {
                                 />
                               )}
                               <div>
-                                <div className="font-semibold hover:text-blue-300 transition-colors">{item.name}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold hover:text-blue-300 transition-colors">{item.name}</span>
+                                  {item.notes && (
+                                    <span className="text-gray-600 text-xs" title={item.notes}>📝</span>
+                                  )}
+                                </div>
                                 <div className="text-xs text-gray-500">
                                   {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
                                 </div>
@@ -2316,6 +2325,33 @@ export default function CollectPro() {
                       </tr>
                     )}
                   </tbody>
+                  {/* Summary row: totals for visible filtered items */}
+                  {sortedItems.length > 0 && (() => {
+                    const totalBuy     = sortedItems.reduce((acc, i) => acc + +i.buy_price, 0);
+                    const totalGrading = sortedItems.reduce((acc, i) => acc + +(i.grading_cost ?? 0), 0);
+                    const totalCost    = totalBuy + totalGrading;
+                    const totalMarket  = sortedItems.reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
+                    const totalPnL     = totalMarket - totalCost;
+                    return (
+                      <tfoot>
+                        <tr className="border-t-2 border-gray-700 bg-gray-900/80 text-xs">
+                          <td /> {/* checkbox */}
+                          <td className="px-3 py-2 text-gray-500 font-semibold">
+                            {sortedItems.length} item{sortedItems.length !== 1 ? "s" : ""}
+                          </td>
+                          <td /> {/* Status */}
+                          <td /> {/* Date */}
+                          <td className="px-3 py-2 text-right text-amber-400 font-semibold">{fmt$(totalBuy)}</td>
+                          <td className="px-3 py-2 text-right text-indigo-400">{totalGrading > 0 ? fmt$(totalGrading) : "—"}</td>
+                          <td className="px-3 py-2 text-right text-blue-400 font-semibold">{fmt$(totalMarket)}</td>
+                          <td className={`px-3 py-2 text-right font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {totalPnL >= 0 ? "+" : ""}{fmt$(totalPnL)}
+                          </td>
+                          <td /> {/* Actions */}
+                        </tr>
+                      </tfoot>
+                    );
+                  })()}
                 </table>
 
                 {totalPages > 1 && (
