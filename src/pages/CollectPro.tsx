@@ -299,6 +299,29 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
+  // Sell streak: longest and current consecutive profitable sale runs
+  const sellStreak = useMemo(() => {
+    const sold = s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .sort((a, b) => new Date(a.sold_at!).getTime() - new Date(b.sold_at!).getTime())
+      .map(i => {
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        return +(i.sell_price!) - cost > 0;
+      });
+    if (sold.length === 0) return null;
+    let current = 0, best = 0, tmp = 0;
+    for (let i = 0; i < sold.length; i++) {
+      if (sold[i]) { tmp++; best = Math.max(best, tmp); }
+      else { tmp = 0; }
+    }
+    // current streak from end
+    for (let i = sold.length - 1; i >= 0; i--) {
+      if (sold[i]) current++;
+      else break;
+    }
+    return { current, best, total: sold.length };
+  }, [s.items]);
+
   // Partner P&L comparison data for bar chart
   const partnerPnL = useMemo(() =>
     s.partners
@@ -1485,6 +1508,39 @@ export default function CollectPro() {
         {/* ══ BRAIN ══════════════════════════════════════════════════════════ */}
         {s.tab === "brain" && (
           <div className="space-y-3">
+
+            {/* ── Next Action Banner ────────────────────────────────────────────── */}
+            {(() => {
+              // Determine single most important action for the user right now
+              const highAction = actionItems[0];
+              if (!highAction && sellScores.length === 0 && s.items.filter(i => i.status === "active" && i.market_price == null).length === 0) return null;
+              let msg = "";
+              let color = "from-blue-900/60 to-indigo-900/60 border-blue-700/40 text-blue-200";
+              let onClick: (() => void) | null = null;
+              if (highAction?.priority === "high") {
+                msg = `⚡ ${highAction.action}: "${highAction.item.name}" · ${highAction.detail}`;
+                color = "from-red-900/50 to-rose-900/50 border-red-700/40 text-red-200";
+                onClick = () => d({ t: "SET_MODAL", id: highAction.item.id });
+              } else if (sellScores.length > 0) {
+                const top = sellScores[0];
+                msg = `💰 Strong sell candidate: "${top.item.name}" — score ${top.score}/100, ${top.ageDays}d hold, ${fmtPct(top.roi * 100)} ROI`;
+                color = "from-emerald-900/50 to-teal-900/50 border-emerald-700/40 text-emerald-200";
+                onClick = () => d({ t: "SET_MODAL", id: top.item.id });
+              } else if (actionItems[0]) {
+                msg = `💡 ${actionItems[0].action}: "${actionItems[0].item.name}" · ${actionItems[0].detail}`;
+                onClick = () => d({ t: "SET_MODAL", id: actionItems[0].item.id });
+              }
+              if (!msg) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={onClick ?? undefined}
+                  className={`w-full text-left px-4 py-3 rounded-xl bg-gradient-to-r ${color} border text-sm font-medium leading-snug transition-opacity hover:opacity-90`}
+                >
+                  {msg}
+                </button>
+              );
+            })()}
 
             {/* ── Health Score ──────────────────────────────────────────────────── */}
             {portfolioHealth && (
@@ -2676,6 +2732,9 @@ export default function CollectPro() {
                 ] : []),
                 ...(bestSaleMonth ? [
                   { label: "Best Sale Month", value: bestSaleMonth.month, cls: "text-emerald-400" as const },
+                ] : []),
+                ...(sellStreak && sellStreak.current > 1 ? [
+                  { label: "🔥 Profit Streak", value: `${sellStreak.current} sales`, cls: "text-orange-400" as const },
                 ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
