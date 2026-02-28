@@ -85,6 +85,7 @@ export default function CollectPro() {
   const [inlineEditId,        setInlineEditId]        = useState<string | null>(null);
   const [inlineEditVal,       setInlineEditVal]       = useState("");
   const [watchlistFilter,     setWatchlistFilter]     = useState(false);
+  const [compactTable,        setCompactTable]        = useState(false);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -2164,6 +2165,13 @@ export default function CollectPro() {
                 >
                   Table
                 </button>
+                {s.viewMode === "table" && (
+                  <button
+                    onClick={() => setCompactTable(v => !v)}
+                    className={`px-3 py-2 text-xs transition-colors border-l border-gray-700 ${compactTable ? "bg-indigo-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+                    title="Compact rows"
+                  >⊟</button>
+                )}
               </div>
               <Button
                 onClick={() => d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(s.partners[0]?.id ?? "") })}
@@ -2494,7 +2502,7 @@ export default function CollectPro() {
             {/* ── Table View ── */}
             {s.viewMode === "table" && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
-                <table className="w-full text-sm">
+                <table className={`w-full ${compactTable ? "text-xs" : "text-sm"}`}>
                   <thead>
                     <tr className="border-b border-gray-800">
                       <th className="px-3 py-2.5 text-xs text-gray-400 w-8">
@@ -2536,7 +2544,7 @@ export default function CollectPro() {
                       const cost   = +item.buy_price + +(item.grading_cost ?? 0);
                       const profit = item.status === "sold" ? +(item.sell_price ?? 0) - cost : null;
                       return (
-                        <tr key={item.id} className="border-b border-gray-800/50 hover:bg-white/[0.02]">
+                        <tr key={item.id} className={`border-b border-gray-800/50 hover:bg-white/[0.02] ${compactTable ? "text-xs" : ""}`}>
                           <td className="px-3 py-2.5">
                             <input
                               type="checkbox"
