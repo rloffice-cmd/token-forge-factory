@@ -74,7 +74,14 @@ export async function callAI(
 
     if (attempt < MAX_ATTEMPTS - 1) {
       const delay = Math.pow(2, attempt) * 1000;
-      await new Promise((r) => setTimeout(r, delay));
+      // Honour abort during the backoff wait
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, delay);
+        opts.signal?.addEventListener("abort", () => {
+          clearTimeout(t);
+          reject(new Error("ABORTED"));
+        }, { once: true });
+      });
       return callAI(messages, mode, opts, attempt + 1);
     }
     throw err;

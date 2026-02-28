@@ -81,6 +81,17 @@
 }
 .scan-btn { animation: scan-pulse 1.8s ease-in-out infinite; }
 
+/* ─── Camera scanner line ────────────────────────────────── */
+@keyframes scanline {
+  0%   { top: 10%; opacity: 1; }
+  50%  { top: 85%; opacity: 0.7; }
+  100% { top: 10%; opacity: 1; }
+}
+
+/* ─── Compact card (arena picker) ───────────────────────── */
+.compact-card .card-actions { display: none; }
+.compact-card:hover .card-actions { display: flex; }
+
 /* ─── Arena drop slots ───────────────────────────────────── */
 .arena-slot-empty {
   border: 2px dashed rgba(255, 255, 255, 0.18);

@@ -39,7 +39,15 @@ export function computeStats(items: CollectionItem[]): PortfolioStats {
   };
 }
 
-export const fmt$ = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+export const fmt$ = (n: number) => {
+  const abs = Math.abs(n);
+  // Show cents for small values so "$1.50" doesn't round to "$2"
+  const decimals = abs < 10 ? 2 : abs < 100 ? 1 : 0;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency", currency: "USD",
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n);
+};
 
 export const fmtPct = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;

@@ -195,7 +195,10 @@ export default function CameraScanner({ onResult, onClose }: Props) {
               <span className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-yellow-400 rounded-bl" />
               <span className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-yellow-400 rounded-br" />
               {/* scanning line */}
-              <div className="absolute inset-x-0 h-0.5 bg-yellow-400 opacity-80 animate-[scanline_2s_ease-in-out_infinite]" style={{ top: "50%" }} />
+              <div
+                className="absolute inset-x-0 h-0.5 bg-yellow-400 opacity-80"
+                style={{ animation: "scanline 2s ease-in-out infinite", top: "10%" }}
+              />
             </div>
           </div>
         )}
@@ -261,8 +264,19 @@ export default function CameraScanner({ onResult, onClose }: Props) {
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
             <div className="text-center mx-4">
               <p className="text-red-400 text-4xl mb-2">⚠</p>
-              <p className="text-red-300 font-bold mb-1">שגיאה</p>
-              <p className="text-gray-400 text-sm">{statusMsg}</p>
+              <p className="text-red-300 font-bold mb-2">שגיאה</p>
+              <p className="text-gray-400 text-sm mb-4">{statusMsg}</p>
+              {statusMsg.includes("גישה") && (
+                <p className="text-gray-500 text-xs mb-3">
+                  אפשר גישה למצלמה בהגדרות הדפדפן ורענן את הדף
+                </p>
+              )}
+              <button
+                onClick={() => { setPhase("init"); setStatusMsg("מאתחל מצלמה..."); startZxing(); }}
+                className="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm"
+              >
+                נסה שוב
+              </button>
             </div>
           </div>
         )}

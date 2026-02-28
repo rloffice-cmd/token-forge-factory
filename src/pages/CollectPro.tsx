@@ -107,14 +107,17 @@ function extractFirstPrice(text: string): number | null {
   return m ? parseFloat(m[1].replace(/,/g, "")) : null;
 }
 
-/** Items whose name appears (partially) in the query string */
+/** Items whose name appears (partially) in the query string.
+ *  Only matches on words ≥ 5 chars to avoid false positives like "char" → "Charizard" */
 function findMatchingItems(query: string, items: CollectionItem[]): CollectionItem[] {
   const q = query.toLowerCase();
   return items.filter((item) => {
     const name = item.name.toLowerCase();
-    // exact substring or each significant word appears in query
-    if (q.includes(name)) return true;
-    return name.split(/\s+/).filter((w) => w.length > 3).some((w) => q.includes(w));
+    // Entire card name appears in query (highest confidence)
+    if (name.length >= 3 && q.includes(name)) return true;
+    // Every significant word of the card name (≥5 chars) appears in query
+    const words = name.split(/\s+/).filter((w) => w.length >= 5);
+    return words.length > 0 && words.every((w) => q.includes(w));
   });
 }
 
@@ -1508,11 +1511,12 @@ function BatchBar({
 
 function BottomNav({ tab, setTab, isAdmin }: { tab: Tab; setTab: (t: Tab) => void; isAdmin: boolean }) {
   const tabs: { key: Tab; icon: string; label: string }[] = [
-    { key: "brain", icon: "🧠", label: "Brain" },
-    { key: "inventory", icon: "📦", label: "Inv" },
-    { key: "arena", icon: "⚔️", label: "Arena" },
-    { key: "market", icon: "🌐", label: "Market" },
-    { key: "partners", icon: "🤝", label: "Partners" },
+    { key: "brain",     icon: "🧠", label: "Brain"    },
+    { key: "inventory", icon: "📦", label: "Inv"      },
+    { key: "roi",       icon: "📈", label: "ROI"      },
+    { key: "arena",     icon: "⚔️", label: "Arena"    },
+    { key: "market",    icon: "🌐", label: "Market"   },
+    { key: "partners",  icon: "🤝", label: "Partners" },
     ...(isAdmin ? [{ key: "admin" as Tab, icon: "🔐", label: "Admin" }] : []),
   ];
   return (
