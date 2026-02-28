@@ -1980,6 +1980,36 @@ export default function CollectPro() {
               );
             })()}
 
+            {/* ── Next to Sell ─────────────────────────────────────────────────── */}
+            {sellScores.length > 0 && (
+              <div className="bg-gray-900 border border-emerald-800/40 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>🏷 Next to Sell</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">top sell signals</span>
+                </div>
+                <div className="space-y-2">
+                  {sellScores.map(({ item, score, cost, mkt, roi }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full text-left flex items-center justify-between gap-2 bg-gray-800/50 hover:bg-gray-800 rounded-lg px-3 py-2 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-bold text-emerald-400 w-8 shrink-0">{score}</span>
+                        <span className="text-xs text-gray-200 truncate">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 text-xs text-gray-400">
+                        <span>mkt {fmt$(mkt)}</span>
+                        <span className="text-emerald-400">list {fmt$(cost * 1.15)}</span>
+                        <span className={roi >= 0 ? "text-emerald-400" : "text-red-400"}>{fmtPct(roi)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── New This Week ─────────────────────────────────────────────────── */}
             {newThisWeek.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
