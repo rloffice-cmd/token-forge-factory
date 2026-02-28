@@ -941,6 +941,21 @@ export default function CollectPro() {
     return buckets.filter(b => b.count > 0);
   }, [s.items]);
 
+  // Hall of Fame: top 3 sold trades by realized ROI %
+  const hallOfFame = useMemo(() =>
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null)
+      .map(i => {
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const roi = cost > 0 ? (profit / cost) * 100 : 0;
+        return { item: i, cost, profit, roi };
+      })
+      .filter(x => x.roi > 0)
+      .sort((a, b) => b.roi - a.roi)
+      .slice(0, 3),
+  [s.items]);
+
   // Portfolio CAGR: compound annual growth rate from first purchase to now
   const portfolioCAGR = useMemo(() => {
     if (s.items.length === 0) return null;
@@ -2478,6 +2493,33 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Hall of Fame ─────────────────────────────────────────────────── */}
+            {hallOfFame.length > 0 && (
+              <div className="bg-gray-900 border border-amber-900/30 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">🏆 Hall of Fame</div>
+                <div className="space-y-1.5">
+                  {hallOfFame.map(({ item, profit, roi }, i) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <span className="text-amber-500 font-bold text-sm w-4 flex-shrink-0">{["🥇","🥈","🥉"][i]}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.condition}{item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                        <span className="text-emerald-400 font-semibold">+{fmt$(profit)}</span>
+                        <span className="text-emerald-300 font-bold">{fmtPct(roi)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Partner Summary ──────────────────────────────────────────────── */}
             {s.partners.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -3549,6 +3591,7 @@ export default function CollectPro() {
                 ] : []),
                 ...(portfolioCAGR ? [
                   { label: "📊 Portfolio CAGR", value: `${portfolioCAGR.cagr >= 0 ? "+" : ""}${portfolioCAGR.cagr.toFixed(1)}%/yr`, cls: portfolioCAGR.cagr >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
+                  { label: "🔮 1yr Projection", value: fmt$(stats.estimatedValue * (1 + portfolioCAGR.cagr / 100)), cls: portfolioCAGR.cagr >= 0 ? "text-indigo-400" as const : "text-gray-400" as const },
                 ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
