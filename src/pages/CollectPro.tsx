@@ -1192,6 +1192,42 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Partner Summary ──────────────────────────────────────────────── */}
+            {s.partners.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>Partner Overview</span>
+                  <button
+                    type="button"
+                    onClick={() => d({ t: "SET_TAB", tab: "partners" })}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                  >View all →</button>
+                </div>
+                <div className="space-y-2">
+                  {partnerStats.map(({ partner, stats: ps }) => {
+                    const pctRoi = ps.roiPct;
+                    return (
+                      <div key={partner.id} className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-gray-300 w-24 truncate flex-shrink-0">{partner.name}</span>
+                        <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${ps.realisedProfit >= 0 ? "bg-emerald-600" : "bg-red-600"}`}
+                            style={{ width: `${Math.min(100, Math.abs(pctRoi))}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-gray-500">{ps.activeCount + ps.gradingCount} cards</span>
+                          <span className={`text-xs font-semibold ${pctRoi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {pctRoi >= 0 ? "+" : ""}{fmtPct(pctRoi)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* ── Alerts ──────────────────────────────────────────────────────── */}
             {portfolioAlerts.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">

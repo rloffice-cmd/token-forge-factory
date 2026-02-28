@@ -155,28 +155,47 @@ export default function CardDetailModal({
           </div>
         </div>
 
+        {/* Sold banner */}
+        {item.status === "sold" && item.sell_price != null && (
+          <div className={`flex items-center justify-between px-4 py-3 rounded-xl mb-4 ${profit != null && profit >= 0 ? "bg-emerald-950/60 border border-emerald-800/50" : "bg-red-950/60 border border-red-800/50"}`}>
+            <div>
+              <div className="text-xs text-gray-400 mb-0.5">Sold {item.sold_at ? new Date(item.sold_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}</div>
+              <div className={`text-xl font-extrabold ${profit != null && profit >= 0 ? "text-emerald-300" : "text-red-300"}`}>{fmt$(item.sell_price)}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-gray-400 mb-0.5">Net Profit</div>
+              <div className={`text-lg font-bold ${profit != null && profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {profit != null ? `${profit >= 0 ? "+" : ""}${fmt$(profit)}` : "—"}
+              </div>
+              {roiPct != null && <div className={`text-xs font-semibold ${roiPct >= 0 ? "text-emerald-500" : "text-red-500"}`}>{fmtPct(roiPct)} ROI</div>}
+            </div>
+          </div>
+        )}
+
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
           {[
-            { label: "Buy Price", value: fmt$(item.buy_price), cls: "text-white" },
-            { label: "Buy Date", value: item.buy_date, cls: "text-gray-300" },
-            { label: "Grading Cost", value: fmt$(item.grading_cost ?? 0), cls: "text-amber-400" },
-            { label: "Total Cost", value: fmt$(cost), cls: "text-amber-300 font-bold" },
-            {
-              label: "Market Estimate",
-              value: item.market_price != null ? fmt$(item.market_price) : "N/A",
-              cls: "text-blue-400",
-            },
-            {
-              label: item.status === "sold" ? "Sale Price" : "Est. Profit",
-              value: profit != null ? `${profit >= 0 ? "+" : ""}${fmt$(profit)}` : "—",
-              cls: profit != null ? (profit >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
-            },
-            {
-              label: "ROI",
-              value: roiPct != null ? fmtPct(roiPct) : "—",
-              cls: roiPct != null ? (roiPct >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
-            },
+            { label: "Buy Price",     value: fmt$(item.buy_price),          cls: "text-white" },
+            { label: "Buy Date",      value: item.buy_date,                  cls: "text-gray-300" },
+            { label: "Grading Cost",  value: fmt$(item.grading_cost ?? 0),   cls: "text-amber-400" },
+            { label: "Total Cost",    value: fmt$(cost),                     cls: "text-amber-300 font-bold" },
+            ...(item.status !== "sold" ? [
+              {
+                label: "Market Estimate",
+                value: item.market_price != null ? fmt$(item.market_price) : "N/A",
+                cls: "text-blue-400",
+              },
+              {
+                label: "Est. Profit",
+                value: profit != null ? `${profit >= 0 ? "+" : ""}${fmt$(profit)}` : "—",
+                cls: profit != null ? (profit >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
+              },
+              {
+                label: "ROI",
+                value: roiPct != null ? fmtPct(roiPct) : "—",
+                cls: roiPct != null ? (roiPct >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
+              },
+            ] : []),
           ].map((st) => (
             <div key={st.label} className="bg-gray-800/60 rounded-xl p-3">
               <div className="text-xs text-gray-500 mb-0.5">{st.label}</div>
