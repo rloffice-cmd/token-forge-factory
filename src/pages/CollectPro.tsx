@@ -408,6 +408,47 @@ export default function CollectPro() {
     return months[0];
   }, [s.items]);
 
+  // Day-of-week ROI: which weekday yields the best realized profit
+  const dayOfWeekROI = useMemo(() => {
+    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const map = new Map<number, { profit: number; cost: number; count: number }>();
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .forEach(i => {
+        const dow = new Date(i.sold_at!).getDay();
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const entry = map.get(dow) ?? { profit: 0, cost: 0, count: 0 };
+        map.set(dow, { profit: entry.profit + profit, cost: entry.cost + cost, count: entry.count + 1 });
+      });
+    return DAYS.map((day, idx) => {
+      const dow = map.get(idx);
+      if (!dow) return { day, profit: 0, count: 0, roi: 0 };
+      return { day, profit: dow.profit, count: dow.count, roi: dow.cost > 0 ? (dow.profit / dow.cost) * 100 : 0 };
+    });
+  }, [s.items]);
+
+  // Hold-time histogram: distribution of hold durations for sold items
+  const holdTimeHistogram = useMemo(() => {
+    const buckets = [
+      { label: "≤30d",    min: 0,   max: 30,       count: 0, profit: 0 },
+      { label: "31-60d",  min: 31,  max: 60,        count: 0, profit: 0 },
+      { label: "61-90d",  min: 61,  max: 90,        count: 0, profit: 0 },
+      { label: "91-180d", min: 91,  max: 180,       count: 0, profit: 0 },
+      { label: "180d+",   min: 181, max: Infinity,  count: 0, profit: 0 },
+    ];
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .forEach(i => {
+        const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const bucket = buckets.find(b => holdDays >= b.min && holdDays <= b.max);
+        if (bucket) { bucket.count++; bucket.profit += profit; }
+      });
+    return buckets.filter(b => b.count > 0);
+  }, [s.items]);
+
   const portfolioAlerts = useMemo(() => {
     const alerts: { level: "warn" | "info"; msg: string; filter: "all" | ItemStatus }[] = [];
     const noPrice = s.items.filter(i => i.status === "active" && i.market_price == null);
@@ -1564,13 +1605,18 @@ export default function CollectPro() {
             <button
               key={tab}
               onClick={() => d({ t: "SET_TAB", tab })}
-              className={`px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+              className={`px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${
                 s.tab === tab
                   ? "text-blue-400 border-b-2 border-blue-400"
                   : "text-gray-500 hover:text-gray-200"
               }`}
             >
               {labels[tab]}
+              {tab === "brain" && actionItems.filter(a => a.priority === "high").length > 0 && (
+                <span className="absolute top-1.5 right-1 bg-red-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                  {actionItems.filter(a => a.priority === "high").length}
+                </span>
+              )}
             </button>
           );
         })}
@@ -3384,6 +3430,56 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Day-of-Week Sales Heatmap ─────────────────────────────── */}
+            {dayOfWeekROI.some(d => d.count > 0) && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Sales by Day of Week</p>
+                <div className="flex gap-1 items-end h-20">
+                  {dayOfWeekROI.map((d) => {
+                    const maxProfit = Math.max(...dayOfWeekROI.map(x => x.profit), 0.01);
+                    const barH = d.count > 0 ? Math.max(8, (d.profit / maxProfit) * 64) : 4;
+                    const isPositive = d.profit >= 0;
+                    return (
+                      <div key={d.day} className="flex-1 flex flex-col items-center gap-1" title={`${d.day}: ${d.count} sales · ${fmt$(d.profit)} profit · ROI ${fmtPct(d.roi)}`}>
+                        <span className={`text-[9px] font-mono ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
+                          {d.count > 0 ? fmtPct(d.roi) : ""}
+                        </span>
+                        <div
+                          className={`w-full rounded-t transition-all ${d.count === 0 ? "bg-gray-800/40" : isPositive ? "bg-emerald-600/80" : "bg-red-600/80"}`}
+                          style={{ height: barH }}
+                        />
+                        <span className="text-[9px] text-gray-600">{d.day}</span>
+                        {d.count > 0 && <span className="text-[8px] text-gray-700">{d.count}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── Hold-Time Distribution ────────────────────────────────── */}
+            {holdTimeHistogram.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Hold-Time Distribution</p>
+                <ResponsiveContainer width="100%" height={110}>
+                  <BarChart data={holdTimeHistogram} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="label" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
+                    <Tooltip
+                      formatter={(v: number, name: string) => [name === "count" ? `${v} sales` : fmt$(v as number), name === "count" ? "Sales" : "Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Bar dataKey="count" name="count" radius={[3, 3, 0, 0]}>
+                      {holdTimeHistogram.map((entry, i) => (
+                        <Cell key={i} fill={entry.profit >= 0 ? "#6366f1" : "#ef4444"} fillOpacity={0.8} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
               <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm flex items-center justify-between">
                 <span>Sold Transactions</span>
@@ -3703,13 +3799,18 @@ export default function CollectPro() {
 
                   {/* Stats grid */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-                    {[
+                    {([
                       { label: "Total Invested",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
                       { label: "Active Market Est.", value: fmt$(ps.estimatedValue),   cls: "text-blue-400" },
                       { label: "Sale Revenue",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
                       { label: "Net Profit + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
                         cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-                    ].map(st => (
+                      ...(ps.soldCount > 0 ? [{
+                        label: "Avg Sale Margin",
+                        value: fmtPct(ps.realisedRevenue > 0 ? (ps.realisedProfit / ps.realisedRevenue) * 100 : 0),
+                        cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400",
+                      }] : []),
+                    ] as { label: string; value: string; cls: string }[]).map(st => (
                       <div key={st.label} className="bg-gray-800 rounded-lg p-3">
                         <div className="text-xs text-gray-500 mb-1">{st.label}</div>
                         <div className={`text-sm font-bold ${st.cls}`}>{st.value}</div>
