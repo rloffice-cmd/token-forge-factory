@@ -1533,6 +1533,22 @@ export default function CollectPro() {
         {s.tab === "brain" && (
           <div className="space-y-3">
 
+            {/* ── Portfolio Snapshot ────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                { label: "Active", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} market` },
+                { label: "Grading", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} invested` },
+                { label: "Sold", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} profit` },
+                { label: "Portfolio", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} invested` },
+              ].map(({ label, value, cls, sub }) => (
+                <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5">
+                  <div className="text-xs text-gray-500 mb-0.5">{label}</div>
+                  <div className={`text-base font-bold ${cls}`}>{value}</div>
+                  <div className="text-xs text-gray-700 truncate">{sub}</div>
+                </div>
+              ))}
+            </div>
+
             {/* ── Quick-Action Toolbar ──────────────────────────────────────────── */}
             <div className="flex flex-wrap gap-2">
               {[
@@ -2909,6 +2925,37 @@ export default function CollectPro() {
                 </div>
               </div>
             )}
+
+            {/* ── Best/Worst Deals (by absolute $ profit) ─────────────── */}
+            {(() => {
+              const sold = s.items
+                .filter(i => i.status === "sold" && i.sell_price != null)
+                .map(i => {
+                  const cost = +i.buy_price + +(i.grading_cost ?? 0);
+                  return { item: i, profit: +(i.sell_price!) - cost };
+                })
+                .sort((a, b) => b.profit - a.profit);
+              if (sold.length < 2) return null;
+              const best  = sold[0];
+              const worst = sold[sold.length - 1];
+              if (worst.profit >= 0) return null; // no losses to show
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-900 border border-emerald-800/40 rounded-xl p-4">
+                    <div className="text-xs text-gray-500 mb-2 font-semibold">🏆 Best Deal</div>
+                    <div className="font-medium text-sm truncate">{best.item.name}</div>
+                    <div className="text-emerald-400 font-bold text-lg">+{fmt$(best.profit)}</div>
+                    <div className="text-xs text-gray-600">{best.item.condition}{best.item.psa_grade ? ` PSA ${best.item.psa_grade}` : ""}</div>
+                  </div>
+                  <div className="bg-gray-900 border border-red-800/40 rounded-xl p-4">
+                    <div className="text-xs text-gray-500 mb-2 font-semibold">📉 Worst Deal</div>
+                    <div className="font-medium text-sm truncate">{worst.item.name}</div>
+                    <div className="text-red-400 font-bold text-lg">{fmt$(worst.profit)}</div>
+                    <div className="text-xs text-gray-600">{worst.item.condition}{worst.item.psa_grade ? ` PSA ${worst.item.psa_grade}` : ""}</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── Top Performers ───────────────────────────────────────── */}
             {topPerformers.length > 0 && (
