@@ -84,7 +84,7 @@ export interface ChatMessage {
 }
 
 export interface SortConfig {
-  field: keyof CollectionItem | "__pnl__";
+  field: keyof CollectionItem | "__pnl__" | "__age__";
   dir: SortDir;
 }
 

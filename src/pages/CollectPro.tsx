@@ -765,10 +765,13 @@ export default function CollectPro() {
       if (i.status === "sold") return +(i.sell_price ?? 0) - c;
       return (i.market_price ?? +i.buy_price) - c;
     };
+    const age = (i: CollectionItem) => new Date(i.buy_date).getTime();
     arr.sort((a, b) => {
       let cmp = 0;
       if ((field as string) === "__pnl__") {
         cmp = pnl(a) - pnl(b);
+      } else if ((field as string) === "__age__") {
+        cmp = age(a) - age(b); // older items have smaller timestamps = lower value
       } else {
         const av = a[field] ?? "";
         const bv = b[field] ?? "";
@@ -2653,7 +2656,7 @@ export default function CollectPro() {
                       {[
                         { label: "Item", field: "name" as const },
                         { label: "Status", field: "status" as const },
-                        { label: "Date", field: "buy_date" as const },
+                        { label: "Age ↕", field: "__age__" as const },
                         { label: "Buy", field: "buy_price" as const },
                         { label: "Grading", field: "grading_cost" as const },
                         { label: "Market", field: "market_price" as const },
@@ -2745,14 +2748,23 @@ export default function CollectPro() {
                               />
                             ) : (
                               <div>
-                                <button
-                                  type="button"
-                                  onClick={() => { setInlineEditId(item.id); setInlineEditVal(item.market_price != null ? String(item.market_price) : ""); }}
-                                  className="text-blue-400 hover:text-blue-300 transition-colors block"
-                                  title="Click to edit market price"
-                                >
-                                  {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600 text-xs">+ price</span>}
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setInlineEditId(item.id); setInlineEditVal(item.market_price != null ? String(item.market_price) : ""); }}
+                                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                                    title="Click to edit market price"
+                                  >
+                                    {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600 text-xs">+ price</span>}
+                                  </button>
+                                  {item.market_price != null && item.status !== "sold" && (() => {
+                                    const daysSinceUpdate = Math.round((Date.now() - new Date(item.updated_at).getTime()) / 86400000);
+                                    if (daysSinceUpdate < 30) return null;
+                                    return (
+                                      <span className="text-amber-700 text-xs" title={`Price not updated in ${daysSinceUpdate}d`}>⏱</span>
+                                    );
+                                  })()}
+                                </div>
                                 {item.status !== "sold" && (() => {
                                   const breakeven = Math.ceil((cost * 1.13) * 100) / 100; // 13% platform fees
                                   const isAbove = item.market_price != null && item.market_price > breakeven;
