@@ -1581,6 +1581,187 @@ function ArenaTab({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// BatchPriceRefreshModal — AI web-search market price update for selected items
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RefreshRow = {
+  item:    CollectionItem;
+  status:  "pending" | "running" | "done" | "error";
+  price?:  number;
+  error?:  string;
+};
+
+function BatchPriceRefreshModal({
+  items,
+  onClose,
+}: {
+  items: CollectionItem[];
+  onClose: () => void;
+}) {
+  const [rows, setRows]     = useState<RefreshRow[]>(items.map(item => ({ item, status: "pending" })));
+  const [running, setRunning] = useState(false);
+  const [done, setDone]     = useState(false);
+  const cancelledRef        = useRef(false);
+
+  const updated = rows.filter(r => r.status === "done").length;
+  const errored = rows.filter(r => r.status === "error").length;
+
+  const run = useCallback(async () => {
+    cancelledRef.current = false;
+    setRunning(true);
+    setDone(false);
+    setRows(items.map(item => ({ item, status: "pending" })));
+
+    for (let i = 0; i < items.length; i++) {
+      if (cancelledRef.current) break;
+
+      setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "running" } : r));
+
+      const item = items[i];
+      const prompt = [
+        `Find the CURRENT market price for this TCG card. Search eBay recent sold listings and TCGPlayer.`,
+        `Card: ${item.name}`,
+        item.card_set  ? `Set: ${item.card_set}`        : "",
+        item.franchise ? `Franchise: ${item.franchise}` : "",
+        `Condition: ${item.condition}`,
+        item.psa_grade ? `Grade: PSA ${item.psa_grade}` : "Ungraded (raw)",
+        ``,
+        `State the current market price clearly as "$X.XX".`,
+      ].filter(Boolean).join("\n");
+
+      try {
+        const reply = await callAI(
+          [{ role: "user", content: prompt }],
+          "market",
+          { cacheKey: `batch-price-${item.id}-${Date.now()}` }
+        );
+
+        const match = reply.match(/\$[\d,]+(?:\.\d{1,2})?/);
+        if (match && !cancelledRef.current) {
+          const price = parseFloat(match[0].replace(/[$,]/g, ""));
+          await Promise.all([
+            supabase.from("coll_items").update({ market_price: price }).eq("id", item.id),
+            supabase.from("cp_price_history").insert({
+              item_id: item.id, price, source: "ai_market",
+              note: `Batch AI scan — ${match[0]}`,
+            }),
+          ]);
+          setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "done", price } : r));
+        } else if (!cancelledRef.current) {
+          setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "error", error: "Price not found" } : r));
+        }
+      } catch (err) {
+        if (!cancelledRef.current) {
+          setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "error", error: (err as Error).message } : r));
+        }
+      }
+    }
+
+    if (!cancelledRef.current) { setRunning(false); setDone(true); }
+  }, [items]);
+
+  const cancel = useCallback(() => {
+    cancelledRef.current = true;
+    setRunning(false);
+  }, []);
+
+  const reset = useCallback(() => {
+    setRows(items.map(item => ({ item, status: "pending" })));
+    setDone(false);
+  }, [items]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      onClick={running ? undefined : onClose}
+    >
+      <div
+        className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="font-bold text-white">📊 AI Market Price Refresh</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Searches eBay + TCGPlayer for each item</p>
+          </div>
+          {!running && <button onClick={onClose} className="text-gray-500 hover:text-white text-xl">✕</button>}
+        </div>
+
+        {/* Row list */}
+        <div className="overflow-y-auto flex-1 p-3 space-y-1.5">
+          {rows.map(({ item, status, price, error }) => (
+            <div key={item.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gray-800/60">
+              <span className="text-base shrink-0 w-5 text-center">
+                {status === "pending" ? "⏳" : status === "running" ? "🔍" : status === "done" ? "✅" : "❌"}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{item.name}</p>
+                <p className="text-xs text-gray-500">
+                  {item.condition}{item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}{item.card_set ? ` · ${item.card_set}` : ""}
+                </p>
+              </div>
+              <div className="shrink-0 text-right min-w-[56px]">
+                {status === "done"    && price != null && <span className="text-emerald-400 font-bold text-sm">{fmt$(price)}</span>}
+                {status === "running" && <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin ml-auto" />}
+                {status === "error"   && <span className="text-red-400 text-xs" title={error}>failed</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-800 shrink-0 space-y-3">
+          {/* Progress bar */}
+          {!done && (
+            <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                style={{ width: `${((updated + errored) / rows.length) * 100}%` }}
+              />
+            </div>
+          )}
+
+          {/* Done summary */}
+          {done && (
+            <div className="flex gap-3 text-sm text-center">
+              <div className="flex-1 bg-emerald-900/30 border border-emerald-900/40 rounded-lg py-2">
+                <div className="font-bold text-emerald-400">{updated}</div>
+                <div className="text-gray-500 text-xs">updated</div>
+              </div>
+              <div className="flex-1 bg-red-900/30 border border-red-900/40 rounded-lg py-2">
+                <div className="font-bold text-red-400">{errored}</div>
+                <div className="text-gray-500 text-xs">failed</div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            {!running && !done && (
+              <Button className="flex-1" onClick={run}>
+                🔍 Start ({items.length} item{items.length !== 1 ? "s" : ""})
+              </Button>
+            )}
+            {running && (
+              <Button className="flex-1" variant="destructive" onClick={cancel}>⏹ Cancel</Button>
+            )}
+            {done && (
+              <>
+                <Button variant="outline" className="flex-1" onClick={reset}>Run again</Button>
+                <Button className="flex-1" onClick={onClose}>Done</Button>
+              </>
+            )}
+          </div>
+          {!done && !running && (
+            <p className="text-xs text-gray-600 text-center">Each item takes ~15–30s · {items.length} items total</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // BatchBar
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1588,6 +1769,7 @@ function BatchBar({
   count,
   onStatusUpdate,
   onPriceUpdate,
+  onAIPriceRefresh,
   onExport,
   onDelete,
   onClear,
@@ -1595,6 +1777,7 @@ function BatchBar({
   count: number;
   onStatusUpdate: () => void;
   onPriceUpdate: () => void;
+  onAIPriceRefresh: () => void;
   onExport: () => void;
   onDelete: () => void;
   onClear: () => void;
@@ -1608,6 +1791,7 @@ function BatchBar({
       <div className="flex gap-2 flex-wrap">
         <Button size="sm" variant="outline" onClick={onStatusUpdate}>Status</Button>
         <Button size="sm" variant="outline" onClick={onPriceUpdate}>Price</Button>
+        <Button size="sm" variant="outline" onClick={onAIPriceRefresh} title="Refresh market prices via AI web search">📊 AI Prices</Button>
         <Button size="sm" variant="outline" onClick={onExport}>Export</Button>
         <Button size="sm" variant="destructive" onClick={onDelete}>Delete All</Button>
       </div>
@@ -1664,7 +1848,8 @@ export default function CollectPro() {
   // Modal state for sell dialog, batch operations, and grading studio
   const [sellTarget,     setSellTarget]     = useState<CollectionItem | null>(null);
   const [batchOp,        setBatchOp]        = useState<"status" | "price" | null>(null);
-  const [gradingForItem, setGradingForItem] = useState<CollectionItem | null>(null);
+  const [gradingForItem,        setGradingForItem]        = useState<CollectionItem | null>(null);
+  const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -3339,9 +3524,20 @@ export default function CollectPro() {
           count={s.inv.selected.length}
           onStatusUpdate={batchUpdateStatus}
           onPriceUpdate={batchUpdatePrice}
+          onAIPriceRefresh={() =>
+            setBatchPriceRefreshItems(s.items.filter((i) => s.inv.selected.includes(i.id)))
+          }
           onExport={() => exportCSV(s.items.filter((i) => s.inv.selected.includes(i.id)), s.partners)}
           onDelete={batchDelete}
           onClear={() => d({ t: "INV_SEL_CLEAR" })}
+        />
+      )}
+
+      {/* ── Batch AI price refresh modal ──────────────────────────────────────── */}
+      {batchPriceRefreshItems && (
+        <BatchPriceRefreshModal
+          items={batchPriceRefreshItems}
+          onClose={() => setBatchPriceRefreshItems(null)}
         />
       )}
 
