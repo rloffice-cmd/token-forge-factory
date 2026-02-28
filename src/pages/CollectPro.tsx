@@ -795,6 +795,18 @@ export default function CollectPro() {
     toast.success(`${s.inv.selected.length} items reassigned to ${partnerName}`);
   }, [s.inv.selected, s.partners]);
 
+  const quickStatusChange = useCallback(async (item: CollectionItem, newStatus: ItemStatus) => {
+    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, status: newStatus, updated_at: new Date().toISOString() } });
+    const { error } = await supabase.from("coll_items").update({ status: newStatus }).eq("id", item.id);
+    if (error) {
+      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      toast.error(error.message);
+    } else {
+      const labels: Record<ItemStatus, string> = { active: "Active", grading: "Grading", sold: "Sold" };
+      toast.success(`${item.name} → ${labels[newStatus]}`);
+    }
+  }, []);
+
   const executeImportCSV = useCallback(async (rows: ItemInsertRow[]) => {
     if (rows.length === 0) return;
     const { error } = await supabase.from("coll_items").insert(rows);
@@ -1929,7 +1941,21 @@ export default function CollectPro() {
                             )}
                           </td>
                           <td className="px-3 py-2.5">
-                            <div className="flex gap-1.5">
+                            <div className="flex gap-1.5 flex-wrap">
+                              {item.status === "active" && (
+                                <button
+                                  onClick={() => quickStatusChange(item, "grading")}
+                                  className="text-xs px-2 py-1 bg-amber-900/60 text-amber-300 rounded hover:bg-amber-800 transition-colors"
+                                  title="Send to grading"
+                                >⚗</button>
+                              )}
+                              {item.status === "grading" && (
+                                <button
+                                  onClick={() => quickStatusChange(item, "active")}
+                                  className="text-xs px-2 py-1 bg-blue-900/60 text-blue-300 rounded hover:bg-blue-800 transition-colors"
+                                  title="Return to active"
+                                >↩</button>
+                              )}
                               {item.status !== "sold" && (
                                 <button
                                   onClick={() => markSold(item)}
