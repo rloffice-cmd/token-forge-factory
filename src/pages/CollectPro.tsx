@@ -372,6 +372,27 @@ export default function CollectPro() {
     [s.items]
   );
 
+  const holdTimeBreakdown = useMemo(() => {
+    const BUCKETS = [
+      { label: "< 30d",   min: 0,   max: 30   },
+      { label: "1–3 mo",  min: 30,  max: 90   },
+      { label: "3–6 mo",  min: 90,  max: 180  },
+      { label: "6–12 mo", min: 180, max: 365  },
+      { label: "1y+",     min: 365, max: Infinity },
+    ];
+    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at);
+    return BUCKETS.map(b => {
+      const items = sold.filter(i => {
+        const days = (new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000;
+        return days >= b.min && days < b.max;
+      });
+      const totalProfit = items.reduce((acc, i) => {
+        return acc + (+(i.sell_price!) - +i.buy_price - +(i.grading_cost ?? 0));
+      }, 0);
+      return { label: b.label, count: items.length, avgProfit: items.length > 0 ? totalProfit / items.length : 0 };
+    }).filter(b => b.count > 0);
+  }, [s.items]);
+
   const conditionBreakdown = useMemo(() => {
     const ORDER = ["M", "NM", "LP", "MP", "HP", "D", "PSA"];
     const map   = new Map<string, number>();
@@ -2166,6 +2187,36 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Hold-Time Distribution ────────────────────────────────── */}
+            {holdTimeBreakdown.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-4">Hold-Time Distribution</p>
+                <div className="space-y-2.5">
+                  {(() => {
+                    const maxCount = Math.max(...holdTimeBreakdown.map(b => b.count));
+                    return holdTimeBreakdown.map(b => (
+                      <div key={b.label} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 w-14 text-right font-mono flex-shrink-0">{b.label}</span>
+                        <div className="flex-1 h-5 bg-gray-800 rounded overflow-hidden relative">
+                          <div
+                            className={`h-full rounded transition-all ${b.avgProfit >= 0 ? "bg-blue-600/70" : "bg-red-600/70"}`}
+                            style={{ width: `${(b.count / maxCount) * 100}%` }}
+                          />
+                          <span className="absolute inset-0 flex items-center px-2 text-xs text-gray-300">
+                            {b.count} sale{b.count !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        <span className={`text-xs font-semibold w-18 text-right flex-shrink-0 ${b.avgProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          avg {b.avgProfit >= 0 ? "+" : ""}{fmt$(b.avgProfit)}
+                        </span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <p className="text-xs text-gray-700 mt-2">Hold time = sold date − buy date. Avg profit shown per bucket.</p>
+              </div>
+            )}
+
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
               <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm flex items-center justify-between">
                 <span>Sold Transactions</span>
@@ -2263,6 +2314,34 @@ export default function CollectPro() {
                 </button>
               ))}
             </div>
+
+            {/* Suggested scans based on unpriced inventory */}
+            {s.market.mode === "market" && (() => {
+              const unpriced = s.items
+                .filter(i => i.status === "active" && i.market_price == null)
+                .sort((a, b) => +b.buy_price - +a.buy_price)
+                .slice(0, 8);
+              if (unpriced.length === 0) return null;
+              return (
+                <div className="mb-3">
+                  <div className="text-xs text-gray-600 mb-1.5">💡 Quick-scan (active, no price):</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {unpriced.map(item => {
+                      const q = `What is the current market price of "${item.name}"${item.card_set ? ` from ${item.card_set}` : ""} ${item.psa_grade ? `PSA ${item.psa_grade}` : item.condition} TCG card? Search eBay sold listings.`;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => d({ t: "MKT_QUERY", v: q })}
+                          className="px-2.5 py-1 rounded-lg text-xs bg-gray-800 hover:bg-blue-900/60 text-gray-300 hover:text-blue-300 border border-gray-700 hover:border-blue-700 transition-colors"
+                        >
+                          {item.name}{item.psa_grade ? ` PSA ${item.psa_grade}` : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             <Textarea
               dir="rtl"
