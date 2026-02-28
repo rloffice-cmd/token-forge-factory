@@ -1,15 +1,6 @@
 /**
- * CollectPro — TCG Card Portfolio Manager
- *
- * Layer architecture:
- *   Knowledge   → coll_items, coll_partners, cp_knowledge  (Supabase)
- *   Definitions → cp_instructions, cp_instruction_patches  (Supabase)
- *   Logic       → this file + src/lib/collectpro/*         (client)
- *
- * Event bus → Supabase Realtime channels
- *   Any mutation by any client is automatically broadcast to all others.
- *
- * State management → useReducer (single source of truth, predictable mutations)
+ * CollectPro — Monster Mode
+ * TCG Card Portfolio Manager with Arena, Cards View, Quick Scan, and Mobile Nav.
  */
 
 import React, {
@@ -19,10 +10,10 @@ import React, {
   useRef,
   useCallback,
 } from "react";
+import "@/lib/collectpro/collectpro.css";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-// Shadcn UI
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,8 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-// Domain lib
 import type {
   CollectionItem,
   Partner,
@@ -48,12 +39,91 @@ import type {
   ItemStatus,
   AIMode,
   Tab,
+  ViewMode,
+  PortfolioStats,
   UndoBuffer,
+  PricePoint,
 } from "@/lib/collectpro/types";
 import { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
 import { callAI } from "@/lib/collectpro/ai";
 import { compressImage } from "@/lib/collectpro/image";
-import { exportCSV } from "@/lib/collectpro/export";
+import { exportCSV, exportEbayCSV, exportCardmarketCSV } from "@/lib/collectpro/export";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mock card data for Quick Scan
+// ─────────────────────────────────────────────────────────────────────────────
+
+const MOCK_CARDS = [
+  { name: "Charizard", card_set: "Base Set", franchise: "Pokemon", condition: "NM", buy_price: "120", grading_cost: "25", market_price: "380", psa_grade: "9" },
+  { name: "Blastoise", card_set: "Base Set", franchise: "Pokemon", condition: "LP", buy_price: "80", grading_cost: "25", market_price: "220", psa_grade: "" },
+  { name: "Pikachu Illustrator", card_set: "Promo", franchise: "Pokemon", condition: "NM", buy_price: "5000", grading_cost: "50", market_price: "18000", psa_grade: "8" },
+  { name: "Lugia", card_set: "Neo Genesis", franchise: "Pokemon", condition: "NM", buy_price: "200", grading_cost: "25", market_price: "650", psa_grade: "" },
+  { name: "Rayquaza Gold Star", card_set: "EX Deoxys", franchise: "Pokemon", condition: "MP", buy_price: "350", grading_cost: "25", market_price: "1200", psa_grade: "7" },
+  { name: "Umbreon VMAX Alt Art", card_set: "Evolving Skies", franchise: "Pokemon", condition: "NM", buy_price: "180", grading_cost: "20", market_price: "420", psa_grade: "" },
+  { name: "Charizard VMAX Rainbow", card_set: "Champions Path", franchise: "Pokemon", condition: "NM", buy_price: "95", grading_cost: "20", market_price: "280", psa_grade: "" },
+  { name: "Mew ex SAR", card_set: "151", franchise: "Pokemon", condition: "NM", buy_price: "45", grading_cost: "20", market_price: "130", psa_grade: "" },
+  { name: "Monkey D. Luffy OP01-001", card_set: "Romance Dawn", franchise: "One Piece", condition: "NM", buy_price: "35", grading_cost: "20", market_price: "90", psa_grade: "" },
+  { name: "Shanks OP01-118 Secret", card_set: "Romance Dawn", franchise: "One Piece", condition: "NM", buy_price: "120", grading_cost: "25", market_price: "380", psa_grade: "" },
+  { name: "Kaido Parallel", card_set: "Paramount War", franchise: "One Piece", condition: "NM", buy_price: "55", grading_cost: "20", market_price: "160", psa_grade: "" },
+  { name: "Nami Full Art OP02-101", card_set: "Paramount War", franchise: "One Piece", condition: "NM", buy_price: "40", grading_cost: "20", market_price: "95", psa_grade: "" },
+  { name: "Enel OP04-020 Special", card_set: "Kingdoms of Intrigue", franchise: "One Piece", condition: "NM", buy_price: "30", grading_cost: "20", market_price: "75", psa_grade: "" },
+  { name: "Rob Lucci Alt Art", card_set: "Wings of the Captain", franchise: "One Piece", condition: "LP", buy_price: "25", grading_cost: "20", market_price: "65", psa_grade: "" },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helper functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+function franchiseCfg(franchise?: string): { neon: string; accent: string; label: string } {
+  const f = (franchise ?? "").toLowerCase();
+  if (f.includes("pokemon") || f.includes("pokémon")) {
+    return { neon: "neon-pokemon", accent: "#facc15", label: "Pokemon" };
+  }
+  if (f.includes("one piece") || f.includes("onepiece")) {
+    return { neon: "neon-onepiece", accent: "#f97316", label: "One Piece" };
+  }
+  return { neon: "neon-other", accent: "#818cf8", label: franchise || "Other" };
+}
+
+function itemCost(item: CollectionItem): number {
+  return +item.buy_price + +(item.grading_cost ?? 0);
+}
+
+function itemProfit(item: CollectionItem): number | null {
+  const cost = itemCost(item);
+  if (item.status === "sold" && item.sell_price != null) {
+    return +item.sell_price - cost;
+  }
+  if (item.market_price != null) {
+    return +item.market_price - cost;
+  }
+  return null;
+}
+
+function genPriceHistory(item: CollectionItem): PricePoint[] {
+  const start = new Date(item.buy_date).getTime();
+  const end = Date.now();
+  const points = Math.floor(Math.random() * 7) + 6; // 6-12
+  const endPrice = item.market_price ?? +item.buy_price;
+  const startPrice = +item.buy_price;
+  const result: PricePoint[] = [];
+  for (let i = 0; i < points; i++) {
+    const t = start + (end - start) * (i / (points - 1));
+    const d = new Date(t);
+    const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+    const ratio = i / (points - 1);
+    const base = startPrice + (endPrice - startPrice) * ratio;
+    const jitter = base * 0.08 * (Math.random() - 0.5);
+    result.push({ month: label, value: Math.max(0, Math.round((base + jitter) * 100) / 100) });
+  }
+  return result;
+}
+
+function mockScan(): Partial<ItemForm> {
+  const card = MOCK_CARDS[Math.floor(Math.random() * MOCK_CARDS.length)];
+  return { ...card, status: "active", buy_date: new Date().toISOString().slice(0, 10), notes: "Quick Scan", image_url: "" };
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State shape & reducer
@@ -64,9 +134,10 @@ type State = {
   partners: Partner[];
   loading:  boolean;
   tab:      Tab;
-  franchise: boolean; // franchise-only filter toggle
-
-  // Tab-level state — all persisted, never lost on tab switch
+  franchise: boolean;
+  viewMode: ViewMode;
+  arena: { a: string | null; b: string | null };
+  modal: string | null;
   chat: { messages: ChatMessage[]; input: string; busy: boolean };
   market: { mode: AIMode; query: string; result: string; busy: boolean };
   inv: {
@@ -76,10 +147,10 @@ type State = {
     showForm:  boolean;
     editId:    string | null;
     form:      ItemForm;
+    selected:  string[];
   };
   partnerForm: { name: string; email: string };
   addingPartner: boolean;
-
   deleteTarget: string | null;
   undo:         UndoBuffer | null;
 };
@@ -90,6 +161,7 @@ type Action =
   | { t: "RT_PARTNER"; event: string; partner: Partner }
   | { t: "SET_TAB";    tab: Tab }
   | { t: "TOGGLE_FRANCHISE" }
+  | { t: "SET_VIEW";   mode: ViewMode }
   | { t: "CHAT_INPUT"; v: string }
   | { t: "CHAT_MSG";   m: ChatMessage }
   | { t: "CHAT_BUSY";  v: boolean }
@@ -103,6 +175,12 @@ type Action =
   | { t: "INV_FORM_SHOW"; show: boolean }
   | { t: "INV_FORM_EDIT"; id: string | null; form: ItemForm }
   | { t: "INV_FORM_PATCH"; p: Partial<ItemForm> }
+  | { t: "INV_SEL_TOGGLE"; id: string }
+  | { t: "INV_SEL_ALL"; ids: string[] }
+  | { t: "INV_SEL_CLEAR" }
+  | { t: "ARENA_SET";  slot: "a" | "b"; id: string | null }
+  | { t: "ARENA_CLEAR" }
+  | { t: "SET_MODAL";  id: string | null }
   | { t: "PF_PATCH";   p: Partial<State["partnerForm"]> }
   | { t: "PF_BUSY";    v: boolean }
   | { t: "DEL_TARGET"; id: string | null }
@@ -121,12 +199,14 @@ function emptyForm(partnerId: string): ItemForm {
 
 const INIT: State = {
   items: [], partners: [], loading: true,
-  tab: "brain", franchise: false,
+  tab: "brain", franchise: false, viewMode: "cards",
+  arena: { a: null, b: null }, modal: null,
   chat:   { messages: [], input: "", busy: false },
   market: { mode: "market", query: "", result: "", busy: false },
   inv: {
     search: "", sort: { field: "buy_date", dir: "desc" },
-    page: 1, showForm: false, editId: null, form: emptyForm(""),
+    page: 1, showForm: false, editId: null,
+    form: emptyForm(""), selected: [],
   },
   partnerForm: { name: "", email: "" }, addingPartner: false,
   deleteTarget: null, undo: null,
@@ -158,6 +238,7 @@ function reducer(s: State, a: Action): State {
 
     case "SET_TAB":          return { ...s, tab: a.tab };
     case "TOGGLE_FRANCHISE": return { ...s, franchise: !s.franchise };
+    case "SET_VIEW":         return { ...s, viewMode: a.mode };
 
     case "CHAT_INPUT": return { ...s, chat: { ...s.chat, input: a.v } };
     case "CHAT_MSG":   return { ...s, chat: { ...s.chat, messages: [...s.chat.messages, a.m] } };
@@ -175,6 +256,23 @@ function reducer(s: State, a: Action): State {
     case "INV_FORM_EDIT": return { ...s, inv: { ...s.inv, editId: a.id, form: a.form, showForm: true } };
     case "INV_FORM_PATCH": return { ...s, inv: { ...s.inv, form: { ...s.inv.form, ...a.p } } };
 
+    case "INV_SEL_TOGGLE": {
+      const sel = s.inv.selected;
+      return {
+        ...s,
+        inv: {
+          ...s.inv,
+          selected: sel.includes(a.id) ? sel.filter(id => id !== a.id) : [...sel, a.id],
+        },
+      };
+    }
+    case "INV_SEL_ALL":   return { ...s, inv: { ...s.inv, selected: a.ids } };
+    case "INV_SEL_CLEAR": return { ...s, inv: { ...s.inv, selected: [] } };
+
+    case "ARENA_SET":   return { ...s, arena: { ...s.arena, [a.slot]: a.id } };
+    case "ARENA_CLEAR": return { ...s, arena: { a: null, b: null } };
+    case "SET_MODAL":   return { ...s, modal: a.id };
+
     case "PF_PATCH": return { ...s, partnerForm: { ...s.partnerForm, ...a.p } };
     case "PF_BUSY":  return { ...s, addingPartner: a.v };
 
@@ -185,19 +283,613 @@ function reducer(s: State, a: Action): State {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Page size
-// ─────────────────────────────────────────────────────────────────────────────
-
 const PAGE = 25;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main component
+// Tilt helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const applyTilt = (e: React.MouseEvent<HTMLDivElement>) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width - 0.5;
+  const y = (e.clientY - r.top) / r.height - 0.5;
+  e.currentTarget.style.transform = `perspective(600px) rotateY(${x * 16}deg) rotateX(${-y * 16}deg) scale3d(1.03,1.03,1.03)`;
+};
+
+const resetTilt = (e: React.MouseEvent<HTMLDivElement>) => {
+  e.currentTarget.style.transform = "";
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: ItemStatus }) {
+  const map: Record<ItemStatus, string> = {
+    active: "bg-emerald-900 text-emerald-300",
+    grading: "bg-yellow-900 text-yellow-300",
+    sold: "bg-blue-900 text-blue-300",
+  };
+  const label: Record<ItemStatus, string> = { active: "Active", grading: "Grading", sold: "Sold" };
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${map[status]}`}>
+      {label[status]}
+    </span>
+  );
+}
+
+function FranchiseIcon({ franchise, size = 24 }: { franchise?: string; size?: number }) {
+  const cfg = franchiseCfg(franchise);
+  const label = franchise?.toLowerCase().includes("pokemon") || franchise?.toLowerCase().includes("pokémon")
+    ? "P"
+    : franchise?.toLowerCase().includes("one piece") || franchise?.toLowerCase().includes("onepiece")
+    ? "OP"
+    : "?";
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        fontSize: size * 0.45,
+        color: cfg.accent,
+        border: `1.5px solid ${cfg.accent}`,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "50%",
+        fontWeight: 700,
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+interface CollectibleCardProps {
+  item: CollectionItem;
+  partner?: Partner;
+  selected?: boolean;
+  onSelect?: (id: string) => void;
+  onEdit?: (item: CollectionItem) => void;
+  onDelete?: (id: string) => void;
+  onMarkSold?: (item: CollectionItem) => void;
+  onArena?: (id: string) => void;
+  onOpenModal?: (id: string) => void;
+  arenaSlot?: "a" | "b" | null;
+  compact?: boolean;
+}
+
+function CollectibleCard({
+  item,
+  partner,
+  selected,
+  onSelect,
+  onEdit,
+  onDelete,
+  onMarkSold,
+  onArena,
+  onOpenModal,
+  arenaSlot,
+  compact,
+}: CollectibleCardProps) {
+  const cfg = franchiseCfg(item.franchise);
+  const cost = itemCost(item);
+  const profit = itemProfit(item);
+  const roiPct = profit != null && cost > 0 ? (profit / cost) * 100 : null;
+
+  return (
+    <div
+      className={`glass card-tilt holo-card ${cfg.neon} relative flex flex-col rounded-2xl overflow-hidden cursor-pointer select-none transition-all duration-200${selected ? " ring-2 ring-blue-500" : ""}${compact ? " compact-card" : ""}`}
+      onMouseMove={applyTilt}
+      onMouseLeave={resetTilt}
+      onClick={onSelect ? () => onSelect(item.id) : undefined}
+      style={{ minHeight: compact ? 120 : 220 }}
+    >
+      {/* Arena slot badge */}
+      {arenaSlot && (
+        <div className={`absolute top-2 left-2 z-20 px-2 py-0.5 rounded-full text-xs font-bold ${arenaSlot === "a" ? "bg-blue-600 text-white" : "bg-purple-600 text-white"}`}>
+          {arenaSlot === "a" ? "Slot A" : "Slot B"}
+        </div>
+      )}
+
+      {/* Selection checkbox */}
+      {onSelect && (
+        <div
+          className="absolute top-2 right-2 z-20"
+          onClick={(e) => { e.stopPropagation(); onSelect(item.id); }}
+        >
+          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${selected ? "bg-blue-500 border-blue-500" : "bg-black/40 border-white/40"}`}>
+            {selected && <span className="text-white text-xs">✓</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Image */}
+      {item.image_url ? (
+        <img
+          src={item.image_url}
+          alt={item.name}
+          className="w-full object-cover"
+          style={{ height: compact ? 70 : 130, objectFit: "cover" }}
+        />
+      ) : (
+        <div
+          className="w-full flex items-center justify-center bg-gray-800/50"
+          style={{ height: compact ? 70 : 130 }}
+        >
+          <FranchiseIcon franchise={item.franchise} size={compact ? 32 : 48} />
+        </div>
+      )}
+
+      {/* Card info */}
+      <div className="flex-1 p-2 flex flex-col gap-1">
+        <div className="font-bold text-white leading-tight" style={{ fontSize: compact ? 11 : 13 }}>
+          {item.name}
+        </div>
+        <div className="text-gray-400 leading-tight" style={{ fontSize: compact ? 9 : 10 }}>
+          {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
+        </div>
+
+        <div className="flex items-center gap-1 flex-wrap">
+          <StatusBadge status={item.status} />
+          {roiPct != null && (
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${roiPct >= 0 ? "bg-emerald-900/70 text-emerald-300" : "bg-red-900/70 text-red-300"}`}>
+              {fmtPct(roiPct)}
+            </span>
+          )}
+        </div>
+
+        <div className="flex justify-between text-xs text-gray-400 mt-auto pt-1">
+          <span>Cost: {fmt$(cost)}</span>
+          {item.market_price != null && <span className="text-blue-400">~{fmt$(item.market_price)}</span>}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      {!compact && (
+        <div
+          className="card-actions flex gap-1 p-2 bg-black/30 backdrop-blur-sm border-t border-white/10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {item.status !== "sold" && onMarkSold && (
+            <button
+              onClick={() => onMarkSold(item)}
+              className="flex-1 text-xs py-1 rounded bg-emerald-900/60 text-emerald-300 hover:bg-emerald-800 transition-colors"
+              title="Mark sold"
+            >✓</button>
+          )}
+          {onEdit && (
+            <button
+              onClick={() => onEdit(item)}
+              className="flex-1 text-xs py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
+              title="Edit"
+            >✏</button>
+          )}
+          {onDelete && (
+            <button
+              onClick={() => onDelete(item.id)}
+              className="flex-1 text-xs py-1 rounded bg-red-900/60 text-red-300 hover:bg-red-800 transition-colors"
+              title="Delete"
+            >✕</button>
+          )}
+          {onArena && (
+            <button
+              onClick={() => onArena(item.id)}
+              className="flex-1 text-xs py-1 rounded bg-purple-900/60 text-purple-300 hover:bg-purple-800 transition-colors"
+              title="Arena"
+            >⚔</button>
+          )}
+          {onOpenModal && (
+            <button
+              onClick={() => onOpenModal(item.id)}
+              className="flex-1 text-xs py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
+              title="Detail"
+            >🔍</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CardDetailModal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CardDetailModal({
+  item,
+  partner,
+  onClose,
+  onArena,
+}: {
+  item: CollectionItem;
+  partner?: Partner;
+  onClose: () => void;
+  onArena?: (id: string) => void;
+}) {
+  const cost = itemCost(item);
+  const profit = itemProfit(item);
+  const roiPct = profit != null && cost > 0 ? (profit / cost) * 100 : null;
+  const priceHistory = useMemo(() => genPriceHistory(item), [item.id]);
+  const cfg = franchiseCfg(item.franchise);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className={`glass ${cfg.neon} relative w-full max-w-lg rounded-2xl overflow-auto max-h-[90vh] p-5`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          className="absolute top-3 left-3 text-gray-400 hover:text-white text-xl"
+          onClick={onClose}
+        >✕</button>
+
+        <div className="flex gap-4 mb-4">
+          {item.image_url ? (
+            <img
+              src={item.image_url}
+              alt={item.name}
+              className="w-28 h-36 object-cover rounded-xl flex-shrink-0"
+            />
+          ) : (
+            <div className="w-28 h-36 bg-gray-800/60 rounded-xl flex items-center justify-center flex-shrink-0">
+              <FranchiseIcon franchise={item.franchise} size={56} />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <h2 className="font-extrabold text-lg text-white leading-tight">{item.name}</h2>
+            {item.card_set && <div className="text-xs text-gray-400 mt-0.5">{item.card_set}</div>}
+            {item.franchise && <div className="text-xs mt-1" style={{ color: cfg.accent }}>{item.franchise}</div>}
+            <div className="flex flex-wrap gap-1 mt-2">
+              <StatusBadge status={item.status} />
+              {item.psa_grade && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-900 text-yellow-300 font-bold">
+                  PSA {item.psa_grade}
+                </span>
+              )}
+              <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{item.condition}</span>
+            </div>
+            {partner && (
+              <div className="text-xs text-gray-500 mt-2">Partner: {partner.name}</div>
+            )}
+          </div>
+        </div>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
+          {[
+            { label: "Buy Price", value: fmt$(item.buy_price), cls: "text-white" },
+            { label: "Grading Cost", value: fmt$(item.grading_cost ?? 0), cls: "text-amber-400" },
+            { label: "Total Cost", value: fmt$(cost), cls: "text-amber-300 font-bold" },
+            {
+              label: "Market Estimate",
+              value: item.market_price != null ? fmt$(item.market_price) : "N/A",
+              cls: "text-blue-400",
+            },
+            {
+              label: item.status === "sold" ? "Sale Price" : "Est. Profit",
+              value: profit != null ? `${profit >= 0 ? "+" : ""}${fmt$(profit)}` : "—",
+              cls: profit != null ? (profit >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
+            },
+            {
+              label: "ROI",
+              value: roiPct != null ? fmtPct(roiPct) : "—",
+              cls: roiPct != null ? (roiPct >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
+            },
+          ].map((st) => (
+            <div key={st.label} className="bg-gray-800/60 rounded-xl p-3">
+              <div className="text-xs text-gray-500 mb-0.5">{st.label}</div>
+              <div className={`font-bold ${st.cls}`}>{st.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {item.market_price == null && (
+          <div className="text-xs text-amber-600 bg-amber-900/30 border border-amber-900/50 rounded-lg px-3 py-2 mb-4">
+            THEORETICAL — no confirmed price point. Market estimate is not available.
+          </div>
+        )}
+
+        {/* Price evolution chart */}
+        <div className="mb-4">
+          <div className="text-xs text-gray-400 mb-2 font-semibold">Price Evolution</div>
+          <ResponsiveContainer width="100%" height={140}>
+            <AreaChart data={priceHistory} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={`grad-${item.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={cfg.accent} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={cfg.accent} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#6b7280" }} />
+              <YAxis tick={{ fontSize: 9, fill: "#6b7280" }} width={40} tickFormatter={(v) => `$${v}`} />
+              <Tooltip
+                contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
+                formatter={(v: number) => [fmt$(v), "Price"]}
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke={cfg.accent}
+                fill={`url(#grad-${item.id})`}
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {onArena && (
+          <Button
+            className="w-full"
+            onClick={() => { onArena(item.id); onClose(); }}
+            variant="outline"
+          >
+            Send to Arena ⚔
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ArenaView
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ArenaView({
+  items,
+  arenaA,
+  arenaB,
+  partners,
+  dispatch,
+}: {
+  items: CollectionItem[];
+  arenaA: string | null;
+  arenaB: string | null;
+  partners: Partner[];
+  dispatch: React.Dispatch<Action>;
+}) {
+  const itemA = items.find((i) => i.id === arenaA) ?? null;
+  const itemB = items.find((i) => i.id === arenaB) ?? null;
+  const partnerOf = (item: CollectionItem | null) =>
+    item ? partners.find((p) => p.id === item.partner_id) : undefined;
+
+  const costA = itemA ? itemCost(itemA) : 0;
+  const costB = itemB ? itemCost(itemB) : 0;
+  const profitA = itemA ? itemProfit(itemA) : null;
+  const profitB = itemB ? itemProfit(itemB) : null;
+  const roiA = profitA != null && costA > 0 ? (profitA / costA) * 100 : null;
+  const roiB = profitB != null && costB > 0 ? (profitB / costB) * 100 : null;
+
+  // Grading recommendation logic
+  let gradingRec = "";
+  if (itemA && itemB) {
+    const bothRaw = !itemA.psa_grade && !itemB.psa_grade;
+    const upsideA = itemA.market_price != null ? itemA.market_price / costA : 0;
+    const upsideB = itemB.market_price != null ? itemB.market_price / costB : 0;
+    if (bothRaw) {
+      if (upsideA >= 3 && upsideB >= 3) {
+        gradingRec = `Both cards show high grading upside (${itemA.name}: ${upsideA.toFixed(1)}x, ${itemB.name}: ${upsideB.toFixed(1)}x). Consider grading both.`;
+      } else if (upsideA >= 3) {
+        gradingRec = `High grading upside on ${itemA.name} (${upsideA.toFixed(1)}x ROI potential). ${itemB.name} shows lower upside (${upsideB.toFixed(1)}x).`;
+      } else if (upsideB >= 3) {
+        gradingRec = `High grading upside on ${itemB.name} (${upsideB.toFixed(1)}x ROI potential). ${itemA.name} shows lower upside (${upsideA.toFixed(1)}x).`;
+      } else {
+        gradingRec = `Both cards are raw. Market upside is modest. Grading cost may not justify the investment for either card.`;
+      }
+    } else if (itemA.psa_grade && !itemB.psa_grade) {
+      if (upsideB >= 3) {
+        gradingRec = `${itemB.name} is raw with high grading upside (${upsideB.toFixed(1)}x). Consider grading it.`;
+      } else {
+        gradingRec = `${itemA.name} is already graded PSA ${itemA.psa_grade}. ${itemB.name} is raw with modest upside.`;
+      }
+    } else if (!itemA.psa_grade && itemB.psa_grade) {
+      if (upsideA >= 3) {
+        gradingRec = `${itemA.name} is raw with high grading upside (${upsideA.toFixed(1)}x). Consider grading it.`;
+      } else {
+        gradingRec = `${itemB.name} is already graded PSA ${itemB.psa_grade}. ${itemA.name} is raw with modest upside.`;
+      }
+    } else {
+      gradingRec = `Both cards are already graded. Compare ROI: ${itemA.name} ${roiA != null ? fmtPct(roiA) : "N/A"} vs ${itemB.name} ${roiB != null ? fmtPct(roiB) : "N/A"}.`;
+    }
+  } else if (itemA || itemB) {
+    const single = itemA ?? itemB!;
+    const upside = single.market_price != null ? single.market_price / itemCost(single) : 0;
+    if (!single.psa_grade && upside >= 3) {
+      gradingRec = `${single.name} shows high grading upside (${upside.toFixed(1)}x). Consider grading.`;
+    } else if (!single.psa_grade) {
+      gradingRec = `${single.name} is raw. Add a second card to compare, or grade if upside justifies cost.`;
+    } else {
+      gradingRec = `${single.name} is graded PSA ${single.psa_grade}. Add a second card to compare.`;
+    }
+  }
+
+  const SlotPlaceholder = ({ slot }: { slot: "a" | "b" }) => (
+    <div className="arena-slot-empty flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-700 text-gray-600 gap-2 p-4" style={{ minHeight: 220 }}>
+      <span className="text-3xl">⚔</span>
+      <span className="text-sm">{slot === "a" ? "Slot A" : "Slot B"}</span>
+      <span className="text-xs">Pick a card below</span>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="flex gap-3 mb-4 flex-col sm:flex-row">
+        {/* Slot A */}
+        <div className="flex-1">
+          {itemA ? (
+            <CollectibleCard
+              item={itemA}
+              partner={partnerOf(itemA)}
+              arenaSlot="a"
+              onDelete={() => dispatch({ t: "ARENA_SET", slot: "a", id: null })}
+            />
+          ) : (
+            <SlotPlaceholder slot="a" />
+          )}
+        </div>
+        {/* Slot B */}
+        <div className="flex-1">
+          {itemB ? (
+            <CollectibleCard
+              item={itemB}
+              partner={partnerOf(itemB)}
+              arenaSlot="b"
+              onDelete={() => dispatch({ t: "ARENA_SET", slot: "b", id: null })}
+            />
+          ) : (
+            <SlotPlaceholder slot="b" />
+          )}
+        </div>
+      </div>
+
+      {/* Comparison table */}
+      {(itemA || itemB) && (
+        <div className="glass rounded-2xl overflow-auto mb-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Metric</th>
+                <th className="text-right px-3 py-2.5 text-xs text-blue-400 font-medium">Slot A{itemA ? ` — ${itemA.name}` : ""}</th>
+                <th className="text-right px-3 py-2.5 text-xs text-purple-400 font-medium">Slot B{itemB ? ` — ${itemB.name}` : ""}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {
+                  label: "Total Cost",
+                  a: itemA ? fmt$(costA) : "—",
+                  b: itemB ? fmt$(costB) : "—",
+                },
+                {
+                  label: "Market Est.",
+                  a: itemA ? (itemA.market_price != null ? fmt$(itemA.market_price) : "N/A") : "—",
+                  b: itemB ? (itemB.market_price != null ? fmt$(itemB.market_price) : "N/A") : "—",
+                },
+                {
+                  label: "Est. Profit",
+                  a: itemA ? (profitA != null ? `${profitA >= 0 ? "+" : ""}${fmt$(profitA)}` : "—") : "—",
+                  b: itemB ? (profitB != null ? `${profitB >= 0 ? "+" : ""}${fmt$(profitB)}` : "—") : "—",
+                },
+                {
+                  label: "ROI",
+                  a: itemA ? (roiA != null ? fmtPct(roiA) : "—") : "—",
+                  b: itemB ? (roiB != null ? fmtPct(roiB) : "—") : "—",
+                },
+                {
+                  label: "Condition",
+                  a: itemA ? itemA.condition : "—",
+                  b: itemB ? itemB.condition : "—",
+                },
+                {
+                  label: "PSA Grade",
+                  a: itemA ? (itemA.psa_grade ? `PSA ${itemA.psa_grade}` : "Raw") : "—",
+                  b: itemB ? (itemB.psa_grade ? `PSA ${itemB.psa_grade}` : "Raw") : "—",
+                },
+              ].map((row) => (
+                <tr key={row.label} className="border-b border-white/5 hover:bg-white/[0.02]">
+                  <td className="px-3 py-2 text-xs text-gray-400 font-medium">{row.label}</td>
+                  <td className="px-3 py-2 text-xs text-white">{row.a}</td>
+                  <td className="px-3 py-2 text-xs text-white">{row.b}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Grading recommendation */}
+      {gradingRec && (
+        <div className="bg-purple-950/40 border border-purple-800/50 rounded-xl p-4 mb-4">
+          <div className="text-xs font-bold text-purple-300 mb-1">Grading Recommendation</div>
+          <div className="text-sm text-gray-200">{gradingRec}</div>
+        </div>
+      )}
+
+      {(itemA || itemB) && (
+        <Button variant="outline" size="sm" onClick={() => dispatch({ t: "ARENA_CLEAR" })}>
+          Clear Arena
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BatchBar
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BatchBar({
+  count,
+  onStatusUpdate,
+  onPriceUpdate,
+  onExport,
+  onDelete,
+  onClear,
+}: {
+  count: number;
+  onStatusUpdate: () => void;
+  onPriceUpdate: () => void;
+  onExport: () => void;
+  onDelete: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="batch-bar fixed bottom-16 md:bottom-0 inset-x-0 z-30 flex items-center justify-between gap-2 px-4 py-3 bg-gray-900/95 backdrop-blur-xl border-t border-gray-700 shadow-2xl">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-white">{count} selected</span>
+        <button onClick={onClear} className="text-xs text-gray-500 hover:text-white">✕ Clear</button>
+      </div>
+      <div className="flex gap-2 flex-wrap">
+        <Button size="sm" variant="outline" onClick={onStatusUpdate}>Status</Button>
+        <Button size="sm" variant="outline" onClick={onPriceUpdate}>Price</Button>
+        <Button size="sm" variant="outline" onClick={onExport}>Export</Button>
+        <Button size="sm" variant="destructive" onClick={onDelete}>Delete All</Button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BottomNav
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const tabs: { key: Tab; icon: string; label: string }[] = [
+    { key: "brain", icon: "🧠", label: "Brain" },
+    { key: "inventory", icon: "📦", label: "Inv" },
+    { key: "arena", icon: "⚔️", label: "Arena" },
+    { key: "market", icon: "🌐", label: "Market" },
+    { key: "partners", icon: "🤝", label: "Partners" },
+  ];
+  return (
+    <nav className="fixed bottom-0 inset-x-0 z-40 flex border-t border-gray-800 bg-gray-950/95 backdrop-blur-xl md:hidden bottom-nav-safe">
+      {tabs.map(({ key, icon, label }) => (
+        <button
+          key={key}
+          onClick={() => setTab(key)}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 text-xs transition-colors ${
+            tab === key ? "text-blue-400" : "text-gray-600 hover:text-gray-300"
+          }`}
+        >
+          <span className="text-lg leading-none">{icon}</span>
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main CollectPro component
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
-
   const aiAbort    = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -215,7 +907,6 @@ export default function CollectPro() {
   }, []);
 
   // ── Event bus — Supabase Realtime ──────────────────────────────────────────
-  // Any client mutation is broadcast here automatically (no manual sync needed)
 
   useEffect(() => {
     const channel = supabase
@@ -229,7 +920,6 @@ export default function CollectPro() {
           d({ t: "RT_PARTNER", event: payload.eventType, partner: (payload.new ?? payload.old) as Partner });
         })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, []);
 
@@ -237,16 +927,17 @@ export default function CollectPro() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [s.chat.messages]);
 
-  // ── Derived data (useMemo — not recomputed on every keystroke) ─────────────
+  // ── Derived data ───────────────────────────────────────────────────────────
 
   const stats = useMemo(() => computeStats(s.items), [s.items]);
 
   const filteredItems = useMemo(() => {
     const q = s.inv.search.toLowerCase();
     return s.items.filter((i) =>
-      (!q || i.name.toLowerCase().includes(q) ||
-       (i.card_set ?? "").toLowerCase().includes(q) ||
-       (i.franchise ?? "").toLowerCase().includes(q)) &&
+      (!q ||
+        i.name.toLowerCase().includes(q) ||
+        (i.card_set ?? "").toLowerCase().includes(q) ||
+        (i.franchise ?? "").toLowerCase().includes(q)) &&
       (!s.franchise || !!i.franchise)
     );
   }, [s.items, s.inv.search, s.franchise]);
@@ -257,9 +948,10 @@ export default function CollectPro() {
     arr.sort((a, b) => {
       const av = a[field] ?? "";
       const bv = b[field] ?? "";
-      const cmp = typeof av === "number" && typeof bv === "number"
-        ? av - bv
-        : String(av).localeCompare(String(bv), "he");
+      const cmp =
+        typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv), "he");
       return dir === "asc" ? cmp : -cmp;
     });
     return arr;
@@ -273,91 +965,123 @@ export default function CollectPro() {
   const totalPages = Math.max(1, Math.ceil(sortedItems.length / PAGE));
 
   const partnerStats = useMemo(
-    () => s.partners.map((p) => ({ partner: p, stats: computeStats(s.items.filter((i) => i.partner_id === p.id)) })),
+    () =>
+      s.partners.map((p) => ({
+        partner: p,
+        stats: computeStats(s.items.filter((i) => i.partner_id === p.id)),
+      })),
     [s.partners, s.items]
   );
 
-  // ── Portfolio context for AI (truncated to last 8 items for context window) ─
+  const portfolioCtx = useMemo(
+    () =>
+      JSON.stringify({
+        stats,
+        items: s.items.slice(0, 80).map((i) => ({
+          name: i.name,
+          set: i.card_set,
+          status: i.status,
+          buy: i.buy_price,
+          grading: i.grading_cost,
+          market: i.market_price,
+          sold: i.sell_price,
+          buy_date: i.buy_date,
+          partner: s.partners.find((p) => p.id === i.partner_id)?.name,
+        })),
+      }),
+    [s.items, s.partners, stats]
+  );
 
-  const portfolioCtx = useMemo(() => JSON.stringify({
-    stats,
-    items: s.items.slice(0, 80).map((i) => ({
-      name: i.name, set: i.card_set, status: i.status,
-      buy: i.buy_price, grading: i.grading_cost,
-      market: i.market_price, sold: i.sell_price,
-      buy_date: i.buy_date, partner: s.partners.find((p) => p.id === i.partner_id)?.name,
-    })),
-  }), [s.items, s.partners, stats]);
+  // ── Sort helpers ───────────────────────────────────────────────────────────
 
-  // ── Sort toggle ────────────────────────────────────────────────────────────
-
-  const toggleSort = useCallback((field: SortConfig["field"]) => {
-    d({
-      t: "INV_SORT",
-      s: s.inv.sort.field === field
-        ? { field, dir: s.inv.sort.dir === "asc" ? "desc" : "asc" }
-        : { field, dir: "asc" },
-    });
-  }, [s.inv.sort]);
+  const toggleSort = useCallback(
+    (field: SortConfig["field"]) => {
+      d({
+        t: "INV_SORT",
+        s:
+          s.inv.sort.field === field
+            ? { field, dir: s.inv.sort.dir === "asc" ? "desc" : "asc" }
+            : { field, dir: "asc" },
+      });
+    },
+    [s.inv.sort]
+  );
 
   const sortArrow = (field: SortConfig["field"]) =>
     s.inv.sort.field !== field ? " ↕" : s.inv.sort.dir === "asc" ? " ↑" : " ↓";
 
   // ── Item CRUD ──────────────────────────────────────────────────────────────
 
-  const saveItem = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    const f = s.inv.form;
-    if (!f.name.trim()) { toast.error("נדרש שם"); return; }
-    if (!f.buy_price || isNaN(+f.buy_price)) { toast.error("נדרש מחיר קנייה תקין"); return; }
-    if (!f.partner_id) { toast.error("נדרש שותף"); return; }
+  const saveItem = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const f = s.inv.form;
+      if (!f.name.trim()) { toast.error("Name is required"); return; }
+      if (!f.buy_price || isNaN(+f.buy_price)) { toast.error("Valid buy price required"); return; }
+      if (!f.partner_id) { toast.error("Partner is required"); return; }
 
-    const dup = s.items.some(
-      (i) => i.id !== s.inv.editId &&
-             i.name.toLowerCase() === f.name.toLowerCase() &&
-             i.partner_id === f.partner_id
-    );
-    if (dup) toast.warning(`"${f.name}" כבר קיים עבור שותף זה`);
+      const dup = s.items.some(
+        (i) =>
+          i.id !== s.inv.editId &&
+          i.name.toLowerCase() === f.name.toLowerCase() &&
+          i.partner_id === f.partner_id
+      );
+      if (dup) toast.warning(`"${f.name}" already exists for this partner`);
 
-    const payload = {
-      name: f.name.trim(), card_set: f.card_set || null, franchise: f.franchise || null,
-      condition: f.condition, buy_price: +f.buy_price, grading_cost: +(f.grading_cost) || 0,
-      market_price: f.market_price ? +f.market_price : null,
-      sell_price: null as number | null,
-      buy_date: f.buy_date || today(), status: f.status as ItemStatus,
-      partner_id: f.partner_id, notes: f.notes || null,
-      image_url: f.image_url || null,
-      psa_grade: f.psa_grade ? +f.psa_grade : null,
-    };
+      const payload = {
+        name: f.name.trim(),
+        card_set: f.card_set || null,
+        franchise: f.franchise || null,
+        condition: f.condition,
+        buy_price: +f.buy_price,
+        grading_cost: +(f.grading_cost) || 0,
+        market_price: f.market_price ? +f.market_price : null,
+        sell_price: null as number | null,
+        buy_date: f.buy_date || today(),
+        status: f.status as ItemStatus,
+        partner_id: f.partner_id,
+        notes: f.notes || null,
+        image_url: f.image_url || null,
+        psa_grade: f.psa_grade ? +f.psa_grade : null,
+      };
 
-    try {
-      if (s.inv.editId) {
-        const { error } = await supabase.from("coll_items").update(payload).eq("id", s.inv.editId);
-        if (error) throw error;
-        // Realtime will update state automatically
-        toast.success("פריט עודכן");
-      } else {
-        const id = crypto.randomUUID();
-        const { error } = await supabase.from("coll_items").insert({ ...payload, id });
-        if (error) throw error;
-        toast.success("פריט נוסף");
+      try {
+        if (s.inv.editId) {
+          const { error } = await supabase.from("coll_items").update(payload).eq("id", s.inv.editId);
+          if (error) throw error;
+          toast.success("Item updated");
+        } else {
+          const id = crypto.randomUUID();
+          const { error } = await supabase.from("coll_items").insert({ ...payload, id });
+          if (error) throw error;
+          toast.success("Item added");
+        }
+        d({ t: "INV_FORM_SHOW", show: false });
+        d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(f.partner_id) });
+      } catch (err: unknown) {
+        toast.error(`Error: ${(err as Error).message}`);
       }
-      d({ t: "INV_FORM_SHOW", show: false });
-      d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(f.partner_id) });
-    } catch (err: unknown) {
-      toast.error(`שגיאה: ${(err as Error).message}`);
-    }
-  }, [s.inv.form, s.inv.editId, s.items]);
+    },
+    [s.inv.form, s.inv.editId, s.items]
+  );
 
   const startEdit = useCallback((item: CollectionItem) => {
     d({
-      t: "INV_FORM_EDIT", id: item.id, form: {
-        name: item.name, card_set: item.card_set ?? "", franchise: item.franchise ?? "",
-        condition: item.condition, buy_price: String(item.buy_price),
+      t: "INV_FORM_EDIT",
+      id: item.id,
+      form: {
+        name: item.name,
+        card_set: item.card_set ?? "",
+        franchise: item.franchise ?? "",
+        condition: item.condition,
+        buy_price: String(item.buy_price),
         grading_cost: String(item.grading_cost ?? 0),
         market_price: item.market_price != null ? String(item.market_price) : "",
-        buy_date: item.buy_date, status: item.status, partner_id: item.partner_id,
-        notes: item.notes ?? "", image_url: item.image_url ?? "",
+        buy_date: item.buy_date,
+        status: item.status,
+        partner_id: item.partner_id,
+        notes: item.notes ?? "",
+        image_url: item.image_url ?? "",
         psa_grade: item.psa_grade != null ? String(item.psa_grade) : "",
       },
     });
@@ -369,48 +1093,99 @@ export default function CollectPro() {
     if (!target) { d({ t: "DEL_TARGET", id: null }); return; }
 
     const { error } = await supabase.from("coll_items").delete().eq("id", s.deleteTarget);
-    if (error) { toast.error(`שגיאה: ${error.message}`); d({ t: "DEL_TARGET", id: null }); return; }
+    if (error) { toast.error(`Error: ${error.message}`); d({ t: "DEL_TARGET", id: null }); return; }
 
-    // Realtime handles state update; set undo buffer
     d({ t: "UNDO_SET", u: { item: target, at: Date.now() } });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => d({ t: "UNDO_SET", u: null }), 30_000);
     d({ t: "DEL_TARGET", id: null });
-    toast("פריט נמחק — ניתן לשחזר תוך 30 שניות");
+    toast("Item deleted — you have 30s to undo");
   }, [s.deleteTarget, s.items]);
 
   const undoDelete = useCallback(async (item: CollectionItem) => {
     const { error } = await supabase.from("coll_items").insert(item);
-    if (error) { toast.error(`שגיאת שחזור: ${error.message}`); return; }
+    if (error) { toast.error(`Restore error: ${error.message}`); return; }
     d({ t: "UNDO_SET", u: null });
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    toast.success("פריט שוחזר");
+    toast.success("Item restored");
   }, []);
 
   const markSold = useCallback(async (item: CollectionItem) => {
-    const raw = window.prompt(`מחיר מכירה עבור "${item.name}":`, String(item.market_price ?? ""));
+    const raw = window.prompt(`Sale price for "${item.name}":`, String(item.market_price ?? ""));
     if (raw === null) return;
     const price = +raw;
-    if (isNaN(price) || price < 0) { toast.error("מחיר לא תקין"); return; }
+    if (isNaN(price) || price < 0) { toast.error("Invalid price"); return; }
     const soldAt = new Date().toISOString();
     const { error } = await supabase
       .from("coll_items")
       .update({ status: "sold", sell_price: price, sold_at: soldAt })
       .eq("id", item.id);
     if (error) { toast.error(error.message); return; }
-    const profit = price - (+item.buy_price) - (+(item.grading_cost ?? 0));
-    toast.success(`מכירה נרשמה · רווח: ${fmt$(profit)} (${fmtPct((profit / (+item.buy_price + +(item.grading_cost ?? 0))) * 100)})`);
+    const cost = itemCost(item);
+    const profit = price - cost;
+    toast.success(`Sale recorded · Profit: ${fmt$(profit)} (${fmtPct(cost > 0 ? (profit / cost) * 100 : 0)})`);
   }, []);
-
-  // ── Image upload ───────────────────────────────────────────────────────────
 
   const handleImage = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const compressed = await compressImage(file).catch(() => null);
-    if (!compressed) { toast.error("שגיאה בעיבוד תמונה"); return; }
+    if (!compressed) { toast.error("Image processing error"); return; }
     d({ t: "INV_FORM_PATCH", p: { image_url: compressed } });
   }, []);
+
+  // ── Arena handler ──────────────────────────────────────────────────────────
+
+  const addToArena = useCallback((id: string) => {
+    if (!s.arena.a) {
+      d({ t: "ARENA_SET", slot: "a", id });
+    } else if (!s.arena.b && s.arena.a !== id) {
+      d({ t: "ARENA_SET", slot: "b", id });
+    } else {
+      // Replace slot A
+      d({ t: "ARENA_SET", slot: "a", id });
+    }
+    d({ t: "SET_TAB", tab: "arena" });
+  }, [s.arena]);
+
+  // ── Batch handlers ─────────────────────────────────────────────────────────
+
+  const batchUpdateStatus = useCallback(async () => {
+    const statusOpts: ItemStatus[] = ["active", "grading", "sold"];
+    const newStatus = window.prompt(
+      `New status for ${s.inv.selected.length} items (active / grading / sold):`
+    ) as ItemStatus | null;
+    if (!newStatus || !statusOpts.includes(newStatus)) { toast.error("Invalid status"); return; }
+    const { error } = await supabase
+      .from("coll_items")
+      .update({ status: newStatus })
+      .in("id", s.inv.selected);
+    if (error) { toast.error(error.message); return; }
+    d({ t: "INV_SEL_CLEAR" });
+    toast.success(`${s.inv.selected.length} items updated to "${newStatus}"`);
+  }, [s.inv.selected]);
+
+  const batchUpdatePrice = useCallback(async () => {
+    const raw = window.prompt(`New market price for ${s.inv.selected.length} items ($):`);
+    if (raw === null) return;
+    const price = +raw;
+    if (isNaN(price) || price < 0) { toast.error("Invalid price"); return; }
+    const { error } = await supabase
+      .from("coll_items")
+      .update({ market_price: price })
+      .in("id", s.inv.selected);
+    if (error) { toast.error(error.message); return; }
+    d({ t: "INV_SEL_CLEAR" });
+    toast.success(`Market price updated for ${s.inv.selected.length} items`);
+  }, [s.inv.selected]);
+
+  const batchDelete = useCallback(async () => {
+    if (!window.confirm(`Delete ${s.inv.selected.length} items? This cannot be undone.`)) return;
+    const { error } = await supabase.from("coll_items").delete().in("id", s.inv.selected);
+    if (error) { toast.error(error.message); return; }
+    d({ t: "INV_SEL_CLEAR" });
+    toast.success(`${s.inv.selected.length} items deleted`);
+  }, [s.inv.selected]);
 
   // ── AI — Brain chat ────────────────────────────────────────────────────────
 
@@ -423,11 +1198,11 @@ export default function CollectPro() {
     d({ t: "CHAT_INPUT", v: "" });
     d({ t: "CHAT_BUSY", v: true });
 
-    // First message carries full portfolio context; subsequent carry last 6 messages
     const history = s.chat.messages.slice(-6);
-    const messages: ChatMessage[] = history.length === 0
-      ? [{ role: "user", content: `=== פורטפוליו ===\n${portfolioCtx}\n\n=== שאלה ===\n${text}` }]
-      : [...history, userMsg];
+    const messages: ChatMessage[] =
+      history.length === 0
+        ? [{ role: "user", content: `=== Portfolio ===\n${portfolioCtx}\n\n=== Question ===\n${text}` }]
+        : [...history, userMsg];
 
     aiAbort.current = new AbortController();
     try {
@@ -456,7 +1231,7 @@ export default function CollectPro() {
       );
       d({ t: "MKT_RESULT", v: result });
     } catch (err: unknown) {
-      if ((err as Error).message !== "ABORTED") toast.error(`סריקה: ${(err as Error).message}`);
+      if ((err as Error).message !== "ABORTED") toast.error(`Scan: ${(err as Error).message}`);
     } finally {
       d({ t: "MKT_BUSY", v: false });
     }
@@ -470,43 +1245,37 @@ export default function CollectPro() {
 
   // ── Partner CRUD ───────────────────────────────────────────────────────────
 
-  const addPartner = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!s.partnerForm.name.trim()) { toast.error("נדרש שם"); return; }
-    d({ t: "PF_BUSY", v: true });
-    const { error } = await supabase.from("coll_partners").insert({
-      id: crypto.randomUUID(),
-      name: s.partnerForm.name.trim(),
-      email: s.partnerForm.email.trim() || null,
-    });
-    d({ t: "PF_BUSY", v: false });
-    if (error) { toast.error(error.message); return; }
-    d({ t: "PF_PATCH", p: { name: "", email: "" } });
-    toast.success("שותף נוסף");
-  }, [s.partnerForm]);
+  const addPartner = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!s.partnerForm.name.trim()) { toast.error("Name is required"); return; }
+      d({ t: "PF_BUSY", v: true });
+      const { error } = await supabase.from("coll_partners").insert({
+        id: crypto.randomUUID(),
+        name: s.partnerForm.name.trim(),
+        email: s.partnerForm.email.trim() || null,
+      });
+      d({ t: "PF_BUSY", v: false });
+      if (error) { toast.error(error.message); return; }
+      d({ t: "PF_PATCH", p: { name: "", email: "" } });
+      toast.success("Partner added");
+    },
+    [s.partnerForm]
+  );
+
+  // ── Modal item ─────────────────────────────────────────────────────────────
+
+  const modalItem = s.modal ? s.items.find((i) => i.id === s.modal) ?? null : null;
+  const modalPartner = modalItem ? s.partners.find((p) => p.id === modalItem.partner_id) : undefined;
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Render helpers
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  const StatusBadge = ({ status }: { status: ItemStatus }) => {
-    const map: Record<ItemStatus, string> = {
-      active: "bg-emerald-900 text-emerald-300",
-      grading: "bg-yellow-900 text-yellow-300",
-      sold: "bg-blue-900 text-blue-300",
-    };
-    const label: Record<ItemStatus, string> = { active: "פעיל", grading: "גריידינג", sold: "נמכר" };
-    return <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${map[status]}`}>{label[status]}</span>;
-  };
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Loading state
+  // Loading
   // ─────────────────────────────────────────────────────────────────────────────
 
   if (s.loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-950 text-gray-400">
-        טוען…
+        Loading…
       </div>
     );
   }
@@ -518,42 +1287,58 @@ export default function CollectPro() {
   return (
     <div dir="rtl" className="min-h-screen bg-gray-950 text-gray-100 font-sans">
 
+      {/* ── Card detail modal ────────────────────────────────────────────────── */}
+      {modalItem && (
+        <CardDetailModal
+          item={modalItem}
+          partner={modalPartner}
+          onClose={() => d({ t: "SET_MODAL", id: null })}
+          onArena={(id) => { addToArena(id); d({ t: "SET_MODAL", id: null }); }}
+        />
+      )}
+
       {/* ── Delete confirmation ──────────────────────────────────────────────── */}
       <AlertDialog open={!!s.deleteTarget} onOpenChange={() => d({ t: "DEL_TARGET", id: null })}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>מחיקה בלתי הפיכה</AlertDialogTitle>
+            <AlertDialogTitle>Permanent Delete</AlertDialogTitle>
             <AlertDialogDescription>
-              פריט זה יימחק לצמיתות ממסד הנתונים. יש לך 30 שניות לשחזור לאחר המחיקה.
+              This item will be permanently deleted. You have 30 seconds to restore it after deletion.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>ביטול</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={confirmDelete}>
-              מחק
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* ── Undo toast bar ───────────────────────────────────────────────────── */}
+      {/* ── Undo bar ─────────────────────────────────────────────────────────── */}
       {s.undo && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-800 border border-gray-600 rounded-xl px-5 py-3 shadow-2xl text-sm">
-          <span>"{s.undo.item.name}" נמחק</span>
-          <Button size="sm" onClick={() => undoDelete(s.undo!.item)}>בטל מחיקה</Button>
-          <button className="text-gray-400 hover:text-white" onClick={() => { d({ t: "UNDO_SET", u: null }); if (undoTimer.current) clearTimeout(undoTimer.current); }}>✕</button>
+        <div className="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-800 border border-gray-600 rounded-xl px-5 py-3 shadow-2xl text-sm">
+          <span>"{s.undo.item.name}" deleted</span>
+          <Button size="sm" onClick={() => undoDelete(s.undo!.item)}>Undo</Button>
+          <button
+            className="text-gray-400 hover:text-white"
+            onClick={() => {
+              d({ t: "UNDO_SET", u: null });
+              if (undoTimer.current) clearTimeout(undoTimer.current);
+            }}
+          >✕</button>
         </div>
       )}
 
       {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-gray-900 via-blue-950 to-gray-900 border-b border-gray-800 px-6 py-4">
+      <div className="bg-gradient-to-r from-gray-900 via-blue-950 to-gray-900 border-b border-gray-800 px-4 py-4">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-xl font-extrabold text-white">CollectPro</h1>
-            <p className="text-xs text-gray-500 mt-0.5">ניהול פורטפוליו קלפים מסחריים</p>
+            <p className="text-xs text-gray-500 mt-0.5">TCG Card Portfolio Manager</p>
           </div>
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-            <span>פרנצ'ייז בלבד</span>
+            <span>Franchise only</span>
             <div
               onClick={() => d({ t: "TOGGLE_FRANCHISE" })}
               className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${s.franchise ? "bg-blue-600" : "bg-gray-700"}`}
@@ -564,29 +1349,29 @@ export default function CollectPro() {
         </div>
 
         {/* Stats row */}
-        <div className="flex flex-wrap gap-3 mt-4">
+        <div className="flex flex-wrap gap-2 mt-3">
           {[
-            { label: "השקעה כוללת (כולל גריידינג)", value: fmt$(stats.totalCost), color: "text-amber-400" },
-            { label: "הערכת שוק פעיל ⚠", value: fmt$(stats.estimatedValue), sub: "הערכה בלבד — לא ממומש", color: "text-blue-400" },
-            { label: "רווח/הפסד לא ממומש", value: fmt$(stats.unrealisedPnL), color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
-            { label: "רווח ממומש נטו", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-            { label: "ROI ממומש", value: fmtPct(stats.roiPct), sub: `${stats.soldCount} עסקאות`, color: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "Total Invested", value: fmt$(stats.totalCost), color: "text-amber-400" },
+            { label: "Active Market Est. ⚠", value: fmt$(stats.estimatedValue), sub: "estimate only", color: "text-blue-400" },
+            { label: "Unrealised P&L", value: fmt$(stats.unrealisedPnL), color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "Realised Profit", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "ROI", value: fmtPct(stats.roiPct), sub: `${stats.soldCount} sales`, color: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
           ].map((st) => (
-            <div key={st.label} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 flex-1 min-w-[130px]">
-              <div className="text-xs text-gray-500 mb-1">{st.label}</div>
-              <div className={`text-base font-bold ${st.color}`}>{st.value}</div>
+            <div key={st.label} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 flex-1 min-w-[110px]">
+              <div className="text-xs text-gray-500 mb-0.5 leading-tight">{st.label}</div>
+              <div className={`text-sm font-bold ${st.color}`}>{st.value}</div>
               {st.sub && <div className="text-xs text-amber-600 mt-0.5">{st.sub}</div>}
             </div>
           ))}
         </div>
       </div>
 
-      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
-      <div className="flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
-        {(["brain", "inventory", "roi", "market", "partners"] as Tab[]).map((tab) => {
+      {/* ── Desktop Tab bar (hidden on mobile) ──────────────────────────────── */}
+      <div className="hidden md:flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
+        {(["brain", "inventory", "roi", "arena", "market", "partners"] as Tab[]).map((tab) => {
           const labels: Record<Tab, string> = {
-            brain: "🧠 מוח", inventory: "📦 מלאי", roi: "📈 ROI",
-            market: "🌐 שוק", partners: "🤝 שותפים",
+            brain: "🧠 Brain", inventory: "📦 Inventory", roi: "📈 ROI",
+            arena: "⚔️ Arena", market: "🌐 Market", partners: "🤝 Partners",
           };
           return (
             <button
@@ -605,28 +1390,31 @@ export default function CollectPro() {
       </div>
 
       {/* ── Tab content ─────────────────────────────────────────────────────── */}
-      <div className="max-w-5xl mx-auto px-4 py-5">
+      <div className="max-w-5xl mx-auto px-3 py-4 pb-20 md:pb-5">
 
         {/* ══ BRAIN ══════════════════════════════════════════════════════════ */}
         {s.tab === "brain" && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="font-bold mb-1">🧠 יועץ אמת פורנזי</h2>
-            <p className="text-xs text-gray-500 mb-4">הניתוח מבוסס על נתוני הפורטפוליו שלך. שאל כל שאלה — כולל שאלות לא נוחות.</p>
+            <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
+            <p className="text-xs text-gray-500 mb-4">Analysis based on your portfolio data. Ask anything — including uncomfortable questions.</p>
 
             <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-3 p-1">
               {s.chat.messages.length === 0 && (
-                <p className="text-center text-gray-600 text-sm mt-10">התחל לשאול…</p>
+                <p className="text-center text-gray-600 text-sm mt-10">Start asking…</p>
               )}
               {s.chat.messages.map((m, i) => (
-                <div key={i} className={`max-w-[82%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
-                  m.role === "user"
-                    ? "self-start bg-gray-700 rounded-tl-sm"
-                    : "self-end bg-blue-900/60 rounded-tr-sm"
-                }`}>
+                <div
+                  key={i}
+                  className={`max-w-[82%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
+                    m.role === "user"
+                      ? "self-start bg-gray-700 rounded-tl-sm"
+                      : "self-end bg-blue-900/60 rounded-tr-sm"
+                  }`}
+                >
                   {m.content}
                 </div>
               ))}
-              {s.chat.busy && <div className="self-end text-sm text-gray-500 italic">מנתח…</div>}
+              {s.chat.busy && <div className="self-end text-sm text-gray-500 italic">Analyzing…</div>}
               <div ref={chatEndRef} />
             </div>
 
@@ -636,13 +1424,13 @@ export default function CollectPro() {
                 value={s.chat.input}
                 onChange={(e) => d({ t: "CHAT_INPUT", v: e.target.value })}
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
-                placeholder="שאל שאלה על הפורטפוליו…"
+                placeholder="Ask about your portfolio…"
                 disabled={s.chat.busy}
                 className="bg-gray-800 border-gray-700"
               />
               {s.chat.busy
-                ? <Button variant="destructive" onClick={cancelAI}>בטל</Button>
-                : <Button onClick={sendChat} disabled={!s.chat.input.trim()}>שלח</Button>
+                ? <Button variant="destructive" onClick={cancelAI}>Cancel</Button>
+                : <Button onClick={sendChat} disabled={!s.chat.input.trim()}>Send</Button>
               }
             </div>
           </div>
@@ -652,32 +1440,84 @@ export default function CollectPro() {
         {s.tab === "inventory" && (
           <div>
             {/* Toolbar */}
-            <div className="flex flex-wrap gap-2 mb-4 items-center">
+            <div className="flex flex-wrap gap-2 mb-3 items-center">
               <Input
                 dir="rtl"
-                className="flex-1 min-w-[180px] bg-gray-800 border-gray-700"
+                className="flex-1 min-w-[160px] bg-gray-800 border-gray-700"
                 value={s.inv.search}
                 onChange={(e) => d({ t: "INV_SEARCH", v: e.target.value })}
-                placeholder="🔍 חיפוש לפי שם, סט, פרנצ'ייז…"
+                placeholder="🔍 Search name, set, franchise…"
               />
-              <Button onClick={() => { d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(s.partners[0]?.id ?? "") }); }}>
-                + הוסף פריט
+              {/* View toggle */}
+              <div className="flex rounded-lg overflow-hidden border border-gray-700">
+                <button
+                  onClick={() => d({ t: "SET_VIEW", mode: "cards" })}
+                  className={`px-3 py-2 text-xs transition-colors ${s.viewMode === "cards" ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+                >
+                  Cards
+                </button>
+                <button
+                  onClick={() => d({ t: "SET_VIEW", mode: "table" })}
+                  className={`px-3 py-2 text-xs transition-colors ${s.viewMode === "table" ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+                >
+                  Table
+                </button>
+              </div>
+              <Button
+                onClick={() => d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(s.partners[0]?.id ?? "") })}
+              >
+                + Add
               </Button>
-              <Button variant="outline" onClick={() => exportCSV(sortedItems, s.partners)}>
-                ⬇ CSV
-              </Button>
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" onClick={() => exportCSV(sortedItems, s.partners)}>CSV</Button>
+                <Button variant="outline" size="sm" onClick={() => exportEbayCSV(sortedItems)}>eBay</Button>
+                <Button variant="outline" size="sm" onClick={() => exportCardmarketCSV(sortedItems)}>CM</Button>
+              </div>
             </div>
+
+            {/* Batch select all button */}
+            {sortedItems.length > 0 && (
+              <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
+                <button
+                  onClick={() => {
+                    if (s.inv.selected.length === sortedItems.length) {
+                      d({ t: "INV_SEL_CLEAR" });
+                    } else {
+                      d({ t: "INV_SEL_ALL", ids: sortedItems.map((i) => i.id) });
+                    }
+                  }}
+                  className="hover:text-white transition-colors"
+                >
+                  {s.inv.selected.length === sortedItems.length ? "Deselect all" : "Select all"}
+                </button>
+                {s.inv.selected.length > 0 && (
+                  <span className="text-blue-400">{s.inv.selected.length} selected</span>
+                )}
+              </div>
+            )}
 
             {/* Form */}
             {s.inv.showForm && (
-              <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4">
-                <h3 className="font-bold mb-4">{s.inv.editId ? "✏ עריכת פריט" : "➕ פריט חדש"}</h3>
+              <div className="bg-gray-900 border border-gray-700 rounded-xl p-4 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold">{s.inv.editId ? "✏ Edit Item" : "➕ New Item"}</h3>
+                  <button
+                    onClick={() => {
+                      const scan = mockScan();
+                      d({ t: "INV_FORM_PATCH", p: scan });
+                      toast.success("Quick Scan loaded mock card");
+                    }}
+                    className="scan-btn px-3 py-1.5 rounded-lg bg-gradient-to-r from-yellow-600 to-orange-600 text-white text-xs font-bold hover:from-yellow-500 hover:to-orange-500 transition-all shadow-lg"
+                  >
+                    ⚡ Quick Scan
+                  </button>
+                </div>
                 <form onSubmit={saveItem} className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
-                      { label: "שם *", key: "name", type: "text" },
-                      { label: "סט", key: "card_set", type: "text" },
-                      { label: "פרנצ'ייז", key: "franchise", type: "text" },
+                      { label: "Name *", key: "name", type: "text" },
+                      { label: "Set", key: "card_set", type: "text" },
+                      { label: "Franchise", key: "franchise", type: "text" },
                     ].map(({ label, key, type }) => (
                       <div key={key}>
                         <label className="text-xs text-gray-400 block mb-1">{label}</label>
@@ -694,41 +1534,45 @@ export default function CollectPro() {
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">מצב</label>
+                      <label className="text-xs text-gray-400 block mb-1">Condition</label>
                       <select
                         className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100"
                         value={s.inv.form.condition}
                         onChange={(e) => d({ t: "INV_FORM_PATCH", p: { condition: e.target.value } })}
                       >
-                        {["M","NM","LP","MP","HP","D","PSA"].map((c) => <option key={c}>{c}</option>)}
+                        {["M", "NM", "LP", "MP", "HP", "D", "PSA"].map((c) => (
+                          <option key={c}>{c}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">סטטוס</label>
+                      <label className="text-xs text-gray-400 block mb-1">Status</label>
                       <select
                         className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100"
                         value={s.inv.form.status}
                         onChange={(e) => d({ t: "INV_FORM_PATCH", p: { status: e.target.value as ItemStatus } })}
                       >
-                        <option value="active">פעיל</option>
-                        <option value="grading">גריידינג</option>
-                        <option value="sold">נמכר</option>
+                        <option value="active">Active</option>
+                        <option value="grading">Grading</option>
+                        <option value="sold">Sold</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">שותף *</label>
+                      <label className="text-xs text-gray-400 block mb-1">Partner *</label>
                       <select
                         className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-gray-100"
                         value={s.inv.form.partner_id}
                         onChange={(e) => d({ t: "INV_FORM_PATCH", p: { partner_id: e.target.value } })}
                         required
                       >
-                        <option value="">בחר…</option>
-                        {s.partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        <option value="">Select…</option>
+                        {s.partners.map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">תאריך קנייה</label>
+                      <label className="text-xs text-gray-400 block mb-1">Buy Date</label>
                       <Input
                         type="date"
                         className="bg-gray-800 border-gray-700"
@@ -740,15 +1584,17 @@ export default function CollectPro() {
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
-                      { label: "מחיר קנייה ($) *", key: "buy_price" },
-                      { label: "עלות גריידינג ($)", key: "grading_cost" },
-                      { label: "הערכת שוק ($) — לא מחיר מכירה", key: "market_price" },
-                      { label: "ציון PSA", key: "psa_grade" },
+                      { label: "Buy Price ($) *", key: "buy_price" },
+                      { label: "Grading Cost ($)", key: "grading_cost" },
+                      { label: "Market Est. ($)", key: "market_price" },
+                      { label: "PSA Grade", key: "psa_grade" },
                     ].map(({ label, key }) => (
                       <div key={key}>
                         <label className="text-xs text-gray-400 block mb-1">{label}</label>
                         <Input
-                          type="number" min="0" step="0.01"
+                          type="number"
+                          min="0"
+                          step="0.01"
                           className="bg-gray-800 border-gray-700"
                           value={s.inv.form[key as keyof ItemForm]}
                           onChange={(e) => d({ t: "INV_FORM_PATCH", p: { [key]: e.target.value } })}
@@ -758,7 +1604,7 @@ export default function CollectPro() {
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">הערות</label>
+                    <label className="text-xs text-gray-400 block mb-1">Notes</label>
                     <Input
                       dir="rtl"
                       className="bg-gray-800 border-gray-700"
@@ -768,109 +1614,231 @@ export default function CollectPro() {
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">תמונה (דחוסה אוטומטית)</label>
-                    <input type="file" accept="image/*" onChange={handleImage} className="text-sm text-gray-300" />
+                    <label className="text-xs text-gray-400 block mb-1">Image (auto-compressed)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImage}
+                      className="text-sm text-gray-300"
+                    />
                     {s.inv.form.image_url && (
-                      <img src={s.inv.form.image_url} alt="preview" className="mt-2 w-16 h-16 object-cover rounded-lg" />
+                      <img
+                        src={s.inv.form.image_url}
+                        alt="preview"
+                        className="mt-2 w-16 h-20 object-cover rounded-lg"
+                      />
                     )}
                   </div>
 
                   <div className="flex gap-2 pt-1">
-                    <Button type="submit">{s.inv.editId ? "עדכן" : "הוסף"}</Button>
-                    <Button type="button" variant="outline" onClick={() => d({ t: "INV_FORM_SHOW", show: false })}>ביטול</Button>
+                    <Button type="submit">{s.inv.editId ? "Update" : "Add"}</Button>
+                    <Button type="button" variant="outline" onClick={() => d({ t: "INV_FORM_SHOW", show: false })}>
+                      Cancel
+                    </Button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Table */}
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800">
-                    {[
-                      { label: "פריט",       field: "name"         as const },
-                      { label: "סטטוס",      field: "status"       as const },
-                      { label: "תאריך",      field: "buy_date"     as const },
-                      { label: "קנייה",      field: "buy_price"    as const },
-                      { label: "גריידינג",   field: "grading_cost" as const },
-                      { label: "הערכה",      field: "market_price" as const },
-                      { label: "מכירה",      field: "sell_price"   as const },
-                    ].map(({ label, field }) => (
-                      <th
-                        key={field}
-                        className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 cursor-pointer hover:text-white whitespace-nowrap select-none"
-                        onClick={() => toggleSort(field)}
-                      >
-                        {label}{sortArrow(field)}
+            {/* ── Cards View ── */}
+            {s.viewMode === "cards" && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {pagedItems.map((item) => (
+                  <CollectibleCard
+                    key={item.id}
+                    item={item}
+                    partner={s.partners.find((p) => p.id === item.partner_id)}
+                    selected={s.inv.selected.includes(item.id)}
+                    onSelect={(id) => d({ t: "INV_SEL_TOGGLE", id })}
+                    onEdit={startEdit}
+                    onDelete={(id) => d({ t: "DEL_TARGET", id })}
+                    onMarkSold={markSold}
+                    onArena={addToArena}
+                    onOpenModal={(id) => d({ t: "SET_MODAL", id })}
+                    arenaSlot={
+                      s.arena.a === item.id ? "a" : s.arena.b === item.id ? "b" : null
+                    }
+                  />
+                ))}
+                {pagedItems.length === 0 && (
+                  <div className="col-span-full text-center py-12 text-gray-600">
+                    {s.inv.search ? "No results found" : "No items — click Add to start"}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Table View ── */}
+            {s.viewMode === "table" && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="px-3 py-2.5 text-xs text-gray-400 w-8">
+                        <input
+                          type="checkbox"
+                          checked={s.inv.selected.length === sortedItems.length && sortedItems.length > 0}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              d({ t: "INV_SEL_ALL", ids: sortedItems.map((i) => i.id) });
+                            } else {
+                              d({ t: "INV_SEL_CLEAR" });
+                            }
+                          }}
+                          className="cursor-pointer"
+                        />
                       </th>
-                    ))}
-                    <th className="px-3 py-2.5 text-xs font-semibold text-gray-400 text-right">פעולות</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedItems.map((item) => {
-                    const cost   = +item.buy_price + +(item.grading_cost ?? 0);
-                    const profit = item.status === "sold" ? +(item.sell_price ?? 0) - cost : null;
-                    return (
-                      <tr key={item.id} className="border-b border-gray-800/50 hover:bg-white/[0.02]">
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            {item.image_url && (
-                              <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-md object-cover flex-shrink-0" />
-                            )}
-                            <div>
-                              <div className="font-semibold">{item.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
+                      {[
+                        { label: "Item", field: "name" as const },
+                        { label: "Status", field: "status" as const },
+                        { label: "Date", field: "buy_date" as const },
+                        { label: "Buy", field: "buy_price" as const },
+                        { label: "Grading", field: "grading_cost" as const },
+                        { label: "Market", field: "market_price" as const },
+                        { label: "Sale", field: "sell_price" as const },
+                      ].map(({ label, field }) => (
+                        <th
+                          key={field}
+                          className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 cursor-pointer hover:text-white whitespace-nowrap select-none"
+                          onClick={() => toggleSort(field)}
+                        >
+                          {label}{sortArrow(field)}
+                        </th>
+                      ))}
+                      <th className="px-3 py-2.5 text-xs font-semibold text-gray-400 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedItems.map((item) => {
+                      const cost   = +item.buy_price + +(item.grading_cost ?? 0);
+                      const profit = item.status === "sold" ? +(item.sell_price ?? 0) - cost : null;
+                      return (
+                        <tr key={item.id} className="border-b border-gray-800/50 hover:bg-white/[0.02]">
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={s.inv.selected.includes(item.id)}
+                              onChange={() => d({ t: "INV_SEL_TOGGLE", id: item.id })}
+                              className="cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              {item.image_url && (
+                                <img
+                                  src={item.image_url}
+                                  alt={item.name}
+                                  className="w-9 h-9 rounded-md object-cover flex-shrink-0"
+                                />
+                              )}
+                              <div>
+                                <div className="font-semibold">{item.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5"><StatusBadge status={item.status} /></td>
-                        <td className="px-3 py-2.5 text-xs text-gray-500">{item.buy_date}</td>
-                        <td className="px-3 py-2.5">{fmt$(item.buy_price)}</td>
-                        <td className="px-3 py-2.5 text-amber-400">{item.grading_cost ? fmt$(item.grading_cost) : <span className="text-gray-600">—</span>}</td>
-                        <td className="px-3 py-2.5 text-blue-400">{item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600">—</span>}</td>
-                        <td className="px-3 py-2.5">
-                          {item.status === "sold" && item.sell_price != null ? (
-                            <div>
-                              <div>{fmt$(item.sell_price)}</div>
-                              <div className={`text-xs ${profit! >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                {profit! >= 0 ? "+" : ""}{fmt$(profit!)}
+                          </td>
+                          <td className="px-3 py-2.5"><StatusBadge status={item.status} /></td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500">{item.buy_date}</td>
+                          <td className="px-3 py-2.5">{fmt$(item.buy_price)}</td>
+                          <td className="px-3 py-2.5 text-amber-400">
+                            {item.grading_cost ? fmt$(item.grading_cost) : <span className="text-gray-600">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-blue-400">
+                            {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {item.status === "sold" && item.sell_price != null ? (
+                              <div>
+                                <div>{fmt$(item.sell_price)}</div>
+                                <div className={`text-xs ${profit! >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {profit! >= 0 ? "+" : ""}{fmt$(profit!)}
+                                </div>
                               </div>
-                            </div>
-                          ) : <span className="text-gray-600">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex gap-1.5">
-                            {item.status !== "sold" && (
-                              <button onClick={() => markSold(item)} className="text-xs px-2 py-1 bg-emerald-900/60 text-emerald-300 rounded hover:bg-emerald-800 transition-colors" title="רשום מכירה">✓</button>
+                            ) : (
+                              <span className="text-gray-600">—</span>
                             )}
-                            <button onClick={() => startEdit(item)} className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors">✏</button>
-                            <button onClick={() => d({ t: "DEL_TARGET", id: item.id })} className="text-xs px-2 py-1 bg-red-900/60 text-red-300 rounded hover:bg-red-800 transition-colors">✕</button>
-                          </div>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex gap-1.5">
+                              {item.status !== "sold" && (
+                                <button
+                                  onClick={() => markSold(item)}
+                                  className="text-xs px-2 py-1 bg-emerald-900/60 text-emerald-300 rounded hover:bg-emerald-800 transition-colors"
+                                  title="Mark sold"
+                                >✓</button>
+                              )}
+                              <button
+                                onClick={() => startEdit(item)}
+                                className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
+                              >✏</button>
+                              <button
+                                onClick={() => d({ t: "DEL_TARGET", id: item.id })}
+                                className="text-xs px-2 py-1 bg-red-900/60 text-red-300 rounded hover:bg-red-800 transition-colors"
+                              >✕</button>
+                              <button
+                                onClick={() => addToArena(item.id)}
+                                className="text-xs px-2 py-1 bg-purple-900/60 text-purple-300 rounded hover:bg-purple-800 transition-colors"
+                                title="Arena"
+                              >⚔</button>
+                              <button
+                                onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                                className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
+                                title="Detail"
+                              >🔍</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {pagedItems.length === 0 && (
+                      <tr>
+                        <td colSpan={9} className="text-center py-10 text-gray-600">
+                          {s.inv.search ? "No results" : "No items — click Add"}
                         </td>
                       </tr>
-                    );
-                  })}
-                  {pagedItems.length === 0 && (
-                    <tr><td colSpan={8} className="text-center py-10 text-gray-600">
-                      {s.inv.search ? "לא נמצאו תוצאות" : "אין פריטים — לחץ על הוסף פריט"}
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
 
-              {totalPages > 1 && (
-                <div className="flex items-center justify-end gap-3 px-4 py-2.5 text-sm text-gray-500 border-t border-gray-800">
-                  <span>{sortedItems.length} פריטים</span>
-                  <button disabled={s.inv.page === 1} onClick={() => d({ t: "INV_PAGE", n: s.inv.page - 1 })} className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700">◀</button>
-                  <span>עמוד {s.inv.page} / {totalPages}</span>
-                  <button disabled={s.inv.page === totalPages} onClick={() => d({ t: "INV_PAGE", n: s.inv.page + 1 })} className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700">▶</button>
-                </div>
-              )}
-            </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-end gap-3 px-4 py-2.5 text-sm text-gray-500 border-t border-gray-800">
+                    <span>{sortedItems.length} items</span>
+                    <button
+                      disabled={s.inv.page === 1}
+                      onClick={() => d({ t: "INV_PAGE", n: s.inv.page - 1 })}
+                      className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700"
+                    >◀</button>
+                    <span>Page {s.inv.page} / {totalPages}</span>
+                    <button
+                      disabled={s.inv.page === totalPages}
+                      onClick={() => d({ t: "INV_PAGE", n: s.inv.page + 1 })}
+                      className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700"
+                    >▶</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pagination for cards view */}
+            {s.viewMode === "cards" && totalPages > 1 && (
+              <div className="flex items-center justify-end gap-3 px-4 py-2.5 text-sm text-gray-500 mt-2">
+                <span>{sortedItems.length} items</span>
+                <button
+                  disabled={s.inv.page === 1}
+                  onClick={() => d({ t: "INV_PAGE", n: s.inv.page - 1 })}
+                  className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700"
+                >◀</button>
+                <span>Page {s.inv.page} / {totalPages}</span>
+                <button
+                  disabled={s.inv.page === totalPages}
+                  onClick={() => d({ t: "INV_PAGE", n: s.inv.page + 1 })}
+                  className="px-2 py-1 rounded bg-gray-800 disabled:opacity-30 hover:bg-gray-700"
+                >▶</button>
+              </div>
+            )}
           </div>
         )}
 
@@ -879,10 +1847,10 @@ export default function CollectPro() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                { label: "השקעה כוללת (קנייה + גריידינג)", value: fmt$(stats.totalCost), cls: "text-amber-400" },
-                { label: "הכנסות מכירות", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
-                { label: "רווח נטו ממומש", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-                { label: "ROI ממומש", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "Total Invested (incl. grading)", value: fmt$(stats.totalCost), cls: "text-amber-400" },
+                { label: "Sale Revenue", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
+                { label: "Net Realised Profit", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "Realised ROI", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
               ].map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-500 mb-1">{st.label}</div>
@@ -892,11 +1860,11 @@ export default function CollectPro() {
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
-              <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm">פירוט עסקאות שנמכרו</div>
+              <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm">Sold Transactions</div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
-                    {["פריט","קנייה","גריידינג","עלות בסיס","מכירה","רווח נטו","ROI","שותף"].map((h) => (
+                    {["Item", "Buy", "Grading", "Base Cost", "Sale", "Net Profit", "ROI", "Partner"].map((h) => (
                       <th key={h} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400">{h}</th>
                     ))}
                   </tr>
@@ -917,12 +1885,16 @@ export default function CollectPro() {
                           {profit >= 0 ? "+" : ""}{fmt$(profit)}
                         </td>
                         <td className={`px-3 py-2.5 ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</td>
-                        <td className="px-3 py-2.5 text-gray-400 text-xs">{s.partners.find((p) => p.id === i.partner_id)?.name ?? "—"}</td>
+                        <td className="px-3 py-2.5 text-gray-400 text-xs">
+                          {s.partners.find((p) => p.id === i.partner_id)?.name ?? "—"}
+                        </td>
                       </tr>
                     );
                   })}
                   {s.items.filter((i) => i.status === "sold").length === 0 && (
-                    <tr><td colSpan={8} className="text-center py-8 text-gray-600">אין עסקאות שנמכרו עדיין</td></tr>
+                    <tr>
+                      <td colSpan={8} className="text-center py-8 text-gray-600">No sold transactions yet</td>
+                    </tr>
                   )}
                 </tbody>
               </table>
@@ -930,13 +1902,49 @@ export default function CollectPro() {
           </div>
         )}
 
+        {/* ══ ARENA ══════════════════════════════════════════════════════════ */}
+        {s.tab === "arena" && (
+          <div>
+            <h2 className="font-bold mb-1">⚔️ Card Arena</h2>
+            <p className="text-xs text-gray-500 mb-4">Compare two cards side by side. Pick cards from the grid below or use the ⚔ button in inventory.</p>
+
+            <ArenaView
+              items={s.items}
+              arenaA={s.arena.a}
+              arenaB={s.arena.b}
+              partners={s.partners}
+              dispatch={d}
+            />
+
+            {/* Item picker grid */}
+            {s.items.length > 0 && (
+              <div className="mt-6">
+                <div className="text-xs text-gray-500 mb-3 font-semibold">PICK CARDS FOR ARENA</div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                  {s.items.slice(0, 24).map((item) => (
+                    <CollectibleCard
+                      key={item.id}
+                      item={item}
+                      compact
+                      arenaSlot={
+                        s.arena.a === item.id ? "a" : s.arena.b === item.id ? "b" : null
+                      }
+                      onArena={addToArena}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ══ MARKET ═════════════════════════════════════════════════════════ */}
         {s.tab === "market" && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="font-bold mb-1">🌐 סריקת שוק — אמת פורנזית</h2>
+            <h2 className="font-bold mb-1">🌐 Market Scan — Forensic Truth</h2>
             <p className="text-xs text-gray-500 mb-4">
-              AI עם חיפוש אינטרנט. מחפש ב-eBay, TCGPlayer, PSA Registry ומציין מקורות.
-              תוצאות נשמרות אוטומטית לבסיס הידע.
+              AI with web search. Searches eBay, TCGPlayer, PSA Registry and cites sources.
+              Results are automatically saved to the knowledge base.
             </p>
 
             <div className="flex gap-2 mb-3">
@@ -948,7 +1956,7 @@ export default function CollectPro() {
                     s.market.mode === m ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"
                   }`}
                 >
-                  {m === "market" ? "🔍 מחירים" : "⚡ ארביטראז׳"}
+                  {m === "market" ? "🔍 Prices" : "⚡ Arbitrage"}
                 </button>
               ))}
             </div>
@@ -961,20 +1969,20 @@ export default function CollectPro() {
               onChange={(e) => d({ t: "MKT_QUERY", v: e.target.value })}
               placeholder={
                 s.market.mode === "market"
-                  ? "לדוגמה: מה מחיר PSA 10 Charizard Base Set 1st Edition?"
-                  : "לדוגמה: הזדמנויות ארביטראז׳ בקלפי One Piece Paramount War"
+                  ? "e.g. What is the price of PSA 10 Charizard Base Set 1st Edition?"
+                  : "e.g. Arbitrage opportunities in One Piece Paramount War cards"
               }
             />
 
             <div className="flex gap-2">
               {s.market.busy
-                ? <Button variant="destructive" onClick={cancelAI}>בטל סריקה</Button>
-                : <Button onClick={runScan} disabled={!s.market.query.trim()}>🔍 הפעל סריקה</Button>
+                ? <Button variant="destructive" onClick={cancelAI}>Cancel Scan</Button>
+                : <Button onClick={runScan} disabled={!s.market.query.trim()}>🔍 Run Scan</Button>
               }
             </div>
 
             {s.market.busy && (
-              <p className="text-sm text-gray-500 mt-3">סורק… (15–30 שניות)</p>
+              <p className="text-sm text-gray-500 mt-3">Scanning… (15–30 seconds)</p>
             )}
 
             {s.market.result && (
@@ -988,23 +1996,34 @@ export default function CollectPro() {
         {/* ══ PARTNERS ═══════════════════════════════════════════════════════ */}
         {s.tab === "partners" && (
           <div className="space-y-4">
-            {/* Add partner */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h3 className="font-bold mb-3">➕ הוסף שותף</h3>
+              <h3 className="font-bold mb-3">➕ Add Partner</h3>
               <form onSubmit={addPartner} className="flex flex-wrap gap-2 items-end">
                 <div className="flex-1 min-w-[150px]">
-                  <label className="text-xs text-gray-400 block mb-1">שם *</label>
-                  <Input dir="rtl" className="bg-gray-800 border-gray-700" value={s.partnerForm.name} onChange={(e) => d({ t: "PF_PATCH", p: { name: e.target.value } })} required />
+                  <label className="text-xs text-gray-400 block mb-1">Name *</label>
+                  <Input
+                    dir="rtl"
+                    className="bg-gray-800 border-gray-700"
+                    value={s.partnerForm.name}
+                    onChange={(e) => d({ t: "PF_PATCH", p: { name: e.target.value } })}
+                    required
+                  />
                 </div>
                 <div className="flex-1 min-w-[150px]">
-                  <label className="text-xs text-gray-400 block mb-1">אימייל</label>
-                  <Input type="email" className="bg-gray-800 border-gray-700" value={s.partnerForm.email} onChange={(e) => d({ t: "PF_PATCH", p: { email: e.target.value } })} />
+                  <label className="text-xs text-gray-400 block mb-1">Email</label>
+                  <Input
+                    type="email"
+                    className="bg-gray-800 border-gray-700"
+                    value={s.partnerForm.email}
+                    onChange={(e) => d({ t: "PF_PATCH", p: { email: e.target.value } })}
+                  />
                 </div>
-                <Button type="submit" disabled={s.addingPartner}>{s.addingPartner ? "מוסיף…" : "הוסף"}</Button>
+                <Button type="submit" disabled={s.addingPartner}>
+                  {s.addingPartner ? "Adding…" : "Add"}
+                </Button>
               </form>
             </div>
 
-            {/* Partner cards */}
             {partnerStats.map(({ partner, stats: ps }) => (
               <div key={partner.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
                 <div className="flex justify-between items-start mb-3">
@@ -1012,20 +2031,24 @@ export default function CollectPro() {
                     <div className="font-bold text-base">{partner.name}</div>
                     {partner.email && <div className="text-xs text-gray-500">{partner.email}</div>}
                     <div className="text-xs text-gray-600 mt-0.5">
-                      {ps.activeCount} פעיל · {ps.gradingCount} גריידינג · {ps.soldCount} נמכר
+                      {ps.activeCount} active · {ps.gradingCount} grading · {ps.soldCount} sold
                     </div>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => exportCSV(s.items.filter((i) => i.partner_id === partner.id), s.partners, `${partner.name}.csv`)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => exportCSV(s.items.filter((i) => i.partner_id === partner.id), s.partners, `${partner.name}.csv`)}
+                  >
                     ⬇ CSV
                   </Button>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                   {[
-                    { label: "השקעה (כולל גריידינג)", value: fmt$(ps.totalCost), cls: "text-amber-400" },
-                    { label: "הערכת שוק פעיל", value: fmt$(ps.estimatedValue), cls: "text-blue-400" },
-                    { label: "הכנסות מכירות", value: fmt$(ps.realisedRevenue), cls: "text-emerald-400" },
-                    { label: "רווח נטו + ROI", value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`, cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                    { label: "Total Invested", value: fmt$(ps.totalCost), cls: "text-amber-400" },
+                    { label: "Active Market Est.", value: fmt$(ps.estimatedValue), cls: "text-blue-400" },
+                    { label: "Sale Revenue", value: fmt$(ps.realisedRevenue), cls: "text-emerald-400" },
+                    { label: "Net Profit + ROI", value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`, cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
                   ].map((st) => (
                     <div key={st.label} className="bg-gray-800 rounded-lg p-3">
                       <div className="text-xs text-gray-500 mb-1">{st.label}</div>
@@ -1054,12 +2077,28 @@ export default function CollectPro() {
             ))}
 
             {s.partners.length === 0 && (
-              <div className="text-center py-12 text-gray-600">אין שותפים — הוסף שותף ראשון למעלה</div>
+              <div className="text-center py-12 text-gray-600">No partners — add the first one above</div>
             )}
           </div>
         )}
 
       </div>
+
+      {/* ── Batch bar ────────────────────────────────────────────────────────── */}
+      {s.inv.selected.length > 0 && (
+        <BatchBar
+          count={s.inv.selected.length}
+          onStatusUpdate={batchUpdateStatus}
+          onPriceUpdate={batchUpdatePrice}
+          onExport={() => exportCSV(s.items.filter((i) => s.inv.selected.includes(i.id)), s.partners)}
+          onDelete={batchDelete}
+          onClear={() => d({ t: "INV_SEL_CLEAR" })}
+        />
+      )}
+
+      {/* ── Mobile bottom nav ────────────────────────────────────────────────── */}
+      <BottomNav tab={s.tab} setTab={(tab) => d({ t: "SET_TAB", tab })} />
+
     </div>
   );
 }
