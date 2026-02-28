@@ -300,6 +300,25 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
+  // Quarterly performance: profit and sales count per calendar quarter
+  const quarterlyPerformance = useMemo(() => {
+    const map = new Map<string, { profit: number; count: number }>();
+    s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at).forEach(i => {
+      const dt = new Date(i.sold_at!);
+      const q = `Q${Math.ceil((dt.getMonth() + 1) / 3)} ${dt.getFullYear()}`;
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      const profit = +(i.sell_price!) - cost;
+      const entry = map.get(q) ?? { profit: 0, count: 0 };
+      map.set(q, { profit: entry.profit + profit, count: entry.count + 1 });
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => {
+        const [qa, ya] = a.split(" "), [qb, yb] = b.split(" ");
+        return +ya !== +yb ? +ya - +yb : +qa[1] - +qb[1];
+      })
+      .map(([quarter, { profit, count }]) => ({ quarter, profit, count }));
+  }, [s.items]);
+
   // Cumulative P&L: running total of realized profit sorted by sold_at date
   const cumulativePnL = useMemo(() => {
     const sold = s.items
@@ -601,15 +620,19 @@ export default function CollectPro() {
     [s.items]
   );
 
-  // Grading pipeline: items in grading with days in queue
+  // Grading pipeline: items in grading with days in queue + PSA expected profit
   const gradingPipeline = useMemo(() => {
     const now = Date.now();
+    const EST_FEE  = 25;   // fallback PSA fee if grading_cost not set
+    const EST_MULT = 2.5;  // conservative PSA 10 premium over raw market price
     return s.items
       .filter(i => i.status === "grading")
       .map(i => {
         const daysIn = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
-        const cost   = +i.buy_price + +(i.grading_cost ?? 0);
-        return { item: i, daysIn, cost, isStale: daysIn > 60 };
+        const cost   = +i.buy_price + +(i.grading_cost ?? EST_FEE);
+        const psaEstValue  = i.market_price != null ? i.market_price * EST_MULT : null;
+        const psaEstProfit = psaEstValue != null ? psaEstValue - cost : null;
+        return { item: i, daysIn, cost, isStale: daysIn > 60, psaEstValue, psaEstProfit };
       })
       .sort((a, b) => b.daysIn - a.daysIn);
   }, [s.items]);
@@ -2200,6 +2223,12 @@ export default function CollectPro() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0 text-right">
                         <span className="text-xs text-gray-500">{fmt$(cost)}</span>
+                        {psaEstProfit != null && (
+                          <span className={`text-xs font-semibold ${psaEstProfit >= 0 ? "text-emerald-500" : "text-red-400"}`}
+                            title={`Est. PSA value: ${fmt$(psaEstValue!)} · Est. profit: ${fmt$(psaEstProfit)}`}>
+                            est.{psaEstProfit >= 0 ? "+" : ""}{fmt$(psaEstProfit)}
+                          </span>
+                        )}
                         <span className={`text-xs font-mono font-semibold ${isStale ? "text-red-400" : daysIn > 30 ? "text-amber-400" : "text-gray-400"}`}>
                           {daysIn}d
                         </span>
@@ -3511,6 +3540,29 @@ export default function CollectPro() {
                     />
                     <Area type="monotone" dataKey="cumulative" stroke="#10b981" strokeWidth={2} fill="url(#pnlGrad)" dot={false} />
                   </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* ── Quarterly Performance ───────────────────────────────────── */}
+            {quarterlyPerformance.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Quarterly Performance</p>
+                <ResponsiveContainer width="100%" height={130}>
+                  <BarChart data={quarterlyPerformance} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="quarter" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
+                    <Tooltip
+                      formatter={(v: number, name: string) => [name === "count" ? `${v} sales` : fmt$(v), name === "count" ? "Sales" : "Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Bar dataKey="profit" name="profit" radius={[3, 3, 0, 0]}>
+                      {quarterlyPerformance.map((entry, i) => (
+                        <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
