@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, ComposedChart, Line } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, ComposedChart, Line, ReferenceLine } from "recharts";
 
 import type {
   CollectionItem,
@@ -3060,6 +3060,16 @@ export default function CollectPro() {
                                     ? <span className="text-blue-400 text-xs" title={item.notes}>👁</span>
                                     : <span className="text-gray-600 text-xs" title={item.notes}>📝</span>
                                   )}
+                                  {(() => {
+                                    const sc = sellScores.find(x => x.item.id === item.id);
+                                    if (!sc || sc.score < 60) return null;
+                                    return (
+                                      <span
+                                        className={`text-[9px] font-bold px-1 py-0.5 rounded-full leading-none ${sc.score >= 80 ? "bg-emerald-700/80 text-emerald-100" : "bg-blue-700/80 text-blue-100"}`}
+                                        title={`Sell score: ${sc.score}/100`}
+                                      >{sc.score}</span>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="text-xs text-gray-500">
                                   {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
@@ -3557,6 +3567,7 @@ export default function CollectPro() {
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
+                    <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
                     <Bar dataKey="profit" name="profit" radius={[3, 3, 0, 0]}>
                       {quarterlyPerformance.map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
