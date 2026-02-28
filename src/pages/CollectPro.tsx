@@ -300,6 +300,23 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
+  // Cumulative P&L: running total of realized profit sorted by sold_at date
+  const cumulativePnL = useMemo(() => {
+    const sold = s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .sort((a, b) => new Date(a.sold_at!).getTime() - new Date(b.sold_at!).getTime());
+    if (sold.length < 2) return [];
+    let running = 0;
+    return sold.map(i => {
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      running += +(i.sell_price!) - cost;
+      return {
+        date: new Date(i.sold_at!).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        cumulative: running,
+      };
+    });
+  }, [s.items]);
+
   // Annual profit projection: extrapolate from trailing 90-day profit
   const annualProjection = useMemo(() => {
     const now = Date.now();
@@ -1777,6 +1794,7 @@ export default function CollectPro() {
                 { label: "Grading", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} invested` },
                 { label: "Sold", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} profit` },
                 { label: "Portfolio", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} invested` },
+                ...(thisMonth ? [{ label: "This Month", value: `${fmt$(thisMonth.profit)}`, cls: thisMonth.profit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${thisMonth.sold} sold · ${thisMonth.bought} bought` }] : []),
               ].map(({ label, value, cls, sub }) => (
                 <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5">
                   <div className="text-xs text-gray-500 mb-0.5">{label}</div>
@@ -3270,6 +3288,9 @@ export default function CollectPro() {
                 ...(winRate ? [
                   { label: "🎯 Win Rate", value: `${winRate.wins}/${winRate.total} (${winRate.pct.toFixed(0)}%)`, cls: winRate.pct >= 50 ? "text-emerald-400" as const : "text-amber-400" as const },
                 ] : []),
+                ...(monthlyScoreboard ? [
+                  { label: "📅 Green Months", value: `${monthlyScoreboard.green}/${monthlyScoreboard.total}`, cls: monthlyScoreboard.green >= monthlyScoreboard.red ? "text-emerald-400" as const : "text-amber-400" as const },
+                ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-500 mb-1">{st.label}</div>
@@ -3465,6 +3486,57 @@ export default function CollectPro() {
                         dot={false} strokeDasharray="4 2" connectNulls={false} />
                     )}
                   </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* ── Cumulative P&L Curve ─────────────────────────────────── */}
+            {cumulativePnL.length >= 3 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Cumulative Realized P&L</p>
+                <ResponsiveContainer width="100%" height={140}>
+                  <AreaChart data={cumulativePnL} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
+                    <Tooltip
+                      formatter={(v: number) => [fmt$(v), "Cumulative profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Area type="monotone" dataKey="cumulative" stroke="#10b981" strokeWidth={2} fill="url(#pnlGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* ── Franchise ROI ─────────────────────────────────────────── */}
+            {franchiseBreakdown.filter(f => f.sold > 0).length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Realized Profit by Franchise</p>
+                <ResponsiveContainer width="100%" height={Math.max(100, franchiseBreakdown.filter(f => f.sold > 0).length * 30)}>
+                  <BarChart
+                    data={franchiseBreakdown.filter(f => f.sold > 0).sort((a, b) => b.profit - a.profit)}
+                    layout="vertical"
+                    margin={{ top: 0, right: 48, left: 0, bottom: 0 }}
+                  >
+                    <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} />
+                    <YAxis type="category" dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
+                    <Tooltip
+                      formatter={(v: number) => [fmt$(v), "Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                    />
+                    <Bar dataKey="profit" radius={[0, 4, 4, 0]}>
+                      {franchiseBreakdown.filter(f => f.sold > 0).sort((a, b) => b.profit - a.profit).map((entry, i) => (
+                        <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
@@ -4098,11 +4170,18 @@ export default function CollectPro() {
                       { label: "Sale Revenue",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
                       { label: "Net Profit + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
                         cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-                      ...(ps.soldCount > 0 ? [{
-                        label: "Avg Sale Margin",
-                        value: fmtPct(ps.realisedRevenue > 0 ? (ps.realisedProfit / ps.realisedRevenue) * 100 : 0),
-                        cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400",
-                      }] : []),
+                      ...(ps.soldCount > 0 ? (() => {
+                        const totalHold = soldItems.reduce((acc, i) => {
+                          if (!i.sold_at) return acc;
+                          return acc + Math.round((new Date(i.sold_at).getTime() - new Date(i.buy_date).getTime()) / 86400000);
+                        }, 0);
+                        const avgHold = soldItems.length > 0 ? Math.round(totalHold / soldItems.length) : 0;
+                        const margin = ps.realisedRevenue > 0 ? (ps.realisedProfit / ps.realisedRevenue) * 100 : 0;
+                        return [
+                          { label: "Avg Sale Margin", value: fmtPct(margin), cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                          { label: "Avg Hold Time", value: `${avgHold}d`, cls: "text-indigo-400" },
+                        ];
+                      })() : []),
                     ] as { label: string; value: string; cls: string }[]).map(st => (
                       <div key={st.label} className="bg-gray-800 rounded-lg p-3">
                         <div className="text-xs text-gray-500 mb-1">{st.label}</div>
