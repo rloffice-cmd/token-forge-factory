@@ -56,7 +56,8 @@ import GradingStudio from "@/components/collectpro/GradingStudio";
 import CollectibleCard from "@/components/collectpro/CollectibleCard";
 import CardDetailModal from "@/components/collectpro/CardDetailModal";
 import { ArenaTab } from "@/components/collectpro/Arena";
-import { SellDialog, BatchOperationModal, BatchPriceRefreshModal } from "@/components/collectpro/Modals";
+import { SellDialog, BatchOperationModal, BatchPriceRefreshModal, ImportCSVModal } from "@/components/collectpro/Modals";
+import type { ItemInsertRow } from "@/lib/collectpro/importcsv";
 import AdminPanel from "@/components/collectpro/AdminPanel";
 import { BatchBar, BottomNav } from "@/components/collectpro/Navigation";
 import { StatusBadge } from "@/components/collectpro/StatusBadge";
@@ -80,6 +81,9 @@ export default function CollectPro() {
   const [statusFilter,        setStatusFilter]        = useState<"all" | ItemStatus>("all");
   const [franchiseFilterInv,  setFranchiseFilterInv]  = useState<string | null>(null);
   const [scanHistory,         setScanHistory]         = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
+  const [showImportCSV,       setShowImportCSV]       = useState(false);
+  const [inlineEditId,        setInlineEditId]        = useState<string | null>(null);
+  const [inlineEditVal,       setInlineEditVal]       = useState("");
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -750,6 +754,34 @@ export default function CollectPro() {
     toast.success(`${s.inv.selected.length} items reassigned to ${partnerName}`);
   }, [s.inv.selected, s.partners]);
 
+  const executeImportCSV = useCallback(async (rows: ItemInsertRow[]) => {
+    if (rows.length === 0) return;
+    const { error } = await supabase.from("coll_items").insert(rows);
+    if (error) { toast.error(`Import error: ${error.message}`); throw error; }
+    await refetch();
+    toast.success(`${rows.length} item${rows.length !== 1 ? "s" : ""} imported`);
+  }, [refetch]);
+
+  const saveInlinePrice = useCallback(async (itemId: string, rawVal: string) => {
+    setInlineEditId(null);
+    const price = parseFloat(rawVal);
+    if (isNaN(price) || price < 0) return;
+    const item = s.items.find(i => i.id === itemId);
+    if (!item) return;
+    // Optimistic update
+    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, market_price: price, updated_at: new Date().toISOString() } });
+    const { error } = await supabase.from("coll_items").update({ market_price: price }).eq("id", itemId);
+    if (error) {
+      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      toast.error(error.message);
+      return;
+    }
+    supabase.from("cp_price_history").insert({
+      item_id: itemId, price, source: "manual", note: "Inline price edit",
+    }).then(() => {});
+    toast.success("Market price updated");
+  }, [s.items]);
+
   // ── AI — Brain chat ────────────────────────────────────────────────────────
 
   const sendChatMessage = useCallback(async (text: string) => {
@@ -1373,6 +1405,7 @@ export default function CollectPro() {
                 <Button variant="outline" size="sm" onClick={() => exportCSV(sortedItems, s.partners)}>CSV</Button>
                 <Button variant="outline" size="sm" onClick={() => exportEbayCSV(sortedItems)}>eBay</Button>
                 <Button variant="outline" size="sm" onClick={() => exportCardmarketCSV(sortedItems)}>CM</Button>
+                <Button variant="outline" size="sm" onClick={() => setShowImportCSV(true)} title="Import CSV">📥</Button>
               </div>
               <div className="group relative">
                 <button className="w-6 h-6 rounded-full bg-gray-800 text-gray-500 hover:text-white text-xs font-bold flex items-center justify-center transition-colors" title="Keyboard shortcuts">?</button>
@@ -1751,13 +1784,44 @@ export default function CollectPro() {
                             </button>
                           </td>
                           <td className="px-3 py-2.5"><StatusBadge status={item.status} /></td>
-                          <td className="px-3 py-2.5 text-xs text-gray-500">{item.buy_date}</td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500">
+                            {item.buy_date}
+                            {(() => {
+                              const ageDays = Math.round((Date.now() - new Date(item.buy_date).getTime()) / 86400000);
+                              if (item.status === "sold") return null;
+                              const cls = ageDays <= 30 ? "text-gray-600" : ageDays <= 90 ? "text-amber-600" : "text-red-600";
+                              return <div className={`font-mono text-xs mt-0.5 ${cls}`}>{ageDays}d old</div>;
+                            })()}
+                          </td>
                           <td className="px-3 py-2.5">{fmt$(item.buy_price)}</td>
                           <td className="px-3 py-2.5 text-amber-400">
                             {item.grading_cost ? fmt$(item.grading_cost) : <span className="text-gray-600">—</span>}
                           </td>
-                          <td className="px-3 py-2.5 text-blue-400">
-                            {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600">—</span>}
+                          <td className="px-3 py-2.5">
+                            {inlineEditId === item.id ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                autoFocus
+                                value={inlineEditVal}
+                                onChange={e => setInlineEditVal(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") saveInlinePrice(item.id, inlineEditVal);
+                                  if (e.key === "Escape") setInlineEditId(null);
+                                }}
+                                className="w-20 bg-gray-800 border border-blue-600 rounded px-2 py-0.5 text-xs text-blue-300 focus:outline-none"
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => { setInlineEditId(item.id); setInlineEditVal(item.market_price != null ? String(item.market_price) : ""); }}
+                                className="text-blue-400 hover:text-blue-300 transition-colors"
+                                title="Click to edit market price"
+                              >
+                                {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600 text-xs">+ price</span>}
+                              </button>
+                            )}
                           </td>
                           <td className="px-3 py-2.5">
                             {item.status === "sold" && item.sell_price != null ? (
@@ -2410,6 +2474,16 @@ export default function CollectPro() {
         <BatchPriceRefreshModal
           items={batchPriceRefreshItems}
           onClose={() => setBatchPriceRefreshItems(null)}
+        />
+      )}
+
+      {/* ── CSV Import modal ──────────────────────────────────────────────────── */}
+      {showImportCSV && (
+        <ImportCSVModal
+          partners={s.partners}
+          defaultPartnerId={s.partners[0]?.id ?? ""}
+          onImport={executeImportCSV}
+          onClose={() => setShowImportCSV(false)}
         />
       )}
 

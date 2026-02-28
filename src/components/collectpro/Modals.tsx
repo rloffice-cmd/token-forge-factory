@@ -4,6 +4,8 @@ import type { CollectionItem, ItemStatus, Partner } from "@/lib/collectpro/types
 import { itemCost } from "@/lib/collectpro/helpers";
 import { fmt$, fmtPct } from "@/lib/collectpro/stats";
 import { callAI, buildMarketPricePrompt, parseAIPrice, saveMarketPrice } from "@/lib/collectpro/ai";
+import { parseImportCSV, toInsertRows } from "@/lib/collectpro/importcsv";
+import type { ParsedImportRow, ItemInsertRow } from "@/lib/collectpro/importcsv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -443,6 +445,190 @@ export function BatchPriceRefreshModal({
           </div>
           {!done && !running && (
             <p className="text-xs text-gray-600 text-center">Each item takes ~15–30s · {items.length} items total</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ImportCSVModal
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function ImportCSVModal({
+  partners,
+  defaultPartnerId,
+  onImport,
+  onClose,
+}: {
+  partners: Partner[];
+  defaultPartnerId: string;
+  onImport: (rows: ItemInsertRow[]) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [rows,     setRows]     = useState<ParsedImportRow[]>([]);
+  const [filename, setFilename] = useState("");
+  const [busy,     setBusy]     = useState(false);
+  const [done,     setDone]     = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFilename(file.name);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setRows(parseImportCSV(text));
+      setDone(false);
+    };
+    reader.readAsText(file, "utf-8");
+  };
+
+  const validRows = rows.filter(r => !r.error && r.name);
+  const errorRows = rows.filter(r => !!r.error);
+
+  const handleImport = async () => {
+    if (validRows.length === 0) return;
+    setBusy(true);
+    const inserts = toInsertRows(validRows, partners, defaultPartnerId);
+    try {
+      await onImport(inserts);
+      setDone(true);
+    } catch {
+      // onImport shows the toast
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+      onClick={!busy ? onClose : undefined}
+    >
+      <div
+        className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="font-bold text-white">📥 Import CSV</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Import from a CollectPro-exported CSV file</p>
+          </div>
+          {!busy && (
+            <button onClick={onClose} className="text-gray-500 hover:text-white text-xl">✕</button>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 p-5 space-y-4">
+          {/* File picker */}
+          {!done && (
+            <div
+              className="border-2 border-dashed border-gray-700 rounded-xl p-6 text-center cursor-pointer hover:border-blue-600 transition-colors"
+              onClick={() => fileRef.current?.click()}
+            >
+              <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={handleFile} />
+              <div className="text-3xl mb-2">📄</div>
+              {filename ? (
+                <p className="text-sm text-gray-300 font-medium">{filename}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-400">Click to select a CSV file</p>
+                  <p className="text-xs text-gray-600 mt-1">Must match CollectPro export format</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Summary counts */}
+          {rows.length > 0 && !done && (
+            <div className="flex gap-3">
+              <div className="flex-1 bg-emerald-900/20 border border-emerald-900/40 rounded-lg py-2 text-center">
+                <div className="font-bold text-emerald-400 text-lg">{validRows.length}</div>
+                <div className="text-gray-500 text-xs">ready to import</div>
+              </div>
+              <div className="flex-1 bg-red-900/20 border border-red-900/40 rounded-lg py-2 text-center">
+                <div className="font-bold text-red-400 text-lg">{errorRows.length}</div>
+                <div className="text-gray-500 text-xs">with errors (skipped)</div>
+              </div>
+            </div>
+          )}
+
+          {/* Preview table */}
+          {validRows.length > 0 && !done && (
+            <div className="bg-gray-800/60 rounded-xl overflow-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    {["Name", "Status", "Partner", "Buy ($)", "Market ($)"].map(h => (
+                      <th key={h} className="px-3 py-2 text-left text-gray-400 font-medium whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {validRows.slice(0, 25).map((r, idx) => (
+                    <tr key={idx} className="border-b border-gray-700/50">
+                      <td className="px-3 py-1.5 font-medium max-w-[160px] truncate">{r.name}</td>
+                      <td className="px-3 py-1.5 text-gray-400">{r.status}</td>
+                      <td className="px-3 py-1.5 text-gray-400 max-w-[90px] truncate">{r.partner_name || "—"}</td>
+                      <td className="px-3 py-1.5">{r.buy_price > 0 ? fmt$(r.buy_price) : "—"}</td>
+                      <td className="px-3 py-1.5 text-blue-400">{r.market_price != null ? fmt$(r.market_price) : "—"}</td>
+                    </tr>
+                  ))}
+                  {validRows.length > 25 && (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-2 text-center text-gray-600">
+                        … and {validRows.length - 25} more rows
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Error rows */}
+          {errorRows.length > 0 && !done && (
+            <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-3 space-y-1">
+              <div className="text-xs font-semibold text-red-400 mb-2">Rows with errors (will be skipped)</div>
+              {errorRows.slice(0, 10).map((r, idx) => (
+                <div key={idx} className="text-xs text-red-300">{r.name || "(empty)"}: {r.error}</div>
+              ))}
+              {errorRows.length > 10 && (
+                <div className="text-xs text-gray-600">… and {errorRows.length - 10} more</div>
+              )}
+            </div>
+          )}
+
+          {/* Success state */}
+          {done && (
+            <div className="text-center py-8">
+              <div className="text-4xl mb-3">✅</div>
+              <p className="font-bold text-white text-lg">{validRows.length} items imported!</p>
+              <p className="text-sm text-gray-500 mt-1">They'll appear in your inventory shortly.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-800 shrink-0 flex gap-2">
+          {!done ? (
+            <>
+              <Button
+                className="flex-1"
+                disabled={validRows.length === 0 || busy}
+                onClick={handleImport}
+              >
+                {busy ? "Importing…" : `Import ${validRows.length} item${validRows.length !== 1 ? "s" : ""}`}
+              </Button>
+              <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+            </>
+          ) : (
+            <Button className="flex-1" onClick={onClose}>Close</Button>
           )}
         </div>
       </div>
