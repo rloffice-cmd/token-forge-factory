@@ -1224,6 +1224,17 @@ export default function CollectPro() {
                 <Button variant="outline" size="sm" onClick={() => exportEbayCSV(sortedItems)}>eBay</Button>
                 <Button variant="outline" size="sm" onClick={() => exportCardmarketCSV(sortedItems)}>CM</Button>
               </div>
+              <div className="group relative">
+                <button className="w-6 h-6 rounded-full bg-gray-800 text-gray-500 hover:text-white text-xs font-bold flex items-center justify-center transition-colors" title="Keyboard shortcuts">?</button>
+                <div className="absolute right-0 top-8 z-30 bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-gray-400 whitespace-nowrap shadow-xl hidden group-hover:block">
+                  <div className="font-semibold text-gray-300 mb-1.5">Keyboard shortcuts</div>
+                  <div className="space-y-1">
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">/</kbd> or <kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">s</kbd> — Focus search</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">n</kbd> — New item</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">Esc</kbd> — Close form</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Status filter chips */}
@@ -1435,20 +1446,31 @@ export default function CollectPro() {
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">Image (auto-compressed)</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImage}
-                      className="text-sm text-gray-300"
-                    />
-                    {s.inv.form.image_url && (
-                      <img
-                        src={s.inv.form.image_url}
-                        alt="preview"
-                        className="mt-2 w-16 h-20 object-cover rounded-lg"
-                      />
-                    )}
+                    <label className="text-xs text-gray-400 block mb-1">Image</label>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1 space-y-1.5">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImage}
+                          className="text-xs text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-gray-300 hover:file:bg-gray-600"
+                        />
+                        <Input
+                          type="url"
+                          className="bg-gray-800 border-gray-700 text-xs"
+                          placeholder="…or paste image URL (https://…)"
+                          value={s.inv.form.image_url.startsWith("data:") ? "" : s.inv.form.image_url}
+                          onChange={(e) => d({ t: "INV_FORM_PATCH", p: { image_url: e.target.value } })}
+                        />
+                      </div>
+                      {s.inv.form.image_url && (
+                        <img
+                          src={s.inv.form.image_url}
+                          alt="preview"
+                          className="w-12 h-16 object-cover rounded-lg flex-shrink-0"
+                        />
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex gap-2 pt-1">
