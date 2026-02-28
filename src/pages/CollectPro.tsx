@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 import type {
   CollectionItem,
@@ -76,6 +76,7 @@ export default function CollectPro() {
   const [gradingForItem,        setGradingForItem]        = useState<CollectionItem | null>(null);
   const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
+  const [statusFilter,     setStatusFilter]     = useState<"all" | ItemStatus>("all");
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -177,6 +178,75 @@ export default function CollectPro() {
       .slice(0, 5);
   }, [s.items]);
 
+  const worstPerformers = useMemo(() => {
+    return s.items
+      .filter(i => +i.buy_price > 0)
+      .map(i => {
+        const cost   = +i.buy_price + +(i.grading_cost ?? 0);
+        const val    = i.status === "sold" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
+        const profit = val - cost;
+        const roi    = cost > 0 ? (profit / cost) * 100 : 0;
+        return { item: i, roi, profit };
+      })
+      .sort((a, b) => a.roi - b.roi)
+      .slice(0, 5);
+  }, [s.items]);
+
+  const avgHoldDays = useMemo(() => {
+    const sold = s.items.filter(i => i.status === "sold" && i.sold_at);
+    if (sold.length === 0) return null;
+    const total = sold.reduce((acc, i) => {
+      const days = (new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000;
+      return acc + days;
+    }, 0);
+    return Math.round(total / sold.length);
+  }, [s.items]);
+
+  const monthlyRevenue = useMemo(() => {
+    const map = new Map<string, { revenue: number; profit: number }>();
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .forEach(i => {
+        const month = new Date(i.sold_at!).toLocaleDateString("en-US", { year: "numeric", month: "short" });
+        const cost  = +i.buy_price + +(i.grading_cost ?? 0);
+        const entry = map.get(month) ?? { revenue: 0, profit: 0 };
+        map.set(month, {
+          revenue: entry.revenue + +(i.sell_price!),
+          profit:  entry.profit  + (+(i.sell_price!) - cost),
+        });
+      });
+    return [...map.entries()]
+      .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+      .map(([month, data]) => ({ month, ...data }));
+  }, [s.items]);
+
+  const portfolioAlerts = useMemo(() => {
+    const alerts: { level: "warn" | "info"; msg: string }[] = [];
+    const noPrice = s.items.filter(i => i.status === "active" && i.market_price == null);
+    if (noPrice.length > 0) alerts.push({
+      level: "warn",
+      msg: `${noPrice.length} active card${noPrice.length > 1 ? "s have" : " has"} no market price — portfolio estimate may be inaccurate`,
+    });
+    const now = Date.now();
+    const longGrading = s.items.filter(i => {
+      if (i.status !== "grading") return false;
+      return (now - new Date(i.buy_date).getTime()) / 86400000 > 60;
+    });
+    if (longGrading.length > 0) alerts.push({
+      level: "warn",
+      msg: `${longGrading.length} card${longGrading.length > 1 ? "s have" : " has"} been in grading for over 60 days`,
+    });
+    const underwater = s.items.filter(i => {
+      if (i.status !== "active" || i.market_price == null) return false;
+      return i.market_price < (+i.buy_price + +(i.grading_cost ?? 0));
+    });
+    if (underwater.length > 0) alerts.push({
+      level: "info",
+      msg: `${underwater.length} active card${underwater.length > 1 ? "s are" : " is"} underwater (market price < cost)`,
+    });
+    return alerts;
+  }, [s.items]);
+
   const filteredItems = useMemo(() => {
     const q = s.inv.search.toLowerCase();
     return s.items.filter((i) =>
@@ -184,9 +254,10 @@ export default function CollectPro() {
         i.name.toLowerCase().includes(q) ||
         (i.card_set ?? "").toLowerCase().includes(q) ||
         (i.franchise ?? "").toLowerCase().includes(q)) &&
-      (!s.franchise || !!i.franchise)
+      (!s.franchise || !!i.franchise) &&
+      (statusFilter === "all" || i.status === statusFilter)
     );
-  }, [s.items, s.inv.search, s.franchise]);
+  }, [s.items, s.inv.search, s.franchise, statusFilter]);
 
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
@@ -891,6 +962,24 @@ export default function CollectPro() {
               </div>
             </div>
 
+            {/* ── Alerts ──────────────────────────────────────────────────────── */}
+            {portfolioAlerts.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Portfolio Alerts</div>
+                {portfolioAlerts.map((a, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg ${
+                      a.level === "warn" ? "bg-amber-950/60 border border-amber-800/50 text-amber-300" : "bg-blue-950/60 border border-blue-800/50 text-blue-300"
+                    }`}
+                  >
+                    <span className="text-base leading-none mt-0.5">{a.level === "warn" ? "⚠" : "ℹ"}</span>
+                    <span>{a.msg}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* ── Chat ────────────────────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
@@ -995,6 +1084,28 @@ export default function CollectPro() {
                 <Button variant="outline" size="sm" onClick={() => exportEbayCSV(sortedItems)}>eBay</Button>
                 <Button variant="outline" size="sm" onClick={() => exportCardmarketCSV(sortedItems)}>CM</Button>
               </div>
+            </div>
+
+            {/* Status filter chips */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {([
+                { key: "all",     label: "All",     count: s.items.length },
+                { key: "active",  label: "Active",  count: s.items.filter(i => i.status === "active").length },
+                { key: "grading", label: "Grading", count: s.items.filter(i => i.status === "grading").length },
+                { key: "sold",    label: "Sold",    count: s.items.filter(i => i.status === "sold").length },
+              ] as const).map(({ key, label, count }) => (
+                <button
+                  key={key}
+                  onClick={() => { setStatusFilter(key); d({ t: "INV_PAGE", n: 1 }); }}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    statusFilter === key
+                      ? "bg-blue-700 text-white"
+                      : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                  }`}
+                >
+                  {label} <span className={statusFilter === key ? "text-blue-200" : "text-gray-600"}>{count}</span>
+                </button>
+              ))}
             </div>
 
             {/* Batch select all button */}
@@ -1381,13 +1492,14 @@ export default function CollectPro() {
         {/* ══ ROI ════════════════════════════════════════════════════════════ */}
         {s.tab === "roi" && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {[
-                { label: "Total Invested (incl. grading)", value: fmt$(stats.totalCost), cls: "text-amber-400" },
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {([
+                { label: "Total Invested", value: fmt$(stats.totalCost), cls: "text-amber-400" },
                 { label: "Sale Revenue", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
                 { label: "Net Realised Profit", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
                 { label: "Realised ROI", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
-              ].map((st) => (
+                { label: "Avg Hold Time", value: avgHoldDays != null ? `${avgHoldDays}d` : "—", cls: "text-purple-400" },
+              ] as const).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                   <div className="text-xs text-gray-500 mb-1">{st.label}</div>
                   <div className={`text-lg font-bold ${st.cls}`}>{st.value}</div>
@@ -1467,6 +1579,55 @@ export default function CollectPro() {
                     <div className="text-right shrink-0">
                       <p className={`text-sm font-bold ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</p>
                       <p className="text-xs text-gray-500">{profit >= 0 ? "+" : ""}{fmt$(profit)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ── Monthly Revenue Bar Chart ──────────────────────────────── */}
+            {monthlyRevenue.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly Sales Revenue</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <BarChart data={monthlyRevenue} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
+                    <Tooltip
+                      formatter={(v: number, name: string) => [fmt$(v), name === "revenue" ? "Revenue" : "Net Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Bar dataKey="revenue" name="revenue" radius={[3, 3, 0, 0]}>
+                      {monthlyRevenue.map((entry, i) => (
+                        <Cell key={i} fill={entry.profit >= 0 ? "#3b82f6" : "#ef4444"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* ── Worst Performers ─────────────────────────────────────── */}
+            {worstPerformers.length > 0 && worstPerformers[0].roi < 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-800 text-sm font-semibold flex items-center gap-2">
+                  <span>📉 Worst Performers</span>
+                  <span className="text-xs text-gray-500 font-normal">by ROI (active + sold)</span>
+                </div>
+                {worstPerformers.filter(p => p.roi < 0).map(({ item, roi, profit }, idx) => (
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-white/[0.02]">
+                    <span className="text-gray-600 text-xs w-4 shrink-0 text-center">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {item.status === "sold" ? "✓ Sold" : item.condition}
+                        {item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-red-400">{fmtPct(roi)}</p>
+                      <p className="text-xs text-gray-500">{fmt$(profit)}</p>
                     </div>
                   </div>
                 ))}
