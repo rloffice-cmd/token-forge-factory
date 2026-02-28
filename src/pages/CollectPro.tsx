@@ -377,6 +377,32 @@ export default function CollectPro() {
     return { wins, total: sold.length, pct: (wins / sold.length) * 100 };
   }, [s.items]);
 
+  // Monthly profit scoreboard: how many calendar months were profitable vs loss-making
+  const monthlyScoreboard = useMemo(() => {
+    const map = new Map<string, number>();
+    s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at).forEach(i => {
+      const key = new Date(i.sold_at!).toLocaleDateString("en-US", { year: "numeric", month: "short" });
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      map.set(key, (map.get(key) ?? 0) + +(i.sell_price!) - cost);
+    });
+    const values = [...map.values()];
+    if (values.length < 2) return null;
+    const green = values.filter(p => p >= 0).length;
+    const red = values.filter(p => p < 0).length;
+    return { green, red, total: values.length };
+  }, [s.items]);
+
+  // This month: sales and purchases since calendar month start
+  const thisMonth = useMemo(() => {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at && new Date(i.sold_at).getTime() >= monthStart);
+    const bought = s.items.filter(i => new Date(i.buy_date).getTime() >= monthStart).length;
+    if (sold.length === 0 && bought === 0) return null;
+    const profit = sold.reduce((acc, i) => acc + +(i.sell_price!) - (+i.buy_price + +(i.grading_cost ?? 0)), 0);
+    return { sold: sold.length, profit, bought };
+  }, [s.items]);
+
   // Needs re-pricing: active items with a market price not updated in > 30 days
   const needsRepricing = useMemo(() => {
     const now = Date.now();
