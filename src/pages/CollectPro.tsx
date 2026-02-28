@@ -784,6 +784,61 @@ export default function CollectPro() {
       .slice(0, 5);
   }, [s.items]);
 
+  // Franchise breakdown: active portfolio distribution + realized profit per franchise
+  const franchiseBreakdown = useMemo(() => {
+    const map = new Map<string, { cost: number; value: number; count: number; sold: number; profit: number }>();
+    s.items.filter(i => i.status !== "sold").forEach(i => {
+      const key = i.franchise ?? "Other";
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      const val = i.market_price ?? +i.buy_price;
+      const entry = map.get(key) ?? { cost: 0, value: 0, count: 0, sold: 0, profit: 0 };
+      map.set(key, { ...entry, cost: entry.cost + cost, value: entry.value + val, count: entry.count + 1 });
+    });
+    s.items.filter(i => i.status === "sold" && i.sell_price != null).forEach(i => {
+      const key = i.franchise ?? "Other";
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      const profit = +(i.sell_price!) - cost;
+      const entry = map.get(key) ?? { cost: 0, value: 0, count: 0, sold: 0, profit: 0 };
+      map.set(key, { ...entry, sold: entry.sold + 1, profit: entry.profit + profit });
+    });
+    return [...map.entries()]
+      .map(([name, data]) => ({
+        name: name.length > 14 ? name.slice(0, 13) + "…" : name,
+        fullName: name,
+        cost: data.cost, value: data.value, count: data.count, sold: data.sold, profit: data.profit,
+        pnl: data.value - data.cost,
+      }))
+      .filter(x => x.count > 0 || x.sold > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [s.items]);
+
+  // Quick-flip detector: sold items held ≤30 days with profit
+  const quickFlips = useMemo(() =>
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .map(i => {
+        const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        return { item: i, holdDays, cost, profit, roi: cost > 0 ? (profit / cost) * 100 : 0 };
+      })
+      .filter(x => x.holdDays <= 30 && x.profit > 0)
+      .sort((a, b) => b.roi - a.roi)
+      .slice(0, 5),
+  [s.items]);
+
+  // Profit-per-hold-day: capital efficiency across all sold items
+  const profitPerDay = useMemo(() => {
+    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at && i.buy_date);
+    if (sold.length === 0) return null;
+    const totalProfit = sold.reduce((acc, i) => acc + +(i.sell_price!) - (+i.buy_price + +(i.grading_cost ?? 0)), 0);
+    const totalDays = sold.reduce((acc, i) => {
+      const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
+      return acc + Math.max(1, holdDays);
+    }, 0);
+    return totalDays > 0 ? totalProfit / totalDays : null;
+  }, [s.items]);
+
   const conditionBreakdown = useMemo(() => {
     const ORDER = ["M", "NM", "LP", "MP", "HP", "D", "PSA"];
     const map   = new Map<string, number>();
@@ -2065,6 +2120,67 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Franchise Breakdown ──────────────────────────────────────────── */}
+            {franchiseBreakdown.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                  📊 Franchise Breakdown
+                </div>
+                <div className="space-y-2">
+                  {franchiseBreakdown.map(f => {
+                    const totalActive = franchiseBreakdown.reduce((a, b) => a + b.count, 0);
+                    const pct = totalActive > 0 ? (f.count / totalActive) * 100 : 0;
+                    return (
+                      <div key={f.fullName} className="flex items-center gap-2">
+                        <div className="w-20 flex-shrink-0 text-xs text-gray-400 truncate" title={f.fullName}>{f.name}</div>
+                        <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-600/70"
+                            style={{ width: `${Math.max(2, pct)}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{f.count}</div>
+                        {f.sold > 0 && (
+                          <div className={`text-xs font-semibold w-16 text-right flex-shrink-0 ${f.profit >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                            {f.profit >= 0 ? "+" : ""}{fmt$(f.profit)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── Quick-Flip Wins ───────────────────────────────────────────────── */}
+            {quickFlips.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>⚡ Quick-Flip Wins</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">sold ≤30d · profitable</span>
+                </div>
+                <div className="space-y-1.5">
+                  {quickFlips.map(({ item, holdDays, profit, roi }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">{holdDays}d hold</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                        <span className="text-emerald-400 font-semibold">+{fmt$(profit)}</span>
+                        <span className="text-emerald-600">{fmtPct(roi)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Partner Summary ──────────────────────────────────────────────── */}
             {s.partners.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
@@ -3007,6 +3123,9 @@ export default function CollectPro() {
                 ...(annualProjection ? [
                   { label: "📅 90d Profit", value: fmt$(annualProjection.recent90d), cls: annualProjection.recent90d >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
                   { label: "📈 Projected Annual", value: fmt$(annualProjection.projAnnual), cls: annualProjection.projAnnual >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
+                ] : []),
+                ...(profitPerDay != null ? [
+                  { label: "💵 Profit / Hold-Day", value: fmt$(profitPerDay), cls: profitPerDay >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
                 ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
