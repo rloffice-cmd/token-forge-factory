@@ -96,10 +96,13 @@ serve(async (req) => {
 
   let body: {
     messages: Array<{ role: string; content: string }>;
-    mode: "brain" | "market" | "arbitrage" | "scan";
+    mode: "brain" | "market" | "arbitrage" | "scan" | "grade";
     cacheKey?: string;
     image_base64?: string;
     image_media_type?: string;
+    // grade mode
+    images?: Array<{ label: string; base64: string; media_type: string }>;
+    item_type?: string;
   };
 
   try {
@@ -108,7 +111,7 @@ serve(async (req) => {
     return json({ error: "Invalid JSON." }, 400);
   }
 
-  const { messages, mode = "brain", cacheKey, image_base64, image_media_type } = body;
+  const { messages, mode = "brain", cacheKey, image_base64, image_media_type, images, item_type } = body;
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
@@ -154,6 +157,60 @@ serve(async (req) => {
     });
 
     return json(await scanResp.json(), scanResp.status);
+  }
+
+  // ── Grade mode: professional pre-grading assessment ───────────────────────
+  if (mode === "grade") {
+    if (!images || images.length === 0) {
+      return json({ error: "images array required for grade mode." }, 400);
+    }
+
+    const gradeSystem =
+      "You are a professional TCG card grading expert with 20+ years of experience, equivalent to PSA, BGS, and CGC graders. " +
+      "You perform meticulous pre-grading assessments by analyzing card images for centering, corner wear, edge wear, surface condition, and print quality. " +
+      "You are ALSO a world-class counterfeit detection specialist — you identify fakes by analyzing: " +
+      "rosette print patterns (genuine cards have a tight, consistent dot pattern), color saturation and ink bleed, " +
+      "font consistency, hologram quality, card thickness/feel indicators, back design accuracy, and border color matching. " +
+      "\n\nFor SEALED products (boxes, cases, sealed items): evaluate seal integrity, pack freshness, corner/edge of box, " +
+      "wrapper condition, and signs of tampering or resealing. " +
+      "\n\nRETURN ONLY valid JSON — no markdown fences, no extra text. Schema:\n" +
+      '{"grade":9.5,"grade_label":"Gem Mint","subgrades":{"centering":9.5,"corners":9.0,"edges":9.5,"surfaces":10.0},' +
+      '"centering":{"left_right":50,"top_bottom":51,"score":9.5},' +
+      '"authenticity":"genuine","authenticity_confidence":98.5,' +
+      '"authenticity_notes":"Consistent rosette pattern, correct font, proper hologram alignment.",' +
+      '"issues":[{"category":"corner","severity":"minor","location":"bottom-right","description":"Slight fraying on bottom-right corner"}],' +
+      '"summary":"Near gem-mint condition card with excellent surfaces.",' +
+      '"recommendations":"Submit to PSA — strong PSA 9 candidate, possible 10 if centering is re-evaluated under studio lighting."}';
+
+    const gradeContentBlocks: ContentBlock[] = [];
+    for (const img of images) {
+      gradeContentBlocks.push({ type: "text", text: `[Image: ${img.label}]` });
+      gradeContentBlocks.push({
+        type: "image",
+        source: { type: "base64", media_type: img.media_type, data: img.base64 },
+      });
+    }
+    gradeContentBlocks.push({
+      type: "text",
+      text: `Item type: ${item_type ?? "card"}. Analyze all provided images and return the professional grading assessment JSON.`,
+    });
+
+    const gradeResp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 1024,
+        system: gradeSystem,
+        messages: [{ role: "user", content: gradeContentBlocks }],
+      }),
+    });
+
+    return json(await gradeResp.json(), gradeResp.status);
   }
 
   const instructionKey = `collectpro_${mode}`;

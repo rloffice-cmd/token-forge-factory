@@ -9,6 +9,45 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ChatMessage, AIMode } from "./types";
 
+// ── Grading types ─────────────────────────────────────────────────────────────
+
+export interface GradingImage {
+  label: string;   // e.g. "Front", "Back", "Corner TL", "Edge Top"
+  base64: string;
+  media_type: string;
+}
+
+export interface GradingIssue {
+  category: "corner" | "edge" | "surface" | "centering" | "print" | "authenticity" | "other";
+  severity: "minor" | "moderate" | "major";
+  location: string;
+  description: string;
+}
+
+export interface GradingSubgrades {
+  centering: number;
+  corners: number;
+  edges: number;
+  surfaces: number;
+}
+
+export interface GradingResult {
+  grade: number;               // 1.0 – 10.0 PSA scale
+  grade_label: string;         // "Gem Mint", "Mint", "Near Mint", etc.
+  subgrades: GradingSubgrades;
+  centering: {
+    left_right: number;        // percentage left border vs right
+    top_bottom: number;        // percentage top border vs bottom
+    score: number;
+  };
+  authenticity: "genuine" | "suspect" | "counterfeit";
+  authenticity_confidence: number;  // 0–100
+  authenticity_notes: string;
+  issues: GradingIssue[];
+  summary: string;
+  recommendations: string;
+}
+
 export interface CardScanResult {
   name: string;
   card_set: string;
@@ -43,6 +82,30 @@ export async function scanCardImage(
   if (start === -1 || end === -1) throw new Error("AI did not return valid JSON");
 
   return JSON.parse(cleaned.slice(start, end + 1)) as CardScanResult;
+}
+
+// ── Professional pre-grading assessment (multi-image) ────────────────────────
+export async function gradeItem(
+  images: GradingImage[],
+  itemType = "card"
+): Promise<GradingResult> {
+  const { data, error } = await supabase.functions.invoke("collectpro-ai", {
+    body: { messages: [], mode: "grade", images, item_type: itemType },
+  });
+
+  if (error) throw new Error(error.message);
+
+  const content = data?.content;
+  const text = Array.isArray(content)
+    ? content.filter((b: { type: string }) => b.type === "text").map((b: { text: string }) => b.text).join("")
+    : String(content ?? "{}");
+
+  const cleaned = text.replace(/```json\n?|```/g, "").trim();
+  const start = cleaned.indexOf("{");
+  const end   = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1) throw new Error("AI did not return valid JSON");
+
+  return JSON.parse(cleaned.slice(start, end + 1)) as GradingResult;
 }
 
 export async function callAI(

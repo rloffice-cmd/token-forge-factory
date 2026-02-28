@@ -50,6 +50,7 @@ import { callAI } from "@/lib/collectpro/ai";
 import type { CardScanResult } from "@/lib/collectpro/ai";
 import { compressImage, uploadCardImage } from "@/lib/collectpro/image";
 import CameraScanner from "@/components/collectpro/CameraScanner";
+import GradingStudio from "@/components/collectpro/GradingStudio";
 import { exportCSV, exportEbayCSV, exportCardmarketCSV } from "@/lib/collectpro/export";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1516,6 +1517,7 @@ function BottomNav({ tab, setTab, isAdmin }: { tab: Tab; setTab: (t: Tab) => voi
     { key: "roi",       icon: "📈", label: "ROI"      },
     { key: "arena",     icon: "⚔️", label: "Arena"    },
     { key: "market",    icon: "🌐", label: "Market"   },
+    { key: "grade",     icon: "🔬", label: "Grade"    },
     { key: "partners",  icon: "🤝", label: "Partners" },
     ...(isAdmin ? [{ key: "admin" as Tab, icon: "🔐", label: "Admin" }] : []),
   ];
@@ -2243,13 +2245,13 @@ export default function CollectPro() {
       {/* ── Desktop Tab bar (hidden on mobile) ──────────────────────────────── */}
       <div className="hidden md:flex bg-gray-900 border-b border-gray-800 overflow-x-auto">
         {([
-          "brain", "inventory", "roi", "arena", "market", "partners",
+          "brain", "inventory", "roi", "arena", "market", "partners", "grade",
           ...(s.isAdmin ? ["admin"] : []),
         ] as Tab[]).map((tab) => {
           const labels: Record<Tab, string> = {
             brain: "🧠 Brain", inventory: "📦 Inventory", roi: "📈 ROI",
             arena: "⚔️ Arena", market: "🌐 Market", partners: "🤝 Partners",
-            admin: "🔐 Admin",
+            grade: "🔬 Grading", admin: "🔐 Admin",
           };
           return (
             <button
@@ -3038,6 +3040,11 @@ export default function CollectPro() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ══ GRADE ═══════════════════════════════════════════════════════════ */}
+        {s.tab === "grade" && (
+          <GradingStudio items={s.items} onClose={() => d({ t: "SET_TAB", tab: "brain" })} />
         )}
 
         {/* ══ ADMIN ═══════════════════════════════════════════════════════════ */}
