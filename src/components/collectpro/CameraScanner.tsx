@@ -36,6 +36,9 @@ export default function CameraScanner({ onResult, onClose }: Props) {
   const [barcodeText, setBarcodeText] = useState("");
   const [statusMsg, setStatusMsg] = useState("מאתחל מצלמה...");
   const [aiResult, setAiResult] = useState<CardScanResult | null>(null);
+  // Track phase in a ref so ZXing callbacks don't capture stale state
+  const phaseRef = useRef<ScanPhase>("init");
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // ── Start ZXing continuous scan ─────────────────────────────────────────────
   const startZxing = useCallback(async () => {
@@ -48,7 +51,7 @@ export default function CameraScanner({ onResult, onClose }: Props) {
         undefined, // default camera
         videoRef.current,
         (result) => {
-          if (result && phase !== "barcode_found" && phase !== "identifying") {
+          if (result && phaseRef.current !== "barcode_found" && phaseRef.current !== "identifying") {
             const text = result.getText();
             setBarcodeText(text);
             setPhase("barcode_found");
@@ -64,7 +67,7 @@ export default function CameraScanner({ onResult, onClose }: Props) {
       setPhase("error");
       setStatusMsg("אין גישה למצלמה");
     }
-  }, [phase]);
+  }, []); // no dependency on phase — uses phaseRef instead
 
   // ── Open camera stream then start ZXing ─────────────────────────────────────
   useEffect(() => {

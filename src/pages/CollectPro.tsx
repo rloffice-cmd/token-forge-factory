@@ -409,6 +409,7 @@ function CollectibleCard({
         <img
           src={item.image_url}
           alt={item.name}
+          loading="lazy"
           className="w-full object-cover"
           style={{ height: compact ? 70 : 130, objectFit: "cover" }}
         />
@@ -557,6 +558,7 @@ function CardDetailModal({
             <img
               src={item.image_url}
               alt={item.name}
+              loading="lazy"
               className="w-28 h-36 object-cover rounded-xl flex-shrink-0"
             />
           ) : (
@@ -931,6 +933,186 @@ function ArenaAICompare({ itemA, itemB }: { itemA: CollectionItem; itemB: Collec
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SellDialog — proper sell price modal (replaces window.prompt)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SellDialog({
+  item,
+  onConfirm,
+  onClose,
+}: {
+  item: CollectionItem;
+  onConfirm: (item: CollectionItem, price: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [price, setPrice] = useState(item.market_price != null ? String(item.market_price) : "");
+  const [busy, setBusy] = useState(false);
+  const cost = itemCost(item);
+  const numPrice = parseFloat(price);
+  const profit = !isNaN(numPrice) ? numPrice - cost : null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isNaN(numPrice) || numPrice < 0) { toast.error("Invalid price"); return; }
+    setBusy(true);
+    await onConfirm(item, numPrice);
+    setBusy(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-bold text-white mb-0.5">Mark as Sold</h3>
+        <p className="text-sm text-gray-400 mb-4 truncate">{item.name}</p>
+
+        <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
+          <div className="bg-gray-800 rounded-lg p-2.5">
+            <div className="text-xs text-gray-500 mb-0.5">Cost basis</div>
+            <div className="font-bold text-amber-400">{fmt$(cost)}</div>
+          </div>
+          {item.market_price != null && (
+            <div className="bg-gray-800 rounded-lg p-2.5">
+              <div className="text-xs text-gray-500 mb-0.5">Market est.</div>
+              <div className="font-bold text-blue-400">{fmt$(item.market_price)}</div>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Sale Price ($) *</label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              autoFocus
+              className="bg-gray-800 border-gray-700 text-white"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="Enter sale price…"
+            />
+            {profit != null && price !== "" && (
+              <div className={`text-xs mt-1.5 font-medium ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                {profit >= 0 ? "▲ Profit" : "▼ Loss"}: {fmt$(profit)}{" "}
+                ({fmtPct(cost > 0 ? (profit / cost) * 100 : 0)})
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button type="submit" disabled={busy || !price} className="flex-1">
+              {busy ? "Saving…" : "Confirm Sale ✓"}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BatchOperationModal — replace window.prompt for batch status/price
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BatchOperationModal({
+  type,
+  count,
+  onStatusUpdate,
+  onPriceUpdate,
+  onClose,
+}: {
+  type: "status" | "price";
+  count: number;
+  onStatusUpdate: (status: ItemStatus) => Promise<void>;
+  onPriceUpdate: (price: number) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [statusVal, setStatusVal] = useState<ItemStatus>("active");
+  const [priceVal, setPriceVal] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (type === "status") {
+        await onStatusUpdate(statusVal);
+      } else {
+        const p = +priceVal;
+        if (isNaN(p) || p < 0) { toast.error("Invalid price"); return; }
+        await onPriceUpdate(p);
+      }
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-sm"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-bold text-white mb-0.5">
+          {type === "status" ? "Update Status" : "Update Market Price"}
+        </h3>
+        <p className="text-sm text-gray-400 mb-4">{count} items selected</p>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {type === "status" ? (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">New Status</label>
+              <select
+                className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+                value={statusVal}
+                onChange={(e) => setStatusVal(e.target.value as ItemStatus)}
+              >
+                <option value="active">Active</option>
+                <option value="grading">Grading</option>
+                <option value="sold">Sold</option>
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Market Price ($)</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                autoFocus
+                className="bg-gray-800 border-gray-700"
+                value={priceVal}
+                onChange={(e) => setPriceVal(e.target.value)}
+                placeholder="Enter price…"
+              />
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              type="submit"
+              disabled={busy || (type === "price" && !priceVal)}
+              className="flex-1"
+            >
+              {busy ? "Applying…" : "Apply to All"}
+            </Button>
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AdminPanel — access control UI (visible to admins only)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -943,6 +1125,11 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
   const [access,  setAccess]  = useState<AccessRow[]>([]);
   const [admins,  setAdmins]  = useState<AdminRow[]>([]);
   const [busy,    setBusy]    = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Confirmation state
+  const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
+  const [removeAdminTarget, setRemoveAdminTarget] = useState<string | null>(null);
 
   // Grant access form
   const [grantEmail,     setGrantEmail]     = useState("");
@@ -952,6 +1139,7 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
   const [adminEmail, setAdminEmail] = useState("");
 
   const load = useCallback(async () => {
+    setLoading(true);
     const [{ data: u }, { data: a }, { data: adm }] = await Promise.all([
       supabase.from("cp_users_public").select("id, email, last_seen").order("last_seen", { ascending: false }),
       supabase.from("cp_user_partner_access").select("id, user_id, partner_id, created_at"),
@@ -960,6 +1148,7 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
     setUsers(u ?? []);
     setAccess(a ?? []);
     setAdmins(adm ?? []);
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -988,6 +1177,7 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
     const { error } = await supabase.from("cp_user_partner_access").delete().eq("id", id);
     if (error) { toast.error(error.message); return; }
     toast.success("Access revoked");
+    setRevokeTarget(null);
     load();
   };
 
@@ -1005,16 +1195,56 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
     const { error } = await supabase.from("cp_admins").delete().eq("user_id", uid);
     if (error) { toast.error(error.message); return; }
     toast.success("Admin removed");
+    setRemoveAdminTarget(null);
     load();
   };
 
   return (
     <div className="space-y-6">
+      {/* Confirmation: revoke access */}
+      <AlertDialog open={!!revokeTarget} onOpenChange={() => setRevokeTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke Access?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This user will immediately lose access to this portfolio.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={() => revokeTarget && revokeAccess(revokeTarget)}>
+              Revoke
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmation: remove admin */}
+      <AlertDialog open={!!removeAdminTarget} onOpenChange={() => setRemoveAdminTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Admin?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {emailOf(removeAdminTarget ?? "")} will lose all admin privileges.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={() => removeAdminTarget && removeAdmin(removeAdminTarget)}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Access table */}
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
           <span className="font-semibold text-sm">🔑 Portfolio Access</span>
-          <span className="text-xs text-gray-500">{access.length} access rows</span>
+          <div className="flex items-center gap-3">
+            {loading && <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />}
+            <span className="text-xs text-gray-500">{access.length} access rows</span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -1036,7 +1266,7 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
                   </td>
                   <td className="px-4 py-2.5">
                     <button
-                      onClick={() => revokeAccess(row.id)}
+                      onClick={() => setRevokeTarget(row.id)}
                       className="text-red-500 hover:text-red-400 text-xs font-medium"
                     >
                       Revoke
@@ -1092,7 +1322,7 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
             <div key={a.user_id} className="flex items-center justify-between bg-gray-800/60 rounded-lg px-3 py-2">
               <span className="text-sm font-mono">{emailOf(a.user_id)}</span>
               <button
-                onClick={() => removeAdmin(a.user_id)}
+                onClick={() => setRemoveAdminTarget(a.user_id)}
                 className="text-red-500 hover:text-red-400 text-xs"
               >
                 Remove
@@ -1150,6 +1380,89 @@ function AdminPanel({ partners }: { partners: Partner[] }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ArenaTab — Arena tab with search filter for card picker
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ArenaTab({
+  items,
+  arenaA,
+  arenaB,
+  partners,
+  dispatch,
+  addToArena,
+}: {
+  items: CollectionItem[];
+  arenaA: string | null;
+  arenaB: string | null;
+  partners: Partner[];
+  dispatch: React.Dispatch<Action>;
+  addToArena: (id: string) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return !q
+      ? items
+      : items.filter(
+          (i) =>
+            i.name.toLowerCase().includes(q) ||
+            (i.card_set ?? "").toLowerCase().includes(q) ||
+            (i.franchise ?? "").toLowerCase().includes(q)
+        );
+  }, [items, search]);
+
+  return (
+    <div>
+      <h2 className="font-bold mb-1">⚔️ Card Arena</h2>
+      <p className="text-xs text-gray-500 mb-4">Compare two cards side by side. Pick cards from the grid below or use the ⚔ button in inventory.</p>
+
+      <ArenaView
+        items={items}
+        arenaA={arenaA}
+        arenaB={arenaB}
+        partners={partners}
+        dispatch={dispatch}
+      />
+
+      {/* Item picker grid */}
+      {items.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">
+              PICK CARDS FOR ARENA
+            </div>
+            <span className="text-xs text-gray-600">{filtered.length} cards</span>
+          </div>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="🔍 Filter cards…"
+            className="w-full mb-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+          />
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+            {filtered.map((item) => (
+              <CollectibleCard
+                key={item.id}
+                item={item}
+                compact
+                arenaSlot={arenaA === item.id ? "a" : arenaB === item.id ? "b" : null}
+                onArena={addToArena}
+              />
+            ))}
+            {filtered.length === 0 && (
+              <div className="col-span-full text-center py-8 text-gray-600 text-sm">
+                No cards match your search
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1228,7 +1541,12 @@ export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
   const aiAbort    = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
   const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Modal state for sell dialog and batch operations
+  const [sellTarget, setSellTarget] = useState<CollectionItem | null>(null);
+  const [batchOp, setBatchOp] = useState<"status" | "price" | null>(null);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -1536,11 +1854,11 @@ export default function CollectPro() {
     toast.success("Item restored");
   }, []);
 
-  const markSold = useCallback(async (item: CollectionItem) => {
-    const raw = window.prompt(`Sale price for "${item.name}":`, String(item.market_price ?? ""));
-    if (raw === null) return;
-    const price = +raw;
-    if (isNaN(price) || price < 0) { toast.error("Invalid price"); return; }
+  const markSold = useCallback((item: CollectionItem) => {
+    setSellTarget(item);
+  }, []);
+
+  const markSoldConfirm = useCallback(async (item: CollectionItem, price: number) => {
     const soldAt = new Date().toISOString();
     const { error } = await supabase
       .from("coll_items")
@@ -1559,6 +1877,7 @@ export default function CollectPro() {
     const cost = itemCost(item);
     const profit = price - cost;
     toast.success(`Sale recorded · Profit: ${fmt$(profit)} (${fmtPct(cost > 0 ? (profit / cost) * 100 : 0)})`);
+    setSellTarget(null);
   }, []);
 
   const handleImage = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1596,12 +1915,11 @@ export default function CollectPro() {
 
   // ── Batch handlers ─────────────────────────────────────────────────────────
 
-  const batchUpdateStatus = useCallback(async () => {
-    const statusOpts: ItemStatus[] = ["active", "grading", "sold"];
-    const newStatus = window.prompt(
-      `New status for ${s.inv.selected.length} items (active / grading / sold):`
-    ) as ItemStatus | null;
-    if (!newStatus || !statusOpts.includes(newStatus)) { toast.error("Invalid status"); return; }
+  const batchUpdateStatus = useCallback(() => {
+    setBatchOp("status");
+  }, []);
+
+  const executeBatchStatus = useCallback(async (newStatus: ItemStatus) => {
     const { error } = await supabase
       .from("coll_items")
       .update({ status: newStatus })
@@ -1611,11 +1929,11 @@ export default function CollectPro() {
     toast.success(`${s.inv.selected.length} items updated to "${newStatus}"`);
   }, [s.inv.selected]);
 
-  const batchUpdatePrice = useCallback(async () => {
-    const raw = window.prompt(`New market price for ${s.inv.selected.length} items ($):`);
-    if (raw === null) return;
-    const price = +raw;
-    if (isNaN(price) || price < 0) { toast.error("Invalid price"); return; }
+  const batchUpdatePrice = useCallback(() => {
+    setBatchOp("price");
+  }, []);
+
+  const executeBatchPrice = useCallback(async (price: number) => {
     const { error } = await supabase
       .from("coll_items")
       .update({ market_price: price })
@@ -1636,18 +1954,23 @@ export default function CollectPro() {
     toast.success(`Market price updated for ${s.inv.selected.length} items`);
   }, [s.inv.selected]);
 
-  const batchDelete = useCallback(async () => {
-    if (!window.confirm(`Delete ${s.inv.selected.length} items? This cannot be undone.`)) return;
+  const [batchDeleteTarget, setBatchDeleteTarget] = useState(false);
+
+  const batchDelete = useCallback(() => {
+    setBatchDeleteTarget(true);
+  }, []);
+
+  const executeBatchDelete = useCallback(async () => {
     const { error } = await supabase.from("coll_items").delete().in("id", s.inv.selected);
     if (error) { toast.error(error.message); return; }
     d({ t: "INV_SEL_CLEAR" });
     toast.success(`${s.inv.selected.length} items deleted`);
+    setBatchDeleteTarget(false);
   }, [s.inv.selected]);
 
   // ── AI — Brain chat ────────────────────────────────────────────────────────
 
-  const sendChat = useCallback(async () => {
-    const text = s.chat.input.trim();
+  const sendChatMessage = useCallback(async (text: string) => {
     if (!text || s.chat.busy) return;
 
     const userMsg: ChatMessage = { role: "user", content: text };
@@ -1669,8 +1992,13 @@ export default function CollectPro() {
       if ((err as Error).message !== "ABORTED") toast.error(`AI: ${(err as Error).message}`);
     } finally {
       d({ t: "CHAT_BUSY", v: false });
+      setTimeout(() => chatInputRef.current?.focus(), 50);
     }
-  }, [s.chat.input, s.chat.busy, s.chat.messages, portfolioCtx]);
+  }, [s.chat.busy, s.chat.messages, portfolioCtx]);
+
+  const sendChat = useCallback(() => {
+    sendChatMessage(s.chat.input.trim());
+  }, [s.chat.input, sendChatMessage]);
 
   // ── AI — Market scan ───────────────────────────────────────────────────────
 
@@ -1751,8 +2079,13 @@ export default function CollectPro() {
 
   if (s.loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-950 text-gray-400">
-        Loading…
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950 gap-5">
+        <div className="text-center">
+          <div className="text-3xl font-extrabold text-white tracking-tight">CollectPro</div>
+          <div className="text-sm text-gray-500 mt-1">TCG Card Portfolio Manager</div>
+        </div>
+        <div className="w-10 h-10 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <div className="text-sm text-gray-600">Loading portfolio…</div>
       </div>
     );
   }
@@ -1763,6 +2096,44 @@ export default function CollectPro() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-950 text-gray-100 font-sans">
+
+      {/* ── Sell dialog ─────────────────────────────────────────────────────── */}
+      {sellTarget && (
+        <SellDialog
+          item={sellTarget}
+          onConfirm={markSoldConfirm}
+          onClose={() => setSellTarget(null)}
+        />
+      )}
+
+      {/* ── Batch operation modals ───────────────────────────────────────────── */}
+      {batchOp && (
+        <BatchOperationModal
+          type={batchOp}
+          count={s.inv.selected.length}
+          onStatusUpdate={executeBatchStatus}
+          onPriceUpdate={executeBatchPrice}
+          onClose={() => setBatchOp(null)}
+        />
+      )}
+
+      {/* ── Batch delete confirmation ────────────────────────────────────────── */}
+      <AlertDialog open={batchDeleteTarget} onOpenChange={(open) => !open && setBatchDeleteTarget(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {s.inv.selected.length} items?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. All selected items will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={executeBatchDelete}>
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Camera Scanner overlay ───────────────────────────────────────────── */}
       {s.showScanner && (
@@ -1935,7 +2306,7 @@ export default function CollectPro() {
                   ].map((q) => (
                     <button
                       key={q}
-                      onClick={() => { d({ t: "CHAT_INPUT", v: q }); }}
+                      onClick={() => sendChatMessage(q)}
                       className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs border border-gray-700 hover:border-gray-500 transition-colors"
                     >
                       {q}
@@ -1945,8 +2316,8 @@ export default function CollectPro() {
               )}
 
               <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-3 p-1">
-                {s.chat.messages.length === 0 && (
-                  <p className="text-center text-gray-600 text-sm mt-8">בחר שאלה מהרשימה למעלה או כתוב בחינם</p>
+                {s.chat.messages.length === 0 && !s.chat.busy && (
+                  <p className="text-center text-gray-600 text-sm mt-6">לחץ על שאלה מהרשימה למעלה לניתוח מיידי, או כתוב בחינם</p>
                 )}
                 {s.chat.messages.map((m, i) => (
                   <div
@@ -1966,6 +2337,7 @@ export default function CollectPro() {
 
               <div className="flex gap-2">
                 <Input
+                  ref={chatInputRef}
                   dir="rtl"
                   value={s.chat.input}
                   onChange={(e) => d({ t: "CHAT_INPUT", v: e.target.value })}
@@ -2204,8 +2576,19 @@ export default function CollectPro() {
                   />
                 ))}
                 {pagedItems.length === 0 && (
-                  <div className="col-span-full text-center py-12 text-gray-600">
-                    {s.inv.search ? "No results found" : "No items — click Add to start"}
+                  <div className="col-span-full text-center py-16 text-gray-600">
+                    {s.inv.search ? (
+                      <>
+                        <div className="text-3xl mb-2">🔍</div>
+                        <div>No cards match "{s.inv.search}"</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="text-3xl mb-2">📦</div>
+                        <div className="font-semibold mb-1">No cards yet</div>
+                        <div className="text-sm text-gray-700">Click "Add" or use the 📸 Camera Scan to add your first card</div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -2272,6 +2655,7 @@ export default function CollectPro() {
                                 <img
                                   src={item.image_url}
                                   alt={item.name}
+                                  loading="lazy"
                                   className="w-9 h-9 rounded-md object-cover flex-shrink-0"
                                 />
                               )}
@@ -2436,7 +2820,11 @@ export default function CollectPro() {
                   })}
                   {s.items.filter((i) => i.status === "sold").length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-8 text-gray-600">No sold transactions yet</td>
+                      <td colSpan={8} className="text-center py-12 text-gray-600">
+                        <div className="text-2xl mb-2">📈</div>
+                        <div>No sold transactions yet</div>
+                        <div className="text-xs text-gray-700 mt-1">Mark a card as sold from the Inventory to see ROI here</div>
+                      </td>
                     </tr>
                   )}
                 </tbody>
@@ -2447,38 +2835,14 @@ export default function CollectPro() {
 
         {/* ══ ARENA ══════════════════════════════════════════════════════════ */}
         {s.tab === "arena" && (
-          <div>
-            <h2 className="font-bold mb-1">⚔️ Card Arena</h2>
-            <p className="text-xs text-gray-500 mb-4">Compare two cards side by side. Pick cards from the grid below or use the ⚔ button in inventory.</p>
-
-            <ArenaView
-              items={s.items}
-              arenaA={s.arena.a}
-              arenaB={s.arena.b}
-              partners={s.partners}
-              dispatch={d}
-            />
-
-            {/* Item picker grid */}
-            {s.items.length > 0 && (
-              <div className="mt-6">
-                <div className="text-xs text-gray-500 mb-3 font-semibold">PICK CARDS FOR ARENA</div>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                  {s.items.slice(0, 24).map((item) => (
-                    <CollectibleCard
-                      key={item.id}
-                      item={item}
-                      compact
-                      arenaSlot={
-                        s.arena.a === item.id ? "a" : s.arena.b === item.id ? "b" : null
-                      }
-                      onArena={addToArena}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <ArenaTab
+            items={s.items}
+            arenaA={s.arena.a}
+            arenaB={s.arena.b}
+            partners={s.partners}
+            dispatch={d}
+            addToArena={addToArena}
+          />
         )}
 
         {/* ══ MARKET ═════════════════════════════════════════════════════════ */}
@@ -2525,7 +2889,10 @@ export default function CollectPro() {
             </div>
 
             {s.market.busy && (
-              <p className="text-sm text-gray-500 mt-3">Scanning… (15–30 seconds)</p>
+              <div className="flex items-center gap-3 mt-3 text-sm text-gray-500">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                <span>Searching eBay, TCGPlayer, PSA Registry… (15–30s)</span>
+              </div>
             )}
 
             {s.market.result && (() => {
@@ -2551,8 +2918,22 @@ export default function CollectPro() {
                       </div>
                     </div>
                   )}
-                  <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
-                    {s.market.result}
+                  <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+                      <span className="text-xs text-gray-500 font-medium">Scan Result</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(s.market.result);
+                          toast.success("Copied to clipboard");
+                        }}
+                        className="text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-gray-700"
+                      >
+                        Copy ⎘
+                      </button>
+                    </div>
+                    <div className="p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
+                      {s.market.result}
+                    </div>
                   </div>
                 </>
               );
@@ -2644,7 +3025,13 @@ export default function CollectPro() {
             ))}
 
             {s.partners.length === 0 && (
-              <div className="text-center py-12 text-gray-600">No partners — add the first one above</div>
+              <div className="text-center py-16 text-gray-600">
+                <div className="text-4xl mb-3">🤝</div>
+                <div className="font-semibold mb-1">No portfolios yet</div>
+                <div className="text-sm text-gray-700">
+                  {s.isAdmin ? "Add the first portfolio above to get started." : "Ask your admin to add you to a portfolio."}
+                </div>
+              </div>
             )}
           </div>
         )}
