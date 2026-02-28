@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/integrations/supabase/client";
-import type { ChatMessage, AIMode } from "./types";
+import type { ChatMessage, AIMode, CollectionItem } from "./types";
 
 // ── Grading types ─────────────────────────────────────────────────────────────
 
@@ -55,6 +55,47 @@ export interface CardScanResult {
   condition: string;
   notes: string;
 }
+
+// ── Market price utilities (shared by single + batch refresh) ─────────────────
+
+/** Build the AI prompt for a market price search. */
+export function buildMarketPricePrompt(
+  item: CollectionItem,
+  opts: { verbose?: boolean } = {}
+): string {
+  return [
+    `Find the current market price for this TCG card. Search eBay recent sold listings and TCGPlayer.`,
+    ``,
+    `Card: ${item.name}`,
+    item.card_set  ? `Set: ${item.card_set}`        : "",
+    item.franchise ? `Franchise: ${item.franchise}` : "",
+    `Condition: ${item.condition}`,
+    item.psa_grade ? `Grade: PSA ${item.psa_grade}` : "Ungraded (raw)",
+    ``,
+    `State the current market price clearly as "$X.XX".`,
+    opts.verbose   ? `Summarise recent sold prices and note any trend.` : "",
+  ].filter(Boolean).join("\n");
+}
+
+/** Extract the first dollar amount from an AI reply. Returns null if not found. */
+export function parseAIPrice(text: string): number | null {
+  const match = text.match(/\$[\d,]+(?:\.\d{1,2})?/);
+  return match ? parseFloat(match[0].replace(/[$,]/g, "")) : null;
+}
+
+/** Write a confirmed market price to coll_items + cp_price_history atomically. */
+export async function saveMarketPrice(
+  itemId: string,
+  price: number,
+  note: string
+): Promise<void> {
+  await Promise.all([
+    supabase.from("coll_items").update({ market_price: price }).eq("id", itemId),
+    supabase.from("cp_price_history").insert({ item_id: itemId, price, source: "ai_market", note }),
+  ]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const MAX_ATTEMPTS = 3;
 

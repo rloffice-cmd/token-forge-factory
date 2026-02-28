@@ -46,7 +46,7 @@ import type {
   PricePoint,
 } from "@/lib/collectpro/types";
 import { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
-import { callAI } from "@/lib/collectpro/ai";
+import { callAI, buildMarketPricePrompt, parseAIPrice, saveMarketPrice } from "@/lib/collectpro/ai";
 import type { CardScanResult } from "@/lib/collectpro/ai";
 import { useCollectProRealtime } from "@/lib/collectpro/realtime";
 import { compressImage, uploadCardImage } from "@/lib/collectpro/image";
@@ -573,43 +573,17 @@ function CardDetailModal({
     setRefreshing(true);
     setRefreshResult("");
 
-    const parts = [
-      `Find the current market price for this TCG card. Search eBay recent sold listings and TCGPlayer.`,
-      ``,
-      `Card: ${item.name}`,
-      item.card_set   ? `Set: ${item.card_set}`         : "",
-      item.franchise  ? `Franchise: ${item.franchise}`  : "",
-      `Condition: ${item.condition}`,
-      item.psa_grade  ? `Grade: PSA ${item.psa_grade}`  : "Ungraded (raw)",
-      ``,
-      `Include the current market price clearly as "$X.XX" in your response.`,
-      `Summarise recent sold prices and note any trend.`,
-    ].filter(Boolean).join("\n");
-
     try {
       const reply = await callAI(
-        [{ role: "user", content: parts }],
+        [{ role: "user", content: buildMarketPricePrompt(item, { verbose: true }) }],
         "market",
         { cacheKey: `price-refresh-${item.id}-${Date.now()}` }
       );
 
-      // Extract first dollar amount from the AI response
-      const match = reply.match(/\$[\d,]+(?:\.\d{1,2})?/);
-      if (match) {
-        const price = parseFloat(match[0].replace(/[$,]/g, ""));
+      const price = parseAIPrice(reply);
+      if (price !== null) {
         setRefreshedPrice(price);
-
-        await Promise.all([
-          supabase.from("coll_items").update({ market_price: price }).eq("id", item.id),
-          supabase.from("cp_price_history").insert({
-            item_id: item.id,
-            price,
-            source: "ai_market",
-            note: `AI market scan — ${match[0]}`,
-          }),
-        ]);
-
-        // Reload chart with fresh data point just added
+        await saveMarketPrice(item.id, price, `AI market scan — $${price}`);
         loadPriceHistory();
       }
 
@@ -1603,8 +1577,13 @@ function BatchPriceRefreshModal({
   const [done, setDone]     = useState(false);
   const cancelledRef        = useRef(false);
 
-  const updated = rows.filter(r => r.status === "done").length;
-  const errored = rows.filter(r => r.status === "error").length;
+  const { updated, errored } = rows.reduce(
+    (acc, r) => ({
+      updated: acc.updated + (r.status === "done"  ? 1 : 0),
+      errored: acc.errored + (r.status === "error" ? 1 : 0),
+    }),
+    { updated: 0, errored: 0 }
+  );
 
   const run = useCallback(async () => {
     cancelledRef.current = false;
@@ -1618,41 +1597,32 @@ function BatchPriceRefreshModal({
       setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "running" } : r));
 
       const item = items[i];
-      const prompt = [
-        `Find the CURRENT market price for this TCG card. Search eBay recent sold listings and TCGPlayer.`,
-        `Card: ${item.name}`,
-        item.card_set  ? `Set: ${item.card_set}`        : "",
-        item.franchise ? `Franchise: ${item.franchise}` : "",
-        `Condition: ${item.condition}`,
-        item.psa_grade ? `Grade: PSA ${item.psa_grade}` : "Ungraded (raw)",
-        ``,
-        `State the current market price clearly as "$X.XX".`,
-      ].filter(Boolean).join("\n");
 
       try {
         const reply = await callAI(
-          [{ role: "user", content: prompt }],
+          [{ role: "user", content: buildMarketPricePrompt(item) }],
           "market",
           { cacheKey: `batch-price-${item.id}-${Date.now()}` }
         );
 
-        const match = reply.match(/\$[\d,]+(?:\.\d{1,2})?/);
-        if (match && !cancelledRef.current) {
-          const price = parseFloat(match[0].replace(/[$,]/g, ""));
-          await Promise.all([
-            supabase.from("coll_items").update({ market_price: price }).eq("id", item.id),
-            supabase.from("cp_price_history").insert({
-              item_id: item.id, price, source: "ai_market",
-              note: `Batch AI scan — ${match[0]}`,
-            }),
-          ]);
+        if (cancelledRef.current) {
+          // Reset any row that was left "running" when cancel was hit mid-call
+          setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "pending" } : r));
+          break;
+        }
+
+        const price = parseAIPrice(reply);
+        if (price !== null) {
+          await saveMarketPrice(item.id, price, `Batch AI scan — $${price}`);
           setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "done", price } : r));
-        } else if (!cancelledRef.current) {
+        } else {
           setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "error", error: "Price not found" } : r));
         }
       } catch (err) {
         if (!cancelledRef.current) {
           setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "error", error: (err as Error).message } : r));
+        } else {
+          setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: "pending" } : r));
         }
       }
     }
@@ -3183,9 +3153,9 @@ export default function CollectPro() {
                     </defs>
                     <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false}
-                      tickFormatter={v => `$${v}`} width={48} />
+                      tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number) => [`$${v.toFixed(0)}`, "Cumulative Profit"]}
+                      formatter={(v: number) => [fmt$(v), "Cumulative Profit"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
