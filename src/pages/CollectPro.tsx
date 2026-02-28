@@ -372,6 +372,26 @@ export default function CollectPro() {
     [s.items]
   );
 
+  // Per-franchise realized ROI (sold items only)
+  const franchiseROI = useMemo(() => {
+    const map = new Map<string, { profit: number; cost: number; count: number }>();
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null)
+      .forEach(i => {
+        const key    = i.franchise ?? "Other";
+        const cost   = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const entry  = map.get(key) ?? { profit: 0, cost: 0, count: 0 };
+        map.set(key, { profit: entry.profit + profit, cost: entry.cost + cost, count: entry.count + 1 });
+      });
+    return [...map.entries()]
+      .map(([name, { profit, cost, count }]) => ({
+        name, profit, count,
+        roi: cost > 0 ? (profit / cost) * 100 : 0,
+      }))
+      .sort((a, b) => b.roi - a.roi);
+  }, [s.items]);
+
   // Cost composition: buy vs grading split across all items
   const costComposition = useMemo(() => {
     const totalBuy     = s.items.reduce((acc, i) => acc + +i.buy_price, 0);
@@ -2302,6 +2322,34 @@ export default function CollectPro() {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* ── Franchise ROI Breakdown ───────────────────────────────── */}
+            {franchiseROI.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Realized ROI by Franchise</p>
+                <div className="space-y-2.5">
+                  {franchiseROI.map(({ name, profit, roi, count }) => (
+                    <div key={name} className="flex items-center gap-3">
+                      <span className="text-xs text-gray-400 truncate min-w-0 flex-1">{name}
+                        <span className="text-gray-600 ml-1">({count})</span>
+                      </span>
+                      <div className="w-24 h-2 bg-gray-800 rounded-full overflow-hidden flex-shrink-0">
+                        <div
+                          className={`h-full rounded-full ${roi >= 0 ? "bg-emerald-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.min(100, Math.abs(roi))}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-semibold w-14 text-right flex-shrink-0 ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {roi >= 0 ? "+" : ""}{fmtPct(roi)}
+                      </span>
+                      <span className={`text-xs w-16 text-right flex-shrink-0 ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
