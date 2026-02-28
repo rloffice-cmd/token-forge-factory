@@ -95,18 +95,26 @@ export default function CollectPro() {
       if (e.key === "/" || e.key === "s") {
         e.preventDefault();
         d({ t: "SET_TAB", tab: "inventory" });
-        // Slight delay so the inventory tab renders first
         setTimeout(() => searchInputRef.current?.focus(), 50);
       } else if (e.key === "n") {
         d({ t: "SET_TAB", tab: "inventory" });
         d({ t: "INV_FORM_SHOW", show: true });
       } else if (e.key === "Escape") {
-        if (s.inv.showForm) d({ t: "INV_FORM_SHOW", show: false });
+        if (s.modal) d({ t: "SET_MODAL", id: null });
+        else if (s.inv.showForm) d({ t: "INV_FORM_SHOW", show: false });
+      } else if (e.key === "b") {
+        d({ t: "SET_TAB", tab: "brain" });
+      } else if (e.key === "r") {
+        d({ t: "SET_TAB", tab: "roi" });
+      } else if (e.key === "m") {
+        d({ t: "SET_TAB", tab: "market" });
+      } else if (e.key === "t") {
+        if (s.tab === "inventory") d({ t: "SET_VIEW", mode: s.viewMode === "table" ? "cards" : "table" });
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [s.inv.showForm]);
+  }, [s.inv.showForm, s.modal, s.tab, s.viewMode]);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -362,7 +370,8 @@ export default function CollectPro() {
         (i.card_set ?? "").toLowerCase().includes(q) ||
         (i.franchise ?? "").toLowerCase().includes(q) ||
         (i.notes ?? "").toLowerCase().includes(q) ||
-        (i.condition).toLowerCase().includes(q)) &&
+        (i.condition).toLowerCase().includes(q) ||
+        (i.psa_grade != null && `psa ${i.psa_grade}`.includes(q))) &&
       (!s.franchise || !!i.franchise) &&
       (statusFilter === "all" || i.status === statusFilter) &&
       (!franchiseFilterInv || i.franchise === franchiseFilterInv)
@@ -1667,7 +1676,11 @@ export default function CollectPro() {
                   <div className="space-y-1">
                     <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">/</kbd> or <kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">s</kbd> — Focus search</div>
                     <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">n</kbd> — New item</div>
-                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">Esc</kbd> — Close form</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">t</kbd> — Toggle table/cards</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">b</kbd> — Brain tab</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">r</kbd> — ROI tab</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">m</kbd> — Market tab</div>
+                    <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">Esc</kbd> — Close modal/form</div>
                   </div>
                 </div>
               </div>
