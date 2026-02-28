@@ -941,6 +941,36 @@ export default function CollectPro() {
     return buckets.filter(b => b.count > 0);
   }, [s.items]);
 
+  // PSA vs Raw ROI: compare realized ROI between PSA-graded and raw sold items
+  const psaVsRaw = useMemo(() => {
+    const calc = (items: CollectionItem[]) => {
+      if (items.length === 0) return null;
+      const profit = items.reduce((acc, i) => acc + +(i.sell_price!) - (+i.buy_price + +(i.grading_cost ?? 0)), 0);
+      const cost   = items.reduce((acc, i) => acc + +i.buy_price + +(i.grading_cost ?? 0), 0);
+      return { count: items.length, profit, roi: cost > 0 ? (profit / cost) * 100 : 0 };
+    };
+    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null);
+    const psa  = calc(sold.filter(i => i.psa_grade != null));
+    const raw  = calc(sold.filter(i => i.psa_grade == null));
+    if (!psa || !raw) return null;
+    return { psa, raw };
+  }, [s.items]);
+
+  // Breakout cards: active items with unrealised gain ≥100% (2× or better)
+  const breakoutCards = useMemo(() =>
+    s.items
+      .filter(i => i.status !== "sold" && i.market_price != null)
+      .map(i => {
+        const cost    = +i.buy_price + +(i.grading_cost ?? 0);
+        const gain    = i.market_price! - cost;
+        const gainPct = cost > 0 ? (gain / cost) * 100 : 0;
+        return { item: i, cost, gain, gainPct };
+      })
+      .filter(x => x.gainPct >= 100)
+      .sort((a, b) => b.gainPct - a.gainPct)
+      .slice(0, 5),
+  [s.items]);
+
   // Flip-speed leaderboard: avg hold days per franchise (franchises with ≥2 sales)
   const flipSpeedByFranchise = useMemo(() => {
     const map = new Map<string, { totalDays: number; count: number; profit: number }>();
@@ -2127,7 +2157,36 @@ export default function CollectPro() {
               </div>
             )}
 
-            {/* ── Grading Candidates ────────────────────────────────────────────── */}
+            {/* ── Breakout Cards ───────────────────────────────────────────────── */}
+            {breakoutCards.length > 0 && (
+              <div className="bg-gray-900 border border-emerald-900/40 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>🚀 Breakout Cards</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">unrealised gain ≥100%</span>
+                </div>
+                <div className="space-y-1.5">
+                  {breakoutCards.map(({ item, cost, gain, gainPct }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                        <span className="text-gray-500">{fmt$(cost)}</span>
+                        <span className="text-emerald-400">→ {fmt$(item.market_price!)}</span>
+                        <span className="font-bold text-emerald-300">+{gainPct.toFixed(0)}%</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Needs Re-Pricing ─────────────────────────────────────────────── */}
             {needsRepricing.length > 0 && (
               <div className="bg-gray-900 border border-amber-800/30 rounded-xl p-4">
@@ -3838,6 +3897,27 @@ export default function CollectPro() {
                         <div className="h-full bg-amber-700/70 rounded-full" style={{ width: `${b.pct}%` }} />
                       </div>
                       <span className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{b.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── PSA vs Raw ROI ─────────────────────────────────────────── */}
+            {psaVsRaw && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">PSA Graded vs Raw ROI</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "🏅 PSA Graded", stats: psaVsRaw.psa! },
+                    { label: "📄 Raw",         stats: psaVsRaw.raw! },
+                  ].map(({ label, stats }) => (
+                    <div key={label} className="bg-gray-800 rounded-lg p-3 text-center">
+                      <div className="text-xs text-gray-500 mb-1">{label}</div>
+                      <div className={`text-lg font-bold ${stats.roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {fmtPct(stats.roi)}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-0.5">{stats.count} sales · {fmt$(stats.profit)} profit</div>
                     </div>
                   ))}
                 </div>
