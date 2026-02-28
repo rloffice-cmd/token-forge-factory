@@ -550,6 +550,11 @@ function CardDetailModal({
           setPriceHistory(genPriceHistory(item));
           setHistoryReal(false);
         }
+      })
+      .catch(() => {
+        // Silently fall back to synthetic — chart still renders, just not real data
+        setPriceHistory(genPriceHistory(item));
+        setHistoryReal(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
@@ -560,9 +565,11 @@ function CardDetailModal({
   const [refreshing,     setRefreshing]     = useState(false);
   const [refreshResult,  setRefreshResult]  = useState("");
   const [refreshedPrice, setRefreshedPrice] = useState<number | null>(null);
+  const refreshingRef = useRef(false); // ref guard avoids stale closure when refreshing is in deps
 
   const refreshMarketPrice = useCallback(async () => {
-    if (refreshing) return;
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setRefreshing(true);
     setRefreshResult("");
 
@@ -610,9 +617,10 @@ function CardDetailModal({
     } catch (err) {
       setRefreshResult(`Error: ${(err as Error).message}`);
     } finally {
+      refreshingRef.current = false;
       setRefreshing(false);
     }
-  }, [refreshing, item, loadPriceHistory]);
+  }, [item, loadPriceHistory]); // refreshing read via ref — no dep needed
 
   return (
     <div
@@ -1646,7 +1654,9 @@ function BottomNav({ tab, setTab, isAdmin }: { tab: Tab; setTab: (t: Tab) => voi
 
 export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
-  const aiAbort    = useRef<AbortController | null>(null);
+  // Separate abort controllers — cancelling chat must not kill an in-progress market scan
+  const chatAbort  = useRef<AbortController | null>(null);
+  const scanAbort  = useRef<AbortController | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
   const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2153,9 +2163,10 @@ export default function CollectPro() {
         ? [{ role: "user", content: `=== Portfolio ===\n${portfolioCtx}\n\n=== Question ===\n${text}` }]
         : [...history, userMsg];
 
-    aiAbort.current = new AbortController();
+    chatAbort.current?.abort(); // cancel any previous chat request
+    chatAbort.current = new AbortController();
     try {
-      const reply = await callAI(messages, "brain", { signal: aiAbort.current.signal });
+      const reply = await callAI(messages, "brain", { signal: chatAbort.current.signal });
       d({ t: "CHAT_MSG", m: { role: "assistant", content: reply } });
     } catch (err: unknown) {
       if ((err as Error).message !== "ABORTED") toast.error(`AI: ${(err as Error).message}`);
@@ -2176,12 +2187,13 @@ export default function CollectPro() {
     if (!query || s.market.busy) return;
     d({ t: "MKT_RESULT", v: "" });
     d({ t: "MKT_BUSY", v: true });
-    aiAbort.current = new AbortController();
+    scanAbort.current?.abort(); // cancel any previous scan
+    scanAbort.current = new AbortController();
     try {
       const result = await callAI(
         [{ role: "user", content: query }],
         s.market.mode,
-        { signal: aiAbort.current.signal, cacheKey: query }
+        { signal: scanAbort.current.signal, cacheKey: query }
       );
       d({ t: "MKT_RESULT", v: result });
     } catch (err: unknown) {
@@ -2192,7 +2204,8 @@ export default function CollectPro() {
   }, [s.market.query, s.market.busy, s.market.mode]);
 
   const cancelAI = useCallback(() => {
-    aiAbort.current?.abort();
+    chatAbort.current?.abort();
+    scanAbort.current?.abort();
     d({ t: "CHAT_BUSY", v: false });
     d({ t: "MKT_BUSY", v: false });
   }, []);

@@ -388,8 +388,9 @@ export default function GradingStudio({ items, initialItem, onClose }: Props) {
   useEffect(() => { itemTypeRef.current = itemType; }, [itemType]);
 
   // ── Stable callback refs (prevent stale closures across re-renders) ───────
-  const triggerCaptureRef = useRef<(() => void) | null>(null);
-  const startAnalysisRef  = useRef<(() => Promise<void>) | null>(null);
+  const triggerCaptureRef    = useRef<(() => void) | null>(null);
+  const startAnalysisRef     = useRef<(() => Promise<void>) | null>(null);
+  const analysisTimerRefs    = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Camera management
@@ -545,7 +546,11 @@ export default function GradingStudio({ items, initialItem, onClose }: Props) {
     stopCamera();
     setPhase("analyzing");
     setAnalysisStep(0);
-    ANALYSIS_STEPS.forEach((_, i) => setTimeout(() => setAnalysisStep(i), i * 900));
+    // Track timers so we can clear them on unmount (prevents setState after unmount)
+    analysisTimerRefs.current.forEach(clearTimeout);
+    analysisTimerRefs.current = ANALYSIS_STEPS.map((_, i) =>
+      setTimeout(() => setAnalysisStep(i), i * 900)
+    );
 
     try {
       const res = await gradeItem(capturedRef.current, itemTypeRef.current);
@@ -581,11 +586,15 @@ export default function GradingStudio({ items, initialItem, onClose }: Props) {
       return;
     }
     // First capture phase — start camera and loop
-    startCamera().then(() => startAnalysisLoop());
+    // Guard: only start loop if stream is actually live (startCamera catches errors internally)
+    startCamera().then(() => { if (streamRef.current) startAnalysisLoop(); });
   }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Cleanup on unmount
-  useEffect(() => () => stopCamera(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Cleanup on unmount — stop camera and cancel any pending analysis step timers
+  useEffect(() => () => {
+    stopCamera();
+    analysisTimerRefs.current.forEach(clearTimeout);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─────────────────────────────────────────────────────────────────────────
   // Save result to DB
