@@ -383,6 +383,19 @@ export default function CollectPro() {
     [s.items]
   );
 
+  // Grading pipeline: items in grading with days in queue
+  const gradingPipeline = useMemo(() => {
+    const now = Date.now();
+    return s.items
+      .filter(i => i.status === "grading")
+      .map(i => {
+        const daysIn = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
+        const cost   = +i.buy_price + +(i.grading_cost ?? 0);
+        return { item: i, daysIn, cost, isStale: daysIn > 60 };
+      })
+      .sort((a, b) => b.daysIn - a.daysIn);
+  }, [s.items]);
+
   // Per-franchise realized ROI (sold items only)
   const franchiseROI = useMemo(() => {
     const map = new Map<string, { profit: number; cost: number; count: number }>();
@@ -1456,6 +1469,46 @@ export default function CollectPro() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-700 mt-2">Estimates use raw × 2.5 premium and $25 grading fee. Actual results may vary.</p>
+              </div>
+            )}
+
+            {/* ── Grading Pipeline ─────────────────────────────────────────────── */}
+            {gradingPipeline.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>⚗ Grading Pipeline</span>
+                  <span className="text-gray-600 font-normal normal-case">{gradingPipeline.length} card{gradingPipeline.length !== 1 ? "s" : ""} in queue</span>
+                </div>
+                <div className="space-y-2">
+                  {gradingPipeline.map(({ item, daysIn, cost, isStale }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className={`w-full flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg hover:bg-gray-800 transition-colors text-left ${isStale ? "bg-red-950/20 border border-red-900/30" : "bg-gray-800/40"}`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {item.image_url && (
+                          <img src={item.image_url} alt={item.name} loading="lazy" className="w-6 h-8 object-cover rounded flex-shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <p className="text-xs text-gray-500">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 text-right">
+                        <span className="text-xs text-gray-500">{fmt$(cost)}</span>
+                        <span className={`text-xs font-mono font-semibold ${isStale ? "text-red-400" : daysIn > 30 ? "text-amber-400" : "text-gray-400"}`}>
+                          {daysIn}d
+                        </span>
+                        {isStale && <span className="text-xs text-red-500">⚠ stale</span>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                {gradingPipeline.some(x => x.isStale) && (
+                  <p className="text-xs text-red-600 mt-2">Items marked ⚠ have been in grading for over 60 days.</p>
+                )}
               </div>
             )}
 
