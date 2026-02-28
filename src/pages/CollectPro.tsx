@@ -837,10 +837,91 @@ function ArenaView({
         </div>
       )}
 
+      {/* AI Deep Compare — web search on both cards */}
+      {itemA && itemB && <ArenaAICompare itemA={itemA} itemB={itemB} />}
+
       {(itemA || itemB) && (
         <Button variant="outline" size="sm" onClick={() => dispatch({ t: "ARENA_CLEAR" })}>
           Clear Arena
         </Button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ArenaAICompare — calls Market AI with web search to compare two cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ArenaAICompare({ itemA, itemB }: { itemA: CollectionItem; itemB: CollectionItem }) {
+  const [result, setResult] = useState("");
+  const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const runCompare = useCallback(async () => {
+    if (busy) { abortRef.current?.abort(); setBusy(false); return; }
+
+    const prompt = [
+      `Compare these two TCG cards for investment decisions. Search current market prices on eBay sold listings and TCGPlayer.`,
+      ``,
+      `CARD A: ${itemA.name}`,
+      `  Set: ${itemA.card_set ?? "Unknown"} | Franchise: ${itemA.franchise ?? "Unknown"}`,
+      `  Condition: ${itemA.condition} | PSA Grade: ${itemA.psa_grade ?? "Not graded"}`,
+      `  My buy price: $${itemA.buy_price} (grading: $${itemA.grading_cost ?? 0})`,
+      `  Market estimate: ${itemA.market_price != null ? "$" + itemA.market_price : "Unknown"}`,
+      ``,
+      `CARD B: ${itemB.name}`,
+      `  Set: ${itemB.card_set ?? "Unknown"} | Franchise: ${itemB.franchise ?? "Unknown"}`,
+      `  Condition: ${itemB.condition} | PSA Grade: ${itemB.psa_grade ?? "Not graded"}`,
+      `  My buy price: $${itemB.buy_price} (grading: $${itemB.grading_cost ?? 0})`,
+      `  Market estimate: ${itemB.market_price != null ? "$" + itemB.market_price : "Unknown"}`,
+      ``,
+      `Please answer:`,
+      `1. Current market price for each card (cite sources + dates)`,
+      `2. Which has better price momentum right now?`,
+      `3. Which to grade first if budget allows only one ($25 grading fee)?`,
+      `4. Hold, sell, or flip recommendation for each card`,
+    ].join("\n");
+
+    setBusy(true);
+    setResult("");
+    abortRef.current = new AbortController();
+
+    try {
+      const reply = await callAI(
+        [{ role: "user", content: prompt }],
+        "market",
+        { signal: abortRef.current.signal, cacheKey: `arena-${itemA.id}-${itemB.id}` }
+      );
+      setResult(reply);
+    } catch (err: unknown) {
+      if ((err as Error).message !== "ABORTED") setResult(`Error: ${(err as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, itemA, itemB]);
+
+  return (
+    <div className="mb-4">
+      <button
+        onClick={runCompare}
+        className={`w-full py-2.5 rounded-xl font-semibold text-sm transition-all ${
+          busy
+            ? "bg-red-900/60 border border-red-700 text-red-300 hover:bg-red-800/60"
+            : "bg-gradient-to-r from-blue-700 to-purple-700 text-white hover:from-blue-600 hover:to-purple-600 shadow-lg"
+        }`}
+      >
+        {busy ? "⏹ Cancel AI Compare" : "🤖 AI Deep Compare (web search)"}
+      </button>
+
+      {busy && !result && (
+        <p className="text-xs text-gray-500 text-center mt-2 animate-pulse">Searching eBay + TCGPlayer… (15–30s)</p>
+      )}
+
+      {result && (
+        <div className="mt-3 bg-gray-800/80 border border-blue-800/40 rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[420px] overflow-y-auto">
+          {result}
+        </div>
       )}
     </div>
   );
@@ -1237,6 +1318,17 @@ export default function CollectPro() {
       .update({ market_price: price })
       .in("id", s.inv.selected);
     if (error) { toast.error(error.message); return; }
+
+    // Record price history for each updated item
+    const historyRows = s.inv.selected.map((id) => ({
+      item_id: id,
+      price,
+      source: "manual",
+      note: `Batch price update to ${fmt$(price)}`,
+    }));
+    supabase.from("cp_price_history").insert(historyRows)
+      .then(({ error: e }) => { if (e) console.warn("Price history batch:", e.message); });
+
     d({ t: "INV_SEL_CLEAR" });
     toast.success(`Market price updated for ${s.inv.selected.length} items`);
   }, [s.inv.selected]);
