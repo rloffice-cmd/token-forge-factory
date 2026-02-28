@@ -1647,40 +1647,52 @@ export default function CollectPro() {
             )}
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
-              <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm">Sold Transactions</div>
+              <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm flex items-center justify-between">
+                <span>Sold Transactions</span>
+                <span className="text-xs text-gray-500 font-normal">{s.items.filter(i => i.status === "sold").length} sales</span>
+              </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
-                    {["Item", "Buy", "Grading", "Base Cost", "Sale", "Net Profit", "ROI", "Partner"].map((h) => (
-                      <th key={h} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400">{h}</th>
+                    {["Item", "Sold Date", "Buy", "Grading", "Base Cost", "Sale", "Net Profit", "ROI", "Hold", "Partner"].map((h) => (
+                      <th key={h} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 first:text-left">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {s.items.filter((i) => i.status === "sold" && i.sell_price != null).map((i) => {
-                    const base   = +i.buy_price + +(i.grading_cost ?? 0);
-                    const profit = +(i.sell_price ?? 0) - base;
-                    const roi    = base > 0 ? (profit / base) * 100 : 0;
-                    return (
-                      <tr key={i.id} className="border-b border-gray-800/40 hover:bg-white/[0.02]">
-                        <td className="px-3 py-2.5 font-semibold">{i.name}</td>
-                        <td className="px-3 py-2.5">{fmt$(i.buy_price)}</td>
-                        <td className="px-3 py-2.5 text-amber-400">{i.grading_cost ? fmt$(i.grading_cost) : "—"}</td>
-                        <td className="px-3 py-2.5 text-amber-300 font-medium">{fmt$(base)}</td>
-                        <td className="px-3 py-2.5">{fmt$(i.sell_price!)}</td>
-                        <td className={`px-3 py-2.5 font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {profit >= 0 ? "+" : ""}{fmt$(profit)}
-                        </td>
-                        <td className={`px-3 py-2.5 ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</td>
-                        <td className="px-3 py-2.5 text-gray-400 text-xs">
-                          {s.partners.find((p) => p.id === i.partner_id)?.name ?? "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {s.items.filter((i) => i.status === "sold" && i.sell_price != null)
+                    .sort((a, b) => new Date(b.sold_at ?? b.updated_at).getTime() - new Date(a.sold_at ?? a.updated_at).getTime())
+                    .map((i) => {
+                      const base     = +i.buy_price + +(i.grading_cost ?? 0);
+                      const profit   = +(i.sell_price ?? 0) - base;
+                      const roi      = base > 0 ? (profit / base) * 100 : 0;
+                      const holdDays = i.sold_at
+                        ? Math.round((new Date(i.sold_at).getTime() - new Date(i.buy_date).getTime()) / 86400000)
+                        : null;
+                      return (
+                        <tr key={i.id} className={`border-b border-gray-800/40 hover:bg-white/[0.02] ${profit < 0 ? "bg-red-950/10" : ""}`}>
+                          <td className="px-3 py-2.5 font-semibold">{i.name}</td>
+                          <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+                            {i.sold_at ? new Date(i.sold_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">{fmt$(i.buy_price)}</td>
+                          <td className="px-3 py-2.5 text-right text-amber-400">{i.grading_cost ? fmt$(i.grading_cost) : "—"}</td>
+                          <td className="px-3 py-2.5 text-right text-amber-300 font-medium">{fmt$(base)}</td>
+                          <td className="px-3 py-2.5 text-right">{fmt$(i.sell_price!)}</td>
+                          <td className={`px-3 py-2.5 text-right font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                          </td>
+                          <td className={`px-3 py-2.5 text-right ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</td>
+                          <td className="px-3 py-2.5 text-right text-xs text-gray-500">{holdDays != null ? `${holdDays}d` : "—"}</td>
+                          <td className="px-3 py-2.5 text-right text-gray-400 text-xs">
+                            {s.partners.find((p) => p.id === i.partner_id)?.name ?? "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   {s.items.filter((i) => i.status === "sold").length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center py-12 text-gray-600">
+                      <td colSpan={10} className="text-center py-12 text-gray-600">
                         <div className="text-2xl mb-2">📈</div>
                         <div>No sold transactions yet</div>
                         <div className="text-xs text-gray-700 mt-1">Mark a card as sold from the Inventory to see ROI here</div>
