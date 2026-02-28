@@ -76,9 +76,10 @@ export default function CollectPro() {
   const [batchOp,        setBatchOp]        = useState<"status" | "price" | null>(null);
   const [gradingForItem,        setGradingForItem]        = useState<CollectionItem | null>(null);
   const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
-  const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
-  const [statusFilter,     setStatusFilter]     = useState<"all" | ItemStatus>("all");
-  const [scanHistory,      setScanHistory]      = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
+  const [expandedPartners,    setExpandedPartners]    = useState<Set<string>>(new Set());
+  const [statusFilter,        setStatusFilter]        = useState<"all" | ItemStatus>("all");
+  const [franchiseFilterInv,  setFranchiseFilterInv]  = useState<string | null>(null);
+  const [scanHistory,         setScanHistory]         = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -283,9 +284,15 @@ export default function CollectPro() {
         (i.card_set ?? "").toLowerCase().includes(q) ||
         (i.franchise ?? "").toLowerCase().includes(q)) &&
       (!s.franchise || !!i.franchise) &&
-      (statusFilter === "all" || i.status === statusFilter)
+      (statusFilter === "all" || i.status === statusFilter) &&
+      (!franchiseFilterInv || i.franchise === franchiseFilterInv)
     );
-  }, [s.items, s.inv.search, s.franchise, statusFilter]);
+  }, [s.items, s.inv.search, s.franchise, statusFilter, franchiseFilterInv]);
+
+  const invFranchises = useMemo(
+    () => [...new Set(s.items.map((i) => i.franchise).filter(Boolean) as string[])].sort(),
+    [s.items]
+  );
 
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
@@ -1197,6 +1204,23 @@ export default function CollectPro() {
               );
             })()}
 
+            {/* Franchise filter chips (only when >1 franchise) */}
+            {invFranchises.length > 1 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {invFranchises.map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFranchiseFilterInv((prev) => prev === f ? null : f)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      franchiseFilterInv === f
+                        ? "bg-indigo-700 text-white"
+                        : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                    }`}
+                  >{f}</button>
+                ))}
+              </div>
+            )}
+
             {/* Batch select all button */}
             {sortedItems.length > 0 && (
               <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
@@ -1455,7 +1479,11 @@ export default function CollectPro() {
                             />
                           </td>
                           <td className="px-3 py-2.5">
-                            <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                              className="flex items-center gap-2 text-left hover:opacity-80 transition-opacity"
+                            >
                               {item.image_url && (
                                 <img
                                   src={item.image_url}
@@ -1465,12 +1493,12 @@ export default function CollectPro() {
                                 />
                               )}
                               <div>
-                                <div className="font-semibold">{item.name}</div>
+                                <div className="font-semibold hover:text-blue-300 transition-colors">{item.name}</div>
                                 <div className="text-xs text-gray-500">
                                   {[item.card_set, item.condition, item.psa_grade ? `PSA ${item.psa_grade}` : ""].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
-                            </div>
+                            </button>
                           </td>
                           <td className="px-3 py-2.5"><StatusBadge status={item.status} /></td>
                           <td className="px-3 py-2.5 text-xs text-gray-500">{item.buy_date}</td>
@@ -1758,7 +1786,11 @@ export default function CollectPro() {
                         ? Math.round((new Date(i.sold_at).getTime() - new Date(i.buy_date).getTime()) / 86400000)
                         : null;
                       return (
-                        <tr key={i.id} className={`border-b border-gray-800/40 hover:bg-white/[0.02] ${profit < 0 ? "bg-red-950/10" : ""}`}>
+                        <tr
+                          key={i.id}
+                          className={`border-b border-gray-800/40 hover:bg-white/[0.04] cursor-pointer ${profit < 0 ? "bg-red-950/10" : ""}`}
+                          onClick={() => d({ t: "SET_MODAL", id: i.id })}
+                        >
                           <td className="px-3 py-2.5 font-semibold">{i.name}</td>
                           <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">
                             {i.sold_at ? new Date(i.sold_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
