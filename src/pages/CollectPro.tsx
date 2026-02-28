@@ -1056,7 +1056,11 @@ export default function CollectPro() {
       if ((field as string) === "__pnl__") {
         cmp = pnl(a) - pnl(b);
       } else if ((field as string) === "__age__") {
-        cmp = age(a) - age(b); // older items have smaller timestamps = lower value
+        cmp = age(a) - age(b);
+      } else if ((field as string) === "__score__") {
+        const sa = sellScores.find(x => x.item.id === a.id)?.score ?? -1;
+        const sb = sellScores.find(x => x.item.id === b.id)?.score ?? -1;
+        cmp = sa - sb;
       } else {
         const av = a[field] ?? "";
         const bv = b[field] ?? "";
@@ -1067,7 +1071,7 @@ export default function CollectPro() {
       return dir === "asc" ? cmp : -cmp;
     });
     return arr;
-  }, [filteredItems, s.inv.sort]);
+  }, [filteredItems, s.inv.sort, sellScores]);
 
   const pagedItems = useMemo(() => {
     const start = (s.inv.page - 1) * PAGE;
@@ -1926,6 +1930,25 @@ export default function CollectPro() {
                 </button>
               ))}
             </div>
+
+            {/* ── Listing Insight ───────────────────────────────────────────────── */}
+            {(() => {
+              const bestDay = dayOfWeekROI.reduce<{ day: string; roi: number; count: number } | null>((best, d) =>
+                d.count > 0 && (best == null || d.roi > best.roi) ? d : best, null);
+              if (!bestDay || !bestSaleMonth) return null;
+              return (
+                <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-xs text-gray-400 flex items-start gap-2">
+                  <span className="text-lg leading-none flex-shrink-0">💡</span>
+                  <span>
+                    Best time to list based on your history:{" "}
+                    <span className="text-emerald-400 font-semibold">{bestDay.day}s</span> in{" "}
+                    <span className="text-emerald-400 font-semibold">{bestSaleMonth.month}</span>{" "}
+                    yield the highest ROI
+                    {bestDay.roi > 0 && ` (${fmtPct(bestDay.roi)} avg on ${bestDay.day}s)`}.
+                  </span>
+                </div>
+              );
+            })()}
 
             {/* ── New This Week ─────────────────────────────────────────────────── */}
             {newThisWeek.length > 0 && (
@@ -3164,6 +3187,7 @@ export default function CollectPro() {
                         { label: "Grading", field: "grading_cost" as const },
                         { label: "Market", field: "market_price" as const },
                         { label: "P&L", field: "__pnl__" as const },
+                        { label: "Score ↕", field: "__score__" as const },
                         { label: "Sale", field: "sell_price" as const },
                       ].map(({ label, field }) => (
                         <th
@@ -3305,6 +3329,19 @@ export default function CollectPro() {
                               );
                             })()}
                           </td>
+                          {/* Sell score column */}
+                          <td className="px-3 py-2.5 text-right">
+                            {(() => {
+                              const sc = sellScores.find(x => x.item.id === item.id);
+                              if (!sc) return <span className="text-gray-700">—</span>;
+                              return (
+                                <span
+                                  className={`text-xs font-bold ${sc.score >= 80 ? "text-emerald-400" : "text-blue-400"}`}
+                                  title={`Sell score: ${sc.score}/100`}
+                                >{sc.score}</span>
+                              );
+                            })()}
+                          </td>
                           <td className="px-3 py-2.5">
                             {item.status === "sold" && item.sell_price != null ? (
                               <div>
@@ -3375,7 +3412,7 @@ export default function CollectPro() {
                     })}
                     {pagedItems.length === 0 && (
                       <tr>
-                        <td colSpan={10} className="text-center py-10 text-gray-600">
+                        <td colSpan={11} className="text-center py-10 text-gray-600">
                           {s.inv.search ? "No results" : "No items — click Add"}
                         </td>
                       </tr>
@@ -3403,6 +3440,7 @@ export default function CollectPro() {
                           <td className={`px-3 py-2 text-right font-semibold ${totalPnL >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                             {totalPnL >= 0 ? "+" : ""}{fmt$(totalPnL)}
                           </td>
+                          <td /> {/* Score */}
                           <td /> {/* Sale */}
                           <td /> {/* Actions */}
                         </tr>
