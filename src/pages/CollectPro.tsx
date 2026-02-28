@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, ComposedChart, Line } from "recharts";
 
 import type {
   CollectionItem,
@@ -289,9 +289,14 @@ export default function CollectPro() {
           profit:  entry.profit  + (+(i.sell_price!) - cost),
         });
       });
-    return [...map.entries()]
+    const sorted = [...map.entries()]
       .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
-      .map(([month, data]) => ({ month, ...data }));
+      .map(([month, data]) => ({ month, ...data, ma3: null as number | null }));
+    // Compute 3-month moving average for profit
+    for (let i = 2; i < sorted.length; i++) {
+      sorted[i].ma3 = (sorted[i - 2].profit + sorted[i - 1].profit + sorted[i].profit) / 3;
+    }
+    return sorted;
   }, [s.items]);
 
   // Partner P&L comparison data for bar chart
@@ -2808,18 +2813,18 @@ export default function CollectPro() {
             {monthlyRevenue.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly Revenue & Net Profit</p>
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={monthlyRevenue} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
+                <ResponsiveContainer width="100%" height={190}>
+                  <ComposedChart data={monthlyRevenue} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
                     <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number, name: string) => [fmt$(v), name === "revenue" ? "Revenue" : "Net Profit"]}
+                      formatter={(v: number, name: string) => [fmt$(v), name === "revenue" ? "Revenue" : name === "profit" ? "Net Profit" : "3-mo avg profit"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
                     <Legend
                       iconSize={8}
-                      formatter={(value) => <span style={{ color: "#9ca3af", fontSize: 10 }}>{value === "revenue" ? "Revenue" : "Net Profit"}</span>}
+                      formatter={(value) => <span style={{ color: "#9ca3af", fontSize: 10 }}>{value === "revenue" ? "Revenue" : value === "profit" ? "Net Profit" : "3-mo avg"}</span>}
                     />
                     <Bar dataKey="revenue" name="revenue" radius={[3, 3, 0, 0]}>
                       {monthlyRevenue.map((_, i) => (
@@ -2831,7 +2836,11 @@ export default function CollectPro() {
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.85} />
                       ))}
                     </Bar>
-                  </BarChart>
+                    {monthlyRevenue.length >= 4 && (
+                      <Line type="monotone" dataKey="ma3" name="ma3" stroke="#f59e0b" strokeWidth={2}
+                        dot={false} strokeDasharray="4 2" connectNulls={false} />
+                    )}
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             )}
