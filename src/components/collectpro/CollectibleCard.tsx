@@ -114,7 +114,12 @@ export default function CollectibleCard({
 
         <div className="flex justify-between text-xs text-gray-400 mt-auto pt-1">
           <span>Cost: {fmt$(cost)}</span>
-          {item.market_price != null && <span className="text-blue-400">~{fmt$(item.market_price)}</span>}
+          {item.market_price != null
+            ? <span className="text-blue-400">~{fmt$(item.market_price)}</span>
+            : item.status === "active"
+              ? <span className="text-gray-600 italic" title="No market price set">no price ⚠</span>
+              : null
+          }
         </div>
       </div>
 

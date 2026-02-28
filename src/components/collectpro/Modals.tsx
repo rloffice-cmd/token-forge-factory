@@ -22,6 +22,9 @@ export function SellDialog({
 }) {
   const [price, setPrice] = useState(item.market_price != null ? String(item.market_price) : "");
   const [busy, setBusy] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const suggestAbort = useRef<AbortController | null>(null);
+
   const cost = itemCost(item);
   const numPrice = parseFloat(price);
   const profit = !isNaN(numPrice) ? numPrice - cost : null;
@@ -33,6 +36,30 @@ export function SellDialog({
     await onConfirm(item, numPrice);
     setBusy(false);
   };
+
+  const suggestPrice = useCallback(async () => {
+    setSuggesting(true);
+    suggestAbort.current = new AbortController();
+    try {
+      const prompt = buildMarketPricePrompt(item, { verbose: false });
+      const reply  = await callAI(
+        [{ role: "user", content: prompt }],
+        "market",
+        { signal: suggestAbort.current.signal }
+      );
+      const suggested = parseAIPrice(reply);
+      if (suggested != null) {
+        setPrice(String(suggested));
+        toast.success(`AI suggests ${fmt$(suggested)}`);
+      } else {
+        toast.error("Could not extract a price from the AI response");
+      }
+    } catch (err: unknown) {
+      if ((err as Error).message !== "ABORTED") toast.error("AI error — try again");
+    } finally {
+      setSuggesting(false);
+    }
+  }, [item]);
 
   return (
     <div
@@ -59,9 +86,43 @@ export function SellDialog({
           )}
         </div>
 
+        {/* Quick price presets (only when market_price is known) */}
+        {item.market_price != null && (
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {([
+              { label: "Market",  mult: 1.00 },
+              { label: "Mkt +10%", mult: 1.10 },
+              { label: "Mkt +20%", mult: 1.20 },
+              { label: "Mkt −10%", mult: 0.90 },
+            ] as const).map(({ label, mult }) => {
+              const p = Math.round(item.market_price! * mult * 100) / 100;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setPrice(String(p))}
+                  className="px-2.5 py-1 rounded-lg text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors border border-gray-700"
+                >
+                  {label} <span className="text-gray-500">{fmt$(p)}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="text-xs text-gray-400 block mb-1">Sale Price ($) *</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-400">Sale Price ($) *</label>
+              <button
+                type="button"
+                onClick={suggesting ? () => suggestAbort.current?.abort() : suggestPrice}
+                disabled={busy}
+                className="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors disabled:opacity-40"
+              >
+                {suggesting ? "⏹ Cancel" : "🤖 AI Suggest"}
+              </button>
+            </div>
             <Input
               type="number"
               min="0"
@@ -72,7 +133,13 @@ export function SellDialog({
               onChange={(e) => setPrice(e.target.value)}
               placeholder="Enter sale price…"
             />
-            {profit != null && price !== "" && (
+            {suggesting && (
+              <div className="flex items-center gap-2 mt-1.5 text-xs text-blue-400">
+                <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                Searching eBay + TCGPlayer for current price…
+              </div>
+            )}
+            {profit != null && price !== "" && !suggesting && (
               <div className={`text-xs mt-1.5 font-medium ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {profit >= 0 ? "▲ Profit" : "▼ Loss"}: {fmt$(profit)}{" "}
                 ({fmtPct(cost > 0 ? (profit / cost) * 100 : 0)})
@@ -80,7 +147,7 @@ export function SellDialog({
             )}
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={busy || !price} className="flex-1">
+            <Button type="submit" disabled={busy || suggesting || !price} className="flex-1">
               {busy ? "Saving…" : "Confirm Sale ✓"}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

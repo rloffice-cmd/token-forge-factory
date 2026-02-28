@@ -63,6 +63,23 @@ export default function CardDetailModal({
   const [refreshedPrice, setRefreshedPrice] = useState<number | null>(null);
   const refreshingRef = useRef(false);
 
+  // ── Manual price record ──────────────────────────────────────────────────
+  const [manualPrice,    setManualPrice]    = useState("");
+  const [recordingManual, setRecordingManual] = useState(false);
+
+  const recordManualPrice = useCallback(async () => {
+    const p = parseFloat(manualPrice);
+    if (isNaN(p) || p <= 0) { return; }
+    setRecordingManual(true);
+    try {
+      await saveMarketPrice(item.id, p, "Manual price point");
+      setManualPrice("");
+      loadPriceHistory();
+    } finally {
+      setRecordingManual(false);
+    }
+  }, [manualPrice, item.id, loadPriceHistory]);
+
   const refreshMarketPrice = useCallback(async () => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
@@ -142,6 +159,7 @@ export default function CardDetailModal({
         <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
           {[
             { label: "Buy Price", value: fmt$(item.buy_price), cls: "text-white" },
+            { label: "Buy Date", value: item.buy_date, cls: "text-gray-300" },
             { label: "Grading Cost", value: fmt$(item.grading_cost ?? 0), cls: "text-amber-400" },
             { label: "Total Cost", value: fmt$(cost), cls: "text-amber-300 font-bold" },
             {
@@ -167,9 +185,17 @@ export default function CardDetailModal({
           ))}
         </div>
 
+        {/* Notes */}
+        {item.notes && (
+          <div className="text-xs text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded-lg px-3 py-2 mb-4 whitespace-pre-wrap">
+            <span className="text-gray-500 font-semibold block mb-0.5">Notes</span>
+            {item.notes}
+          </div>
+        )}
+
         {item.market_price == null && (
           <div className="text-xs text-amber-600 bg-amber-900/30 border border-amber-900/50 rounded-lg px-3 py-2 mb-4">
-            THEORETICAL — no confirmed price point. Market estimate is not available.
+            No confirmed market price. Profit / ROI figures are estimates only.
           </div>
         )}
 
@@ -200,6 +226,27 @@ export default function CardDetailModal({
                 {refreshResult}
               </div>
             )}
+
+            {/* Manual price record */}
+            <div className="flex items-center gap-2 mt-2">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="📝 Record manual price ($)"
+                className="flex-1 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
+                value={manualPrice}
+                onChange={(e) => setManualPrice(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && recordManualPrice()}
+              />
+              <button
+                onClick={recordManualPrice}
+                disabled={!manualPrice || recordingManual}
+                className="px-3 py-1.5 rounded-lg text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 transition-colors whitespace-nowrap"
+              >
+                {recordingManual ? "…" : "Record"}
+              </button>
+            </div>
           </div>
         )}
 
@@ -221,7 +268,7 @@ export default function CardDetailModal({
                 </linearGradient>
               </defs>
               <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#6b7280" }} />
-              <YAxis tick={{ fontSize: 9, fill: "#6b7280" }} width={40} tickFormatter={(v) => `$${v}`} />
+              <YAxis tick={{ fontSize: 9, fill: "#6b7280" }} width={40} tickFormatter={fmt$} />
               <Tooltip
                 contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, fontSize: 11 }}
                 formatter={(v: number) => [fmt$(v), "Price"]}
