@@ -2536,7 +2536,14 @@ export default function CollectPro() {
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
               <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm flex items-center justify-between">
                 <span>Sold Transactions</span>
-                <span className="text-xs text-gray-500 font-normal">{s.items.filter(i => i.status === "sold").length} sales</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500 font-normal">{s.items.filter(i => i.status === "sold").length} sales</span>
+                  <button
+                    onClick={() => exportCSV(s.items.filter(i => i.status === "sold"), s.partners, "sold-transactions.csv")}
+                    className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                    title="Export sold transactions to CSV"
+                  >⬇ CSV</button>
+                </div>
               </div>
               <table className="w-full text-sm">
                 <thead>
