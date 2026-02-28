@@ -1,8 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CollectPro — Image utilities
-// Compresses an uploaded image to ≤ targetKB before base64 storage.
+//
+// compressImage   — compress File to ≤ targetKB, returns base64 data URL
+// uploadCardImage — compress + upload to Supabase Storage, returns public URL
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { supabase } from "@/integrations/supabase/client";
+
+const BUCKET = "collectpro-images";
+
+/** Compress image file to a JPEG ≤ targetKB. Returns base64 data URL. */
 export function compressImage(file: File, targetKB = 120): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -40,4 +47,32 @@ export function compressImage(file: File, targetKB = 120): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Compress a card image and upload it to Supabase Storage.
+ * Returns the public URL of the uploaded file.
+ *
+ * Path format: `{userId}/{itemId}.jpg`
+ * If itemId is not yet known (new item), pass a temp UUID — caller can rename later.
+ */
+export async function uploadCardImage(file: File, pathKey: string): Promise<string> {
+  // 1. Compress to data URL
+  const dataUrl = await compressImage(file, 120);
+
+  // 2. Convert data URL → Blob
+  const res  = await fetch(dataUrl);
+  const blob = await res.blob();
+
+  // 3. Upload to Supabase Storage (upsert so re-uploads overwrite)
+  const path = `${pathKey}.jpg`;
+  const { error } = await supabase.storage
+    .from(BUCKET)
+    .upload(path, blob, { contentType: "image/jpeg", upsert: true });
+
+  if (error) throw new Error(`Storage upload failed: ${error.message}`);
+
+  // 4. Return public URL
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
+  return data.publicUrl;
 }

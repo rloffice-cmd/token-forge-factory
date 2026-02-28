@@ -90,10 +90,16 @@ serve(async (req) => {
 
   if (!ANTHROPIC_KEY) return json({ error: "AI service not configured." }, 503);
 
+  type ContentBlock =
+    | { type: "text"; text: string }
+    | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
   let body: {
     messages: Array<{ role: string; content: string }>;
-    mode: "brain" | "market" | "arbitrage";
+    mode: "brain" | "market" | "arbitrage" | "scan";
     cacheKey?: string;
+    image_base64?: string;
+    image_media_type?: string;
   };
 
   try {
@@ -102,10 +108,55 @@ serve(async (req) => {
     return json({ error: "Invalid JSON." }, 400);
   }
 
-  const { messages, mode = "brain", cacheKey } = body;
-  const instructionKey = `collectpro_${mode}`;
+  const { messages, mode = "brain", cacheKey, image_base64, image_media_type } = body;
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  // ── Scan mode: vision-based card identification ───────────────────────────
+  if (mode === "scan") {
+    if (!image_base64) return json({ error: "image_base64 required for scan mode." }, 400);
+
+    const scanSystem =
+      "You are a TCG card identification expert. When shown a card image, " +
+      "identify it and return ONLY valid JSON (no markdown, no extra text): " +
+      '{"name":"<card name>","card_set":"<set name>","franchise":"Pokemon|One Piece|Magic|Other",' +
+      '"condition":"M|NM|LP|MP|HP|D","notes":"<any relevant observation>"}. ' +
+      "If you cannot identify the card, return {\"name\":\"\",\"card_set\":\"\",\"franchise\":\"Other\",\"condition\":\"NM\",\"notes\":\"Could not identify\"}";
+
+    const contentBlocks: ContentBlock[] = [
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: image_media_type ?? "image/jpeg",
+          data: image_base64,
+        },
+      },
+      {
+        type: "text",
+        text: "Identify this trading card. Return ONLY the JSON object described in the system prompt.",
+      },
+    ];
+
+    const scanResp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 512,
+        system: scanSystem,
+        messages: [{ role: "user", content: contentBlocks }],
+      }),
+    });
+
+    return json(await scanResp.json(), scanResp.status);
+  }
+
+  const instructionKey = `collectpro_${mode}`;
 
   // Load merged system prompt from Layer 2
   const systemPrompt = await loadSystemPrompt(sb, instructionKey);

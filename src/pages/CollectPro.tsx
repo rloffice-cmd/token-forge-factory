@@ -6,6 +6,7 @@
 import React, {
   useReducer,
   useEffect,
+  useState,
   useMemo,
   useRef,
   useCallback,
@@ -46,7 +47,9 @@ import type {
 } from "@/lib/collectpro/types";
 import { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
 import { callAI } from "@/lib/collectpro/ai";
-import { compressImage } from "@/lib/collectpro/image";
+import type { CardScanResult } from "@/lib/collectpro/ai";
+import { compressImage, uploadCardImage } from "@/lib/collectpro/image";
+import CameraScanner from "@/components/collectpro/CameraScanner";
 import { exportCSV, exportEbayCSV, exportCardmarketCSV } from "@/lib/collectpro/export";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -138,6 +141,7 @@ type State = {
   viewMode: ViewMode;
   arena: { a: string | null; b: string | null };
   modal: string | null;
+  showScanner: boolean;
   chat: { messages: ChatMessage[]; input: string; busy: boolean };
   market: { mode: AIMode; query: string; result: string; busy: boolean };
   inv: {
@@ -180,7 +184,8 @@ type Action =
   | { t: "INV_SEL_CLEAR" }
   | { t: "ARENA_SET";  slot: "a" | "b"; id: string | null }
   | { t: "ARENA_CLEAR" }
-  | { t: "SET_MODAL";  id: string | null }
+  | { t: "SET_MODAL";    id: string | null }
+  | { t: "SET_SCANNER";  v: boolean }
   | { t: "PF_PATCH";   p: Partial<State["partnerForm"]> }
   | { t: "PF_BUSY";    v: boolean }
   | { t: "DEL_TARGET"; id: string | null }
@@ -200,7 +205,7 @@ function emptyForm(partnerId: string): ItemForm {
 const INIT: State = {
   items: [], partners: [], loading: true,
   tab: "brain", franchise: false, viewMode: "cards",
-  arena: { a: null, b: null }, modal: null,
+  arena: { a: null, b: null }, modal: null, showScanner: false,
   chat:   { messages: [], input: "", busy: false },
   market: { mode: "market", query: "", result: "", busy: false },
   inv: {
@@ -272,6 +277,7 @@ function reducer(s: State, a: Action): State {
     case "ARENA_SET":   return { ...s, arena: { ...s.arena, [a.slot]: a.id } };
     case "ARENA_CLEAR": return { ...s, arena: { a: null, b: null } };
     case "SET_MODAL":   return { ...s, modal: a.id };
+    case "SET_SCANNER": return { ...s, showScanner: a.v };
 
     case "PF_PATCH": return { ...s, partnerForm: { ...s.partnerForm, ...a.p } };
     case "PF_BUSY":  return { ...s, addingPartner: a.v };
@@ -511,8 +517,33 @@ function CardDetailModal({
   const cost = itemCost(item);
   const profit = itemProfit(item);
   const roiPct = profit != null && cost > 0 ? (profit / cost) * 100 : null;
-  const priceHistory = useMemo(() => genPriceHistory(item), [item.id]);
   const cfg = franchiseCfg(item.franchise);
+
+  // Fetch real price history; fall back to synthetic data
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
+  const [historyReal, setHistoryReal] = useState(false);
+  useEffect(() => {
+    supabase
+      .from("cp_price_history")
+      .select("price, recorded_at")
+      .eq("item_id", item.id)
+      .order("recorded_at", { ascending: true })
+      .then(({ data }) => {
+        if (data && data.length >= 2) {
+          setPriceHistory(
+            data.map((r: { price: number; recorded_at: string }) => ({
+              month: new Date(r.recorded_at).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+              value: +r.price,
+            }))
+          );
+          setHistoryReal(true);
+        } else {
+          setPriceHistory(genPriceHistory(item));
+          setHistoryReal(false);
+        }
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
 
   return (
     <div
@@ -596,7 +627,13 @@ function CardDetailModal({
 
         {/* Price evolution chart */}
         <div className="mb-4">
-          <div className="text-xs text-gray-400 mb-2 font-semibold">Price Evolution</div>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-gray-400 font-semibold">Price Evolution</span>
+            {historyReal
+              ? <span className="text-xs text-green-500 font-mono">● LIVE DATA</span>
+              : <span className="text-xs text-yellow-600 font-mono">⚠ SYNTHETIC</span>
+            }
+          </div>
           <ResponsiveContainer width="100%" height={140}>
             <AreaChart data={priceHistory} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <defs>
@@ -1046,16 +1083,31 @@ export default function CollectPro() {
       };
 
       try {
+        let itemId: string;
         if (s.inv.editId) {
           const { error } = await supabase.from("coll_items").update(payload).eq("id", s.inv.editId);
           if (error) throw error;
+          itemId = s.inv.editId;
           toast.success("Item updated");
         } else {
-          const id = crypto.randomUUID();
-          const { error } = await supabase.from("coll_items").insert({ ...payload, id });
+          itemId = crypto.randomUUID();
+          const { error } = await supabase.from("coll_items").insert({ ...payload, id: itemId });
           if (error) throw error;
           toast.success("Item added");
         }
+
+        // Record price point in history when market_price is set
+        if (payload.market_price != null) {
+          supabase.from("cp_price_history").insert({
+            item_id: itemId,
+            price: payload.market_price,
+            source: "manual",
+            note: "Market estimate updated via form",
+          }).then(({ error }) => {
+            if (error) console.warn("Price history insert failed:", error.message);
+          });
+        }
+
         d({ t: "INV_FORM_SHOW", show: false });
         d({ t: "INV_FORM_EDIT", id: null, form: emptyForm(f.partner_id) });
       } catch (err: unknown) {
@@ -1121,6 +1173,15 @@ export default function CollectPro() {
       .update({ status: "sold", sell_price: price, sold_at: soldAt })
       .eq("id", item.id);
     if (error) { toast.error(error.message); return; }
+
+    // Record sell price in price history
+    supabase.from("cp_price_history").insert({
+      item_id: item.id,
+      price,
+      source: "sell",
+      note: `Sold at ${fmt$(price)}`,
+    }).then(({ error: e }) => { if (e) console.warn("Price history:", e.message); });
+
     const cost = itemCost(item);
     const profit = price - cost;
     toast.success(`Sale recorded · Profit: ${fmt$(profit)} (${fmtPct(cost > 0 ? (profit / cost) * 100 : 0)})`);
@@ -1129,10 +1190,21 @@ export default function CollectPro() {
   const handleImage = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const compressed = await compressImage(file).catch(() => null);
-    if (!compressed) { toast.error("Image processing error"); return; }
-    d({ t: "INV_FORM_PATCH", p: { image_url: compressed } });
-  }, []);
+
+    // Show local preview immediately while uploading
+    const preview = await compressImage(file).catch(() => null);
+    if (!preview) { toast.error("Image processing error"); return; }
+    d({ t: "INV_FORM_PATCH", p: { image_url: preview } });
+
+    // Upload to Supabase Storage in background; replace preview URL with CDN URL
+    const pathKey = s.inv.editId ?? crypto.randomUUID();
+    uploadCardImage(file, pathKey)
+      .then((url) => d({ t: "INV_FORM_PATCH", p: { image_url: url } }))
+      .catch((err) => {
+        // Storage might not be deployed yet — keep base64 preview silently
+        console.warn("Storage upload skipped (bucket not configured):", err.message);
+      });
+  }, [s.inv.editId]);
 
   // ── Arena handler ──────────────────────────────────────────────────────────
 
@@ -1286,6 +1358,28 @@ export default function CollectPro() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-gray-950 text-gray-100 font-sans">
+
+      {/* ── Camera Scanner overlay ───────────────────────────────────────────── */}
+      {s.showScanner && (
+        <CameraScanner
+          onResult={(card: CardScanResult) => {
+            d({
+              t: "INV_FORM_PATCH",
+              p: {
+                name:        card.name,
+                card_set:    card.card_set,
+                franchise:   card.franchise,
+                condition:   (card.condition as ItemForm["condition"]) || "NM",
+                notes:       card.notes,
+                status:      "active",
+                buy_date:    new Date().toISOString().slice(0, 10),
+              },
+            });
+            toast.success(`זוהה: ${card.name || "קלף לא ידוע"}`);
+          }}
+          onClose={() => d({ t: "SET_SCANNER", v: false })}
+        />
+      )}
 
       {/* ── Card detail modal ────────────────────────────────────────────────── */}
       {modalItem && (
@@ -1502,14 +1596,10 @@ export default function CollectPro() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold">{s.inv.editId ? "✏ Edit Item" : "➕ New Item"}</h3>
                   <button
-                    onClick={() => {
-                      const scan = mockScan();
-                      d({ t: "INV_FORM_PATCH", p: scan });
-                      toast.success("Quick Scan loaded mock card");
-                    }}
+                    onClick={() => d({ t: "SET_SCANNER", v: true })}
                     className="scan-btn px-3 py-1.5 rounded-lg bg-gradient-to-r from-yellow-600 to-orange-600 text-white text-xs font-bold hover:from-yellow-500 hover:to-orange-500 transition-all shadow-lg"
                   >
-                    ⚡ Quick Scan
+                    📸 Camera Scan
                   </button>
                 </div>
                 <form onSubmit={saveItem} className="space-y-3">
