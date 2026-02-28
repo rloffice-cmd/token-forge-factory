@@ -300,6 +300,21 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
+  // Annual profit projection: extrapolate from trailing 90-day profit
+  const annualProjection = useMemo(() => {
+    const now = Date.now();
+    const since90d = now - 90 * 86400000;
+    const recent = s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at && new Date(i.sold_at).getTime() >= since90d);
+    if (recent.length < 2) return null;
+    const profit90d = recent.reduce((acc, i) => {
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      return acc + +(i.sell_price!) - cost;
+    }, 0);
+    const projAnnual = (profit90d / 90) * 365;
+    return { recent90d: profit90d, projAnnual, salesIn90d: recent.length };
+  }, [s.items]);
+
   // New this week: items bought in the last 7 days
   const newThisWeek = useMemo(() =>
     s.items
@@ -980,6 +995,31 @@ export default function CollectPro() {
         psa_grade: item.psa_grade != null ? String(item.psa_grade) : "",
       },
     });
+  }, []);
+
+  const duplicateItem = useCallback((item: CollectionItem) => {
+    d({
+      t: "INV_FORM_EDIT",
+      id: null, // new item
+      form: {
+        name: `${item.name} (copy)`,
+        card_set: item.card_set ?? "",
+        franchise: item.franchise ?? "",
+        condition: item.condition,
+        buy_price: String(item.buy_price),
+        grading_cost: String(item.grading_cost ?? 0),
+        market_price: item.market_price != null ? String(item.market_price) : "",
+        sell_price: "",
+        sold_at: "",
+        buy_date: today(),
+        status: "active",
+        partner_id: item.partner_id,
+        notes: item.notes ?? "",
+        image_url: item.image_url ?? "",
+        psa_grade: "",
+      },
+    });
+    toast.success(`Duplicated "${item.name}" — edit and save to add`);
   }, []);
 
   const confirmDelete = useCallback(async () => {
@@ -2780,6 +2820,11 @@ export default function CollectPro() {
                                 className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
                               >✏</button>
                               <button
+                                onClick={() => duplicateItem(item)}
+                                className="text-xs px-2 py-1 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
+                                title="Duplicate item"
+                              >⧉</button>
+                              <button
                                 onClick={() => d({ t: "DEL_TARGET", id: item.id })}
                                 className="text-xs px-2 py-1 bg-red-900/60 text-red-300 rounded hover:bg-red-800 transition-colors"
                               >✕</button>
@@ -2899,6 +2944,10 @@ export default function CollectPro() {
                 ] : []),
                 ...(sellStreak && sellStreak.current > 1 ? [
                   { label: "🔥 Profit Streak", value: `${sellStreak.current} sales`, cls: "text-orange-400" as const },
+                ] : []),
+                ...(annualProjection ? [
+                  { label: "📅 90d Profit", value: fmt$(annualProjection.recent90d), cls: annualProjection.recent90d >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
+                  { label: "📈 Projected Annual", value: fmt$(annualProjection.projAnnual), cls: annualProjection.projAnnual >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
                 ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
