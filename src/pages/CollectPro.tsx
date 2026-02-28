@@ -1616,6 +1616,55 @@ export default function CollectPro() {
 
   const stats = useMemo(() => computeStats(s.items), [s.items]);
 
+  // ── ROI Analytics ─────────────────────────────────────────────────────────
+
+  const pnlTimeline = useMemo(() => {
+    const sold = s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .sort((a, b) => new Date(a.sold_at!).getTime() - new Date(b.sold_at!).getTime());
+    let cum = 0;
+    return sold.map(i => {
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      cum += +(i.sell_price!) - cost;
+      return {
+        date: new Date(i.sold_at!).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        profit: +cum.toFixed(0),
+      };
+    });
+  }, [s.items]);
+
+  const franchiseBreakdown = useMemo(() => {
+    const active = s.items.filter(i => i.status === "active");
+    const totalVal = active.reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
+    const map = new Map<string, { value: number; count: number }>();
+    active.forEach(i => {
+      const key = i.franchise ?? "Other";
+      const e = map.get(key) ?? { value: 0, count: 0 };
+      map.set(key, { value: e.value + (i.market_price ?? +i.buy_price), count: e.count + 1 });
+    });
+    return [...map.entries()]
+      .map(([name, { value, count }]) => ({
+        name, value, count,
+        pct: totalVal > 0 ? (value / totalVal) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+  }, [s.items]);
+
+  const topPerformers = useMemo(() => {
+    return s.items
+      .filter(i => +i.buy_price > 0)
+      .map(i => {
+        const cost   = +i.buy_price + +(i.grading_cost ?? 0);
+        const val    = i.status === "sold" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
+        const profit = val - cost;
+        const roi    = cost > 0 ? (profit / cost) * 100 : 0;
+        return { item: i, roi, profit };
+      })
+      .sort((a, b) => b.roi - a.roi)
+      .slice(0, 5);
+  }, [s.items]);
+
   const filteredItems = useMemo(() => {
     const q = s.inv.search.toLowerCase();
     return s.items.filter((i) =>
@@ -2830,6 +2879,84 @@ export default function CollectPro() {
                 </div>
               ))}
             </div>
+
+            {/* ── Cumulative P&L Timeline ─────────────────────────────── */}
+            {pnlTimeline.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Cumulative P&L Timeline</p>
+                <ResponsiveContainer width="100%" height={160}>
+                  <AreaChart data={pnlTimeline} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="pnl-grad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%"  stopColor="#10b981" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false}
+                      tickFormatter={v => `$${v}`} width={48} />
+                    <Tooltip
+                      formatter={(v: number) => [`$${v.toFixed(0)}`, "Cumulative Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2}
+                      fill="url(#pnl-grad)" dot={{ fill: "#10b981", r: 3, strokeWidth: 0 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* ── Active Portfolio by Franchise ────────────────────────── */}
+            {franchiseBreakdown.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-4">Active Portfolio by Franchise</p>
+                <div className="space-y-3">
+                  {franchiseBreakdown.map(({ name, value, count, pct }) => (
+                    <div key={name}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-gray-300 font-medium">
+                          {name} <span className="text-gray-600 font-normal">({count} card{count !== 1 ? "s" : ""})</span>
+                        </span>
+                        <span className="text-blue-400 font-semibold">{fmt$(value)}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-blue-600 to-indigo-500 rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Top Performers ───────────────────────────────────────── */}
+            {topPerformers.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-800 text-sm font-semibold flex items-center gap-2">
+                  <span>🏆 Top Performers</span>
+                  <span className="text-xs text-gray-500 font-normal">by ROI (active + sold)</span>
+                </div>
+                {topPerformers.map(({ item, roi, profit }, idx) => (
+                  <div key={item.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-white/[0.02]">
+                    <span className="text-gray-600 text-xs w-4 shrink-0 text-center">{idx + 1}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{item.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {item.status === "sold" ? "✓ Sold" : item.condition}
+                        {item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-sm font-bold ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</p>
+                      <p className="text-xs text-gray-500">{profit >= 0 ? "+" : ""}{fmt$(profit)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
               <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm">Sold Transactions</div>
