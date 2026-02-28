@@ -1081,24 +1081,84 @@ export default function CollectPro() {
     [s.partners, s.items]
   );
 
-  const portfolioCtx = useMemo(
-    () =>
-      JSON.stringify({
-        stats,
-        items: s.items.slice(0, 80).map((i) => ({
-          name: i.name,
-          set: i.card_set,
-          status: i.status,
-          buy: i.buy_price,
-          grading: i.grading_cost,
-          market: i.market_price,
-          sold: i.sell_price,
-          buy_date: i.buy_date,
-          partner: s.partners.find((p) => p.id === i.partner_id)?.name,
-        })),
-      }),
-    [s.items, s.partners, stats]
-  );
+  const portfolioCtx = useMemo(() => {
+    const partnerName = (id: string) => s.partners.find((p) => p.id === id)?.name ?? "Unknown";
+    const cost = (i: CollectionItem) => +i.buy_price + +(i.grading_cost ?? 0);
+    const pct  = (val: number, base: number) => base > 0 ? ` (${val >= base ? "+" : ""}${(((val - base) / base) * 100).toFixed(1)}%)` : "";
+
+    const active  = s.items.filter((i) => i.status === "active");
+    const grading = s.items.filter((i) => i.status === "grading");
+    const sold    = s.items.filter((i) => i.status === "sold" && i.sell_price != null);
+
+    const lines: string[] = [
+      "=== PORTFOLIO SUMMARY ===",
+      `Cards: ${s.items.length} total  |  ${active.length} active, ${grading.length} grading, ${sold.length} sold`,
+      `Total invested (buy + grading): ${fmt$(stats.totalCost)}`,
+      `Active market estimate: ${fmt$(stats.estimatedValue)}${pct(stats.estimatedValue, stats.totalCost - sold.reduce((s,i)=>s+cost(i),0))}`,
+      `Unrealised P&L: ${fmt$(stats.unrealisedPnL)}`,
+      `Realised profit: ${fmt$(stats.realisedProfit)} on ${sold.length} sales (ROI ${fmtPct(stats.roiPct)})`,
+    ];
+
+    // Active cards — sorted by market value desc
+    const sortedActive = [...active].sort(
+      (a, b) => (+(b.market_price ?? b.buy_price)) - (+(a.market_price ?? a.buy_price))
+    );
+    lines.push("", "=== ACTIVE CARDS (by market value) ===");
+    sortedActive.slice(0, 60).forEach((i, idx) => {
+      const c = cost(i);
+      const m = i.market_price ?? null;
+      lines.push(
+        `${idx + 1}. ${i.name}${i.card_set ? ` [${i.card_set}]` : ""}` +
+        `${i.franchise ? ` | ${i.franchise}` : ""}` +
+        ` | ${i.condition}` +
+        (i.psa_grade ? ` | PSA ${i.psa_grade}` : " | Raw") +
+        ` | Cost: ${fmt$(c)}` +
+        (m != null ? ` | Market: ${fmt$(m)}${pct(m, c)}` : " | Market: unknown") +
+        ` | Partner: ${partnerName(i.partner_id)}`
+      );
+    });
+
+    // Grading queue
+    if (grading.length > 0) {
+      lines.push("", "=== GRADING QUEUE ===");
+      grading.forEach((i) => {
+        lines.push(
+          `• ${i.name}${i.card_set ? ` [${i.card_set}]` : ""} | ${i.condition} | Cost so far: ${fmt$(cost(i))}` +
+          (i.market_price ? ` | Target market: ${fmt$(i.market_price)}` : "")
+        );
+      });
+    }
+
+    // Sold history
+    if (sold.length > 0) {
+      lines.push("", "=== SOLD TRANSACTIONS ===");
+      sold.forEach((i) => {
+        const c = cost(i);
+        const profit = +(i.sell_price ?? 0) - c;
+        lines.push(
+          `• ${i.name} | Sold: ${fmt$(i.sell_price!)} | Cost: ${fmt$(c)} | Net: ${profit >= 0 ? "+" : ""}${fmt$(profit)}${pct(+(i.sell_price!), c)} | Partner: ${partnerName(i.partner_id)}`
+        );
+      });
+    }
+
+    // Top grading candidates (raw cards with market > 3x cost)
+    const gradingCandidates = active
+      .filter((i) => !i.psa_grade && i.market_price != null && i.market_price / cost(i) >= 2.5)
+      .sort((a, b) => (b.market_price! / cost(b)) - (a.market_price! / cost(a)))
+      .slice(0, 5);
+
+    if (gradingCandidates.length > 0) {
+      lines.push("", "=== TOP GRADING CANDIDATES (market ≥ 2.5× cost, raw) ===");
+      gradingCandidates.forEach((i) => {
+        const c = cost(i);
+        lines.push(
+          `• ${i.name} | Cost: ${fmt$(c)} | Market: ${fmt$(i.market_price!)} (${(i.market_price! / c).toFixed(1)}×) | ${i.condition}`
+        );
+      });
+    }
+
+    return lines.join("\n");
+  }, [s.items, s.partners, stats]);
 
   // ── Sort helpers ───────────────────────────────────────────────────────────
 
@@ -1590,44 +1650,88 @@ export default function CollectPro() {
 
         {/* ══ BRAIN ══════════════════════════════════════════════════════════ */}
         {s.tab === "brain" && (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
-            <p className="text-xs text-gray-500 mb-4">Analysis based on your portfolio data. Ask anything — including uncomfortable questions.</p>
-
-            <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-3 p-1">
-              {s.chat.messages.length === 0 && (
-                <p className="text-center text-gray-600 text-sm mt-10">Start asking…</p>
-              )}
-              {s.chat.messages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`max-w-[82%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
-                    m.role === "user"
-                      ? "self-start bg-gray-700 rounded-tl-sm"
-                      : "self-end bg-blue-900/60 rounded-tr-sm"
-                  }`}
-                >
-                  {m.content}
-                </div>
-              ))}
-              {s.chat.busy && <div className="self-end text-sm text-gray-500 italic">Analyzing…</div>}
-              <div ref={chatEndRef} />
+          <div className="space-y-3">
+            {/* ── Portfolio snapshot ──────────────────────────────────────────── */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+              <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">Portfolio Snapshot</div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {[
+                  { label: "Active",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
+                  { label: "Grading",  value: stats.gradingCount.toString(),       sub: "cards",         color: "text-amber-400" },
+                  { label: "Invested", value: fmt$(stats.totalCost),               sub: "buy + grading", color: "text-gray-200" },
+                  { label: "Est. P&L", value: fmt$(stats.unrealisedPnL),           sub: "unrealised",    color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+                ].map((st) => (
+                  <div key={st.label} className="bg-gray-800/60 rounded-lg px-3 py-2">
+                    <div className="text-xs text-gray-500">{st.label}</div>
+                    <div className={`text-sm font-bold ${st.color}`}>{st.value}</div>
+                    <div className="text-xs text-gray-600">{st.sub}</div>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="flex gap-2">
-              <Input
-                dir="rtl"
-                value={s.chat.input}
-                onChange={(e) => d({ t: "CHAT_INPUT", v: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
-                placeholder="Ask about your portfolio…"
-                disabled={s.chat.busy}
-                className="bg-gray-800 border-gray-700"
-              />
-              {s.chat.busy
-                ? <Button variant="destructive" onClick={cancelAI}>Cancel</Button>
-                : <Button onClick={sendChat} disabled={!s.chat.input.trim()}>Send</Button>
-              }
+            {/* ── Chat ────────────────────────────────────────────────────────── */}
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
+              <p className="text-xs text-gray-500 mb-3">Analysis based on your real portfolio data. Ask anything — including uncomfortable questions.</p>
+
+              {/* Suggested questions — shown only when chat is empty */}
+              {s.chat.messages.length === 0 && !s.chat.busy && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {[
+                    "איזה קלף כדאי למכור עכשיו?",
+                    "מהם המועמדים הטובים לגריידינג?",
+                    "סיכום בריאות הפורטפוליו",
+                    "איזה קלף מסוכן לשמירה?",
+                    "מה ה-ROI הממוצע שלי?",
+                    "השוואת פרנצ'ייזים",
+                  ].map((q) => (
+                    <button
+                      key={q}
+                      onClick={() => { d({ t: "CHAT_INPUT", v: q }); }}
+                      className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-xs border border-gray-700 hover:border-gray-500 transition-colors"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 max-h-96 overflow-y-auto mb-3 p-1">
+                {s.chat.messages.length === 0 && (
+                  <p className="text-center text-gray-600 text-sm mt-8">בחר שאלה מהרשימה למעלה או כתוב בחינם</p>
+                )}
+                {s.chat.messages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`max-w-[82%] rounded-xl px-4 py-2.5 text-sm whitespace-pre-wrap leading-relaxed ${
+                      m.role === "user"
+                        ? "self-start bg-gray-700 rounded-tl-sm"
+                        : "self-end bg-blue-900/60 rounded-tr-sm"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                ))}
+                {s.chat.busy && <div className="self-end text-sm text-gray-500 italic">מנתח…</div>}
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="flex gap-2">
+                <Input
+                  dir="rtl"
+                  value={s.chat.input}
+                  onChange={(e) => d({ t: "CHAT_INPUT", v: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendChat()}
+                  placeholder="שאל על הפורטפוליו שלך…"
+                  disabled={s.chat.busy}
+                  className="bg-gray-800 border-gray-700"
+                />
+                {s.chat.busy
+                  ? <Button variant="destructive" onClick={cancelAI}>ביטול</Button>
+                  : <Button onClick={sendChat} disabled={!s.chat.input.trim()}>שלח</Button>
+                }
+              </div>
             </div>
           </div>
         )}
