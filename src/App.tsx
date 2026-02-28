@@ -41,6 +41,7 @@ import HunterDashboard from "./pages/HunterDashboard";
 import SystemDiagnosticReport from "./pages/SystemDiagnosticReport";
 import NotFound from "./pages/NotFound";
 import ResearchFindingPage from "./pages/ResearchFindingPage";
+import CollectPro from "./pages/CollectPro";
 
 const queryClient = new QueryClient();
 
@@ -92,6 +93,9 @@ const App = () => (
             <Route path="/forge/hunter" element={<AuthGuard><HunterDashboard /></AuthGuard>} />
             <Route path="/admin/diagnostic-report" element={<AuthGuard><SystemDiagnosticReport /></AuthGuard>} />
             
+            {/* CollectPro — TCG card portfolio manager */}
+            <Route path="/collectpro" element={<AuthGuard><CollectPro /></AuthGuard>} />
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
