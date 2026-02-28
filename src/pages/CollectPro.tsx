@@ -360,7 +360,9 @@ export default function CollectPro() {
       (!q ||
         i.name.toLowerCase().includes(q) ||
         (i.card_set ?? "").toLowerCase().includes(q) ||
-        (i.franchise ?? "").toLowerCase().includes(q)) &&
+        (i.franchise ?? "").toLowerCase().includes(q) ||
+        (i.notes ?? "").toLowerCase().includes(q) ||
+        (i.condition).toLowerCase().includes(q)) &&
       (!s.franchise || !!i.franchise) &&
       (statusFilter === "all" || i.status === statusFilter) &&
       (!franchiseFilterInv || i.franchise === franchiseFilterInv)
@@ -1615,14 +1617,23 @@ export default function CollectPro() {
           <div>
             {/* Toolbar */}
             <div className="flex flex-wrap gap-2 mb-3 items-center">
-              <Input
-                dir="rtl"
-                ref={searchInputRef}
-                className="flex-1 min-w-[160px] bg-gray-800 border-gray-700"
-                value={s.inv.search}
-                onChange={(e) => d({ t: "INV_SEARCH", v: e.target.value })}
-                placeholder="🔍 Search name, set, franchise… ( / )"
-              />
+              <div className="relative flex-1 min-w-[160px]">
+                <Input
+                  dir="rtl"
+                  ref={searchInputRef}
+                  className="bg-gray-800 border-gray-700 pr-8 w-full"
+                  value={s.inv.search}
+                  onChange={(e) => d({ t: "INV_SEARCH", v: e.target.value })}
+                  placeholder="🔍 Search name, set, notes… ( / )"
+                />
+                {s.inv.search && (
+                  <button
+                    onClick={() => { d({ t: "INV_SEARCH", v: "" }); searchInputRef.current?.focus(); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-sm leading-none"
+                    title="Clear search"
+                  >✕</button>
+                )}
+              </div>
               {/* View toggle */}
               <div className="flex rounded-lg overflow-hidden border border-gray-700">
                 <button
