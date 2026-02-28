@@ -530,7 +530,8 @@ function CardDetailModal({
   // Fetch real price history; fall back to synthetic data
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [historyReal, setHistoryReal] = useState(false);
-  useEffect(() => {
+
+  const loadPriceHistory = useCallback(() => {
     supabase
       .from("cp_price_history")
       .select("price, recorded_at")
@@ -552,6 +553,66 @@ function CardDetailModal({
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.id]);
+
+  useEffect(() => { loadPriceHistory(); }, [loadPriceHistory]);
+
+  // ── AI market price refresh ─────────────────────────────────────────────
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [refreshResult,  setRefreshResult]  = useState("");
+  const [refreshedPrice, setRefreshedPrice] = useState<number | null>(null);
+
+  const refreshMarketPrice = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setRefreshResult("");
+
+    const parts = [
+      `Find the current market price for this TCG card. Search eBay recent sold listings and TCGPlayer.`,
+      ``,
+      `Card: ${item.name}`,
+      item.card_set   ? `Set: ${item.card_set}`         : "",
+      item.franchise  ? `Franchise: ${item.franchise}`  : "",
+      `Condition: ${item.condition}`,
+      item.psa_grade  ? `Grade: PSA ${item.psa_grade}`  : "Ungraded (raw)",
+      ``,
+      `Include the current market price clearly as "$X.XX" in your response.`,
+      `Summarise recent sold prices and note any trend.`,
+    ].filter(Boolean).join("\n");
+
+    try {
+      const reply = await callAI(
+        [{ role: "user", content: parts }],
+        "market",
+        { cacheKey: `price-refresh-${item.id}-${Date.now()}` }
+      );
+
+      // Extract first dollar amount from the AI response
+      const match = reply.match(/\$[\d,]+(?:\.\d{1,2})?/);
+      if (match) {
+        const price = parseFloat(match[0].replace(/[$,]/g, ""));
+        setRefreshedPrice(price);
+
+        await Promise.all([
+          supabase.from("coll_items").update({ market_price: price }).eq("id", item.id),
+          supabase.from("cp_price_history").insert({
+            item_id: item.id,
+            price,
+            source: "ai_market",
+            note: `AI market scan — ${match[0]}`,
+          }),
+        ]);
+
+        // Reload chart with fresh data point just added
+        loadPriceHistory();
+      }
+
+      setRefreshResult(reply);
+    } catch (err) {
+      setRefreshResult(`Error: ${(err as Error).message}`);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing, item, loadPriceHistory]);
 
   return (
     <div
@@ -631,6 +692,36 @@ function CardDetailModal({
         {item.market_price == null && (
           <div className="text-xs text-amber-600 bg-amber-900/30 border border-amber-900/50 rounded-lg px-3 py-2 mb-4">
             THEORETICAL — no confirmed price point. Market estimate is not available.
+          </div>
+        )}
+
+        {/* AI market price refresh */}
+        {item.status !== "sold" && (
+          <div className="mb-4 space-y-2">
+            <button
+              onClick={refreshMarketPrice}
+              disabled={refreshing}
+              className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                refreshing
+                  ? "bg-blue-900/40 border border-blue-800/50 text-blue-400 cursor-wait"
+                  : "bg-blue-900/60 border border-blue-800/50 text-blue-300 hover:bg-blue-800/60 active:scale-98"
+              }`}
+            >
+              {refreshing ? "🔍 Searching eBay + TCGPlayer…" : "🔍 Refresh market price (AI web search)"}
+            </button>
+
+            {refreshedPrice != null && !refreshing && (
+              <div className="flex items-center justify-between text-xs px-3 py-1.5 bg-emerald-900/30 border border-emerald-800/40 rounded-lg">
+                <span className="text-emerald-400 font-semibold">Updated → {fmt$(refreshedPrice)}</span>
+                <span className="text-gray-500">price history updated ✓</span>
+              </div>
+            )}
+
+            {refreshResult && !refreshing && (
+              <div className="text-xs text-gray-400 bg-gray-800/60 rounded-xl p-3 max-h-48 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+                {refreshResult}
+              </div>
+            )}
           </div>
         )}
 
