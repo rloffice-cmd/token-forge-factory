@@ -81,6 +81,8 @@ const ITEM_TYPES = [
 
 interface Props {
   items: CollectionItem[];
+  /** When set, pre-fills the form and auto-starts the scan (skips intro) */
+  initialItem?: CollectionItem | null;
   onClose: () => void;
 }
 
@@ -337,17 +339,20 @@ function HistoryCard({ rec, onUpdate }: { rec: GradingRecord; onUpdate: () => vo
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function GradingStudio({ items, onClose }: Props) {
+export default function GradingStudio({ items, initialItem, onClose }: Props) {
+
+  // When initialItem is supplied we start directly in "front" phase (skip intro)
+  const startPhase: GradingPhase = initialItem ? "front" : "intro";
 
   // ── Phase (ref-synced to avoid stale closures) ───────────────────────────
-  const [phase, _setPhase] = useState<GradingPhase>("intro");
-  const phaseRef = useRef<GradingPhase>("intro");
+  const [phase, _setPhase] = useState<GradingPhase>(startPhase);
+  const phaseRef = useRef<GradingPhase>(startPhase);
   const setPhase = useCallback((p: GradingPhase) => { phaseRef.current = p; _setPhase(p); }, []);
 
   // ── Setup ─────────────────────────────────────────────────────────────────
   const [itemType,  setItemType]  = useState("card");
-  const [itemName,  setItemName]  = useState("");
-  const [linkedId,  setLinkedId]  = useState("");
+  const [itemName,  setItemName]  = useState(initialItem?.name ?? "");
+  const [linkedId,  setLinkedId]  = useState(initialItem?.id ?? "");
 
   // ── Camera / analysis UI state ────────────────────────────────────────────
   const [guidance,      setGuidance]      = useState("");
@@ -641,8 +646,9 @@ export default function GradingStudio({ items, onClose }: Props) {
     setStability(0);
     setLighting(0);
     setGuidance("");
-    setPhase("intro");
-  }, [setPhase]);
+    // If opened via initialItem, restart directly to scan (not intro)
+    setPhase(initialItem ? "front" : "intro");
+  }, [setPhase, initialItem]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Derived
@@ -665,7 +671,11 @@ export default function GradingStudio({ items, onClose }: Props) {
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none w-8 h-8 flex items-center justify-center">✕</button>
           <div>
             <p className="text-white font-bold text-sm leading-tight">סטודיו דירוג מקצועי</p>
-            {phaseIsCapture && <p className="text-gray-500 text-xs">{PHASE_LABELS[phase]}</p>}
+            {phaseIsCapture && (
+              <p className="text-gray-500 text-xs">
+                {itemName ? `${itemName} — ` : ""}{PHASE_LABELS[phase]}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

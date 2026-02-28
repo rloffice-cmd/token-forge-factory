@@ -359,6 +359,7 @@ interface CollectibleCardProps {
   onMarkSold?: (item: CollectionItem) => void;
   onArena?: (id: string) => void;
   onOpenModal?: (id: string) => void;
+  onGrade?: (item: CollectionItem) => void;
   arenaSlot?: "a" | "b" | null;
   compact?: boolean;
 }
@@ -373,6 +374,7 @@ function CollectibleCard({
   onMarkSold,
   onArena,
   onOpenModal,
+  onGrade,
   arenaSlot,
   compact,
 }: CollectibleCardProps) {
@@ -490,6 +492,13 @@ function CollectibleCard({
               className="flex-1 text-xs py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
               title="Detail"
             >🔍</button>
+          )}
+          {onGrade && (
+            <button
+              onClick={() => onGrade(item)}
+              className="flex-1 text-xs py-1 rounded bg-indigo-900/60 text-indigo-300 hover:bg-indigo-800 transition-colors"
+              title="Pre-grade"
+            >🔬</button>
           )}
         </div>
       )}
@@ -1550,9 +1559,10 @@ export default function CollectPro() {
   const chatInputRef = useRef<HTMLInputElement>(null);
   const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Modal state for sell dialog and batch operations
-  const [sellTarget, setSellTarget] = useState<CollectionItem | null>(null);
-  const [batchOp, setBatchOp] = useState<"status" | "price" | null>(null);
+  // Modal state for sell dialog, batch operations, and grading studio
+  const [sellTarget,     setSellTarget]     = useState<CollectionItem | null>(null);
+  const [batchOp,        setBatchOp]        = useState<"status" | "price" | null>(null);
+  const [gradingForItem, setGradingForItem] = useState<CollectionItem | null>(null);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -2576,6 +2586,7 @@ export default function CollectPro() {
                     onMarkSold={markSold}
                     onArena={addToArena}
                     onOpenModal={(id) => d({ t: "SET_MODAL", id })}
+                    onGrade={setGradingForItem}
                     arenaSlot={
                       s.arena.a === item.id ? "a" : s.arena.b === item.id ? "b" : null
                     }
@@ -2721,6 +2732,11 @@ export default function CollectPro() {
                                 className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
                                 title="Detail"
                               >🔍</button>
+                              <button
+                                onClick={() => setGradingForItem(item)}
+                                className="text-xs px-2 py-1 bg-indigo-900/60 text-indigo-300 rounded hover:bg-indigo-800 transition-colors"
+                                title="Pre-grade"
+                              >🔬</button>
                             </div>
                           </td>
                         </tr>
@@ -3072,6 +3088,15 @@ export default function CollectPro() {
           onExport={() => exportCSV(s.items.filter((i) => s.inv.selected.includes(i.id)), s.partners)}
           onDelete={batchDelete}
           onClear={() => d({ t: "INV_SEL_CLEAR" })}
+        />
+      )}
+
+      {/* ── Quick-grade overlay (opened from any inventory card/row) ────────── */}
+      {gradingForItem && (
+        <GradingStudio
+          items={s.items}
+          initialItem={gradingForItem}
+          onClose={() => setGradingForItem(null)}
         />
       )}
 
