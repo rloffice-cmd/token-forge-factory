@@ -218,6 +218,21 @@ export default function CollectPro() {
       .slice(0, 5);
   }, [s.items]);
 
+  // Active items with known market price sorted by upside multiple (market / cost)
+  const bestUpside = useMemo(() => {
+    return s.items
+      .filter(i => i.status === "active" && i.market_price != null && +i.buy_price > 0)
+      .map(i => {
+        const cost     = +i.buy_price + +(i.grading_cost ?? 0);
+        const upside   = i.market_price! / cost;
+        const profit   = i.market_price! - cost;
+        return { item: i, upside, profit };
+      })
+      .filter(x => x.upside > 1)       // only show gainers
+      .sort((a, b) => b.upside - a.upside)
+      .slice(0, 5);
+  }, [s.items]);
+
   const avgHoldDays = useMemo(() => {
     const sold = s.items.filter(i => i.status === "sold" && i.sold_at);
     if (sold.length === 0) return null;
@@ -1040,6 +1055,38 @@ export default function CollectPro() {
                         </button>
                       );
                     })}
+                </div>
+              </div>
+            )}
+
+            {/* ── Best Upside ──────────────────────────────────────────────────── */}
+            {bestUpside.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>🚀 Best Upside (Active)</span>
+                  <span className="text-xs text-gray-600 font-normal normal-case">market ÷ cost</span>
+                </div>
+                <div className="space-y-2">
+                  {bestUpside.map(({ item, upside, profit }, idx) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center justify-between gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-gray-600 text-xs w-4 text-center">{idx + 1}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <p className="text-xs text-gray-500">{item.condition}{item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-xs text-emerald-400">+{fmt$(profit)}</span>
+                        <span className="text-sm font-bold text-emerald-400">{upside.toFixed(2)}×</span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
