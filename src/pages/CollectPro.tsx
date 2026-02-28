@@ -59,6 +59,7 @@ import { ArenaTab } from "@/components/collectpro/Arena";
 import { SellDialog, BatchOperationModal, BatchPriceRefreshModal } from "@/components/collectpro/Modals";
 import AdminPanel from "@/components/collectpro/AdminPanel";
 import { BatchBar, BottomNav } from "@/components/collectpro/Navigation";
+import { StatusBadge } from "@/components/collectpro/StatusBadge";
 
 export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
@@ -74,6 +75,7 @@ export default function CollectPro() {
   const [batchOp,        setBatchOp]        = useState<"status" | "price" | null>(null);
   const [gradingForItem,        setGradingForItem]        = useState<CollectionItem | null>(null);
   const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
+  const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -1667,13 +1669,26 @@ export default function CollectPro() {
                       {ps.activeCount} active · {ps.gradingCount} grading · {ps.soldCount} sold
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => exportCSV(s.items.filter((i) => i.partner_id === partner.id), s.partners, `${partner.name}.csv`)}
-                  >
-                    ⬇ CSV
-                  </Button>
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => exportCSV(s.items.filter((i) => i.partner_id === partner.id), s.partners, `${partner.name}.csv`)}
+                      title="Standard CSV"
+                    >⬇ CSV</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => exportEbayCSV(s.items.filter((i) => i.partner_id === partner.id), `${partner.name}-ebay.csv`)}
+                      title="eBay Bulk Upload CSV"
+                    >eBay</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => exportCardmarketCSV(s.items.filter((i) => i.partner_id === partner.id), `${partner.name}-cm.csv`)}
+                      title="Cardmarket CSV"
+                    >CM</Button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
@@ -1690,22 +1705,55 @@ export default function CollectPro() {
                   ))}
                 </div>
 
-                {s.items.filter((i) => i.partner_id === partner.id).slice(0, 4).map((i) => {
-                  const base   = +i.buy_price + +(i.grading_cost ?? 0);
-                  const value  = i.status === "sold" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
-                  const profit = value - base;
+                {(() => {
+                  const partnerItems = s.items.filter((i) => i.partner_id === partner.id);
+                  const isExpanded   = expandedPartners.has(partner.id);
+                  const PREVIEW      = 4;
+                  const displayed    = isExpanded ? partnerItems : partnerItems.slice(0, PREVIEW);
                   return (
-                    <div key={i.id} className="flex justify-between items-center py-1.5 border-t border-gray-800 text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{i.name}</span>
-                        <StatusBadge status={i.status} />
-                      </div>
-                      <span className={profit >= 0 ? "text-emerald-400" : "text-red-400"}>
-                        {profit >= 0 ? "+" : ""}{fmt$(profit)}
-                      </span>
-                    </div>
+                    <>
+                      {displayed.map((i) => {
+                        const base   = +i.buy_price + +(i.grading_cost ?? 0);
+                        const value  = i.status === "sold" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
+                        const profit = value - base;
+                        return (
+                          <div key={i.id} className="flex items-center justify-between py-1.5 border-t border-gray-800 text-sm gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-medium truncate">{i.name}</span>
+                              <StatusBadge status={i.status} />
+                            </div>
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <span className="text-xs text-gray-500">{fmt$(base)}</span>
+                              {i.market_price != null && (
+                                <span className="text-xs text-blue-400">~{fmt$(i.market_price)}</span>
+                              )}
+                              <span className={`text-xs font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                              </span>
+                              <button
+                                onClick={() => d({ t: "SET_MODAL", id: i.id })}
+                                className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white transition-colors"
+                                title="Detail"
+                              >🔍</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {partnerItems.length > PREVIEW && (
+                        <button
+                          onClick={() => setExpandedPartners((prev) => {
+                            const next = new Set(prev);
+                            isExpanded ? next.delete(partner.id) : next.add(partner.id);
+                            return next;
+                          })}
+                          className="w-full text-center py-2 mt-1 text-xs text-gray-500 hover:text-gray-300 border-t border-gray-800 transition-colors"
+                        >
+                          {isExpanded ? "▲ Show less" : `▼ Show ${partnerItems.length - PREVIEW} more cards`}
+                        </button>
+                      )}
+                    </>
                   );
-                })}
+                })()}
               </div>
             ))}
 
