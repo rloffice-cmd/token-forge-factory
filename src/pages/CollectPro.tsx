@@ -66,9 +66,10 @@ export default function CollectPro() {
   // Separate abort controllers — cancelling chat must not kill an in-progress market scan
   const chatAbort  = useRef<AbortController | null>(null);
   const scanAbort  = useRef<AbortController | null>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<HTMLInputElement>(null);
-  const undoTimer  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatEndRef    = useRef<HTMLDivElement>(null);
+  const chatInputRef  = useRef<HTMLInputElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const undoTimer     = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modal state for sell dialog, batch operations, and grading studio
   const [sellTarget,     setSellTarget]     = useState<CollectionItem | null>(null);
@@ -78,6 +79,29 @@ export default function CollectPro() {
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [statusFilter,     setStatusFilter]     = useState<"all" | ItemStatus>("all");
   const [scanHistory,      setScanHistory]      = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Ignore when typing in an input/textarea/select
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      if (e.key === "/" || e.key === "s") {
+        e.preventDefault();
+        d({ t: "SET_TAB", tab: "inventory" });
+        // Slight delay so the inventory tab renders first
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      } else if (e.key === "n") {
+        d({ t: "SET_TAB", tab: "inventory" });
+        d({ t: "INV_FORM_SHOW", show: true });
+      } else if (e.key === "Escape") {
+        if (s.inv.showForm) d({ t: "INV_FORM_SHOW", show: false });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [s.inv.showForm]);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -970,6 +994,49 @@ export default function CollectPro() {
               </div>
             </div>
 
+            {/* ── Grading Queue ────────────────────────────────────────────────── */}
+            {s.items.filter(i => i.status === "grading").length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>Grading Queue</span>
+                  <span className="text-amber-500 font-mono">{s.items.filter(i => i.status === "grading").length} cards</span>
+                </div>
+                <div className="space-y-2">
+                  {s.items
+                    .filter(i => i.status === "grading")
+                    .sort((a, b) => new Date(a.buy_date).getTime() - new Date(b.buy_date).getTime())
+                    .map((item) => {
+                      const days = Math.round((Date.now() - new Date(item.buy_date).getTime()) / 86400000);
+                      const isLong = days > 60;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                          className="w-full flex items-center justify-between gap-3 py-2 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {item.image_url && (
+                              <img src={item.image_url} alt={item.name} loading="lazy" className="w-8 h-10 object-cover rounded flex-shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{item.name}</p>
+                              <p className="text-xs text-gray-500">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isLong ? "bg-red-900/60 text-red-300" : "bg-amber-900/60 text-amber-300"}`}>
+                              {days}d
+                            </span>
+                            <span className="text-xs text-gray-500">{fmt$(+item.buy_price + +(item.grading_cost ?? 0))}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
             {/* ── Alerts ──────────────────────────────────────────────────────── */}
             {portfolioAlerts.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
@@ -980,7 +1047,7 @@ export default function CollectPro() {
                     type="button"
                     onClick={() => {
                       setStatusFilter(a.filter);
-                      d({ t: "SET_TAB", tab: "inv" });
+                      d({ t: "SET_TAB", tab: "inventory" });
                     }}
                     className={`w-full flex items-start gap-2 text-xs px-3 py-2 rounded-lg text-left transition-opacity hover:opacity-80 ${
                       a.level === "warn" ? "bg-amber-950/60 border border-amber-800/50 text-amber-300" : "bg-blue-950/60 border border-blue-800/50 text-blue-300"
@@ -1068,10 +1135,11 @@ export default function CollectPro() {
             <div className="flex flex-wrap gap-2 mb-3 items-center">
               <Input
                 dir="rtl"
+                ref={searchInputRef}
                 className="flex-1 min-w-[160px] bg-gray-800 border-gray-700"
                 value={s.inv.search}
                 onChange={(e) => d({ t: "INV_SEARCH", v: e.target.value })}
-                placeholder="🔍 Search name, set, franchise…"
+                placeholder="🔍 Search name, set, franchise… ( / )"
               />
               {/* View toggle */}
               <div className="flex rounded-lg overflow-hidden border border-gray-700">
@@ -1255,9 +1323,10 @@ export default function CollectPro() {
 
                   <div>
                     <label className="text-xs text-gray-400 block mb-1">Notes</label>
-                    <Input
+                    <Textarea
                       dir="rtl"
-                      className="bg-gray-800 border-gray-700"
+                      rows={2}
+                      className="bg-gray-800 border-gray-700 resize-none"
                       value={s.inv.form.notes}
                       onChange={(e) => d({ t: "INV_FORM_PATCH", p: { notes: e.target.value } })}
                     />
@@ -1588,7 +1657,12 @@ export default function CollectPro() {
                   <span className="text-xs text-gray-500 font-normal">by ROI (active + sold)</span>
                 </div>
                 {topPerformers.map(({ item, roi, profit }, idx) => (
-                  <div key={item.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-white/[0.02]">
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                    className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-white/[0.04] transition-colors text-left"
+                  >
                     <span className="text-gray-600 text-xs w-4 shrink-0 text-center">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.name}</p>
@@ -1601,7 +1675,7 @@ export default function CollectPro() {
                       <p className={`text-sm font-bold ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmtPct(roi)}</p>
                       <p className="text-xs text-gray-500">{profit >= 0 ? "+" : ""}{fmt$(profit)}</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -1637,7 +1711,12 @@ export default function CollectPro() {
                   <span className="text-xs text-gray-500 font-normal">by ROI (active + sold)</span>
                 </div>
                 {worstPerformers.filter(p => p.roi < 0).map(({ item, roi, profit }, idx) => (
-                  <div key={item.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-white/[0.02]">
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                    className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-800/40 last:border-0 hover:bg-white/[0.04] transition-colors text-left"
+                  >
                     <span className="text-gray-600 text-xs w-4 shrink-0 text-center">{idx + 1}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.name}</p>
@@ -1650,7 +1729,7 @@ export default function CollectPro() {
                       <p className="text-sm font-bold text-red-400">{fmtPct(roi)}</p>
                       <p className="text-xs text-gray-500">{fmt$(profit)}</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
