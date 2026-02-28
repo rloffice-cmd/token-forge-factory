@@ -839,6 +839,48 @@ export default function CollectPro() {
     return totalDays > 0 ? totalProfit / totalDays : null;
   }, [s.items]);
 
+  // Inventory aging: active/grading items bucketed by age (capital tied up in each bucket)
+  const inventoryAging = useMemo(() => {
+    const now = Date.now();
+    const buckets = [
+      { label: "Fresh (≤30d)",    min: 0,   max: 30,       count: 0, cost: 0, cls: "bg-emerald-600/70" as const },
+      { label: "Active (31-90d)", min: 31,  max: 90,        count: 0, cost: 0, cls: "bg-blue-600/70" as const },
+      { label: "Stale (91-180d)", min: 91,  max: 180,       count: 0, cost: 0, cls: "bg-amber-600/70" as const },
+      { label: "Old (180d+)",     min: 181, max: Infinity,  count: 0, cost: 0, cls: "bg-red-600/70" as const },
+    ];
+    s.items.filter(i => i.status !== "sold").forEach(i => {
+      const ageDays = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      const bucket = buckets.find(b => ageDays >= b.min && ageDays <= b.max);
+      if (bucket) { bucket.count++; bucket.cost += cost; }
+    });
+    return buckets.filter(b => b.count > 0);
+  }, [s.items]);
+
+  // Flip-speed leaderboard: avg hold days per franchise (franchises with ≥2 sales)
+  const flipSpeedByFranchise = useMemo(() => {
+    const map = new Map<string, { totalDays: number; count: number; profit: number }>();
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .forEach(i => {
+        const key = i.franchise ?? "Other";
+        const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
+        const cost = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const entry = map.get(key) ?? { totalDays: 0, count: 0, profit: 0 };
+        map.set(key, { totalDays: entry.totalDays + holdDays, count: entry.count + 1, profit: entry.profit + profit });
+      });
+    return [...map.entries()]
+      .filter(([, v]) => v.count >= 2)
+      .map(([name, v]) => ({
+        name: name.length > 16 ? name.slice(0, 15) + "…" : name,
+        avgHold: Math.round(v.totalDays / v.count),
+        count: v.count,
+        profit: v.profit,
+      }))
+      .sort((a, b) => a.avgHold - b.avgHold);
+  }, [s.items]);
+
   const conditionBreakdown = useMemo(() => {
     const ORDER = ["M", "NM", "LP", "MP", "HP", "D", "PSA"];
     const map   = new Map<string, number>();
@@ -2256,6 +2298,28 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Inventory Aging ──────────────────────────────────────────────── */}
+            {inventoryAging.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>⏳ Inventory Age</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">capital tied up by age bucket</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {inventoryAging.map(b => (
+                    <div key={b.label} className="bg-gray-800 rounded-lg p-3 flex items-start gap-2">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${b.cls}`} />
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500 leading-tight">{b.label}</div>
+                        <div className="font-bold text-sm text-white mt-0.5">{b.count} card{b.count !== 1 ? "s" : ""}</div>
+                        <div className="text-xs text-amber-400 font-mono">{fmt$(b.cost)}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Alerts ──────────────────────────────────────────────────────── */}
             {portfolioAlerts.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
@@ -3444,6 +3508,37 @@ export default function CollectPro() {
                         </span>
                         <span className={`text-xs w-16 text-right flex-shrink-0 ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
                           {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                        </span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* ── Flip-Speed Leaderboard ───────────────────────────────── */}
+            {flipSpeedByFranchise.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">
+                  ⚡ Flip Speed by Franchise
+                  <span className="ml-1 font-normal normal-case">(≥2 sales · lower = faster)</span>
+                </p>
+                <div className="space-y-2.5">
+                  {(() => {
+                    const maxHold = Math.max(1, ...flipSpeedByFranchise.map(f => f.avgHold));
+                    return flipSpeedByFranchise.map((f, i) => (
+                      <div key={f.name} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-600 w-4 flex-shrink-0">{i + 1}.</span>
+                        <span className="text-xs text-gray-400 w-24 flex-shrink-0 truncate">{f.name}</span>
+                        <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-indigo-500/70"
+                            style={{ width: `${(f.avgHold / maxHold) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-indigo-400 font-semibold w-12 text-right flex-shrink-0">{f.avgHold}d avg</span>
+                        <span className={`text-xs w-14 text-right flex-shrink-0 ${f.profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {f.profit >= 0 ? "+" : ""}{fmt$(f.profit)}
                         </span>
                       </div>
                     ));
