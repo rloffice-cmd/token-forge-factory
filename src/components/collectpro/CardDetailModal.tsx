@@ -13,11 +13,13 @@ export default function CardDetailModal({
   partner,
   onClose,
   onArena,
+  onUpdateNotes,
 }: {
   item: CollectionItem;
   partner?: Partner;
   onClose: () => void;
   onArena?: (id: string) => void;
+  onUpdateNotes?: (id: string, notes: string) => Promise<void>;
 }) {
   const cost = itemCost(item);
   const profit = itemProfit(item);
@@ -62,6 +64,22 @@ export default function CardDetailModal({
   const [refreshResult,  setRefreshResult]  = useState("");
   const [refreshedPrice, setRefreshedPrice] = useState<number | null>(null);
   const refreshingRef = useRef(false);
+
+  // ── Inline notes edit ───────────────────────────────────────────────────
+  const [editingNotes,  setEditingNotes]  = useState(false);
+  const [notesVal,      setNotesVal]      = useState(item.notes ?? "");
+  const [savingNotes,   setSavingNotes]   = useState(false);
+
+  const saveNotes = useCallback(async () => {
+    if (!onUpdateNotes) return;
+    setSavingNotes(true);
+    try {
+      await onUpdateNotes(item.id, notesVal);
+      setEditingNotes(false);
+    } finally {
+      setSavingNotes(false);
+    }
+  }, [onUpdateNotes, item.id, notesVal]);
 
   // ── Manual price record ──────────────────────────────────────────────────
   const [manualPrice,    setManualPrice]    = useState("");
@@ -204,13 +222,48 @@ export default function CardDetailModal({
           ))}
         </div>
 
-        {/* Notes */}
-        {item.notes && (
-          <div className="text-xs text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded-lg px-3 py-2 mb-4 whitespace-pre-wrap">
-            <span className="text-gray-500 font-semibold block mb-0.5">Notes</span>
-            {item.notes}
-          </div>
-        )}
+        {/* Notes — with inline editing if onUpdateNotes provided */}
+        <div className="mb-4">
+          {editingNotes ? (
+            <div className="bg-gray-800/40 border border-gray-600 rounded-lg p-2">
+              <textarea
+                autoFocus
+                rows={3}
+                value={notesVal}
+                onChange={e => setNotesVal(e.target.value)}
+                className="w-full bg-transparent text-xs text-gray-300 resize-none focus:outline-none"
+                placeholder="Add notes…"
+              />
+              <div className="flex gap-2 mt-1.5 justify-end">
+                <button
+                  onClick={saveNotes}
+                  disabled={savingNotes}
+                  className="text-xs px-2.5 py-1 rounded bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                >
+                  {savingNotes ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => { setEditingNotes(false); setNotesVal(item.notes ?? ""); }}
+                  className="text-xs px-2.5 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`text-xs text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded-lg px-3 py-2 whitespace-pre-wrap ${onUpdateNotes ? "cursor-pointer hover:border-gray-600 transition-colors" : ""}`}
+              onClick={() => onUpdateNotes && setEditingNotes(true)}
+              title={onUpdateNotes ? "Click to edit notes" : undefined}
+            >
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="text-gray-500 font-semibold">Notes</span>
+                {onUpdateNotes && <span className="text-gray-700 text-xs">✏ edit</span>}
+              </div>
+              {item.notes ? item.notes : <span className="text-gray-700 italic">No notes — click to add</span>}
+            </div>
+          )}
+        </div>
 
         {item.market_price == null && (
           <div className="text-xs text-amber-600 bg-amber-900/30 border border-amber-900/50 rounded-lg px-3 py-2 mb-4">

@@ -237,6 +237,26 @@ export default function CollectPro() {
       .slice(0, 5);
   }, [s.items]);
 
+  // Raw active cards where market ≥ 2.5× cost — strong grading candidates
+  // Estimate graded value = raw market × 2.5 (conservative PSA 10 premium)
+  const gradingCandidates = useMemo(() => {
+    const EST_FEE = 25; // typical PSA basic tier fee
+    const EST_MULT = 2.5; // conservative PSA 10 premium over raw
+    return s.items
+      .filter(i => i.status === "active" && !i.psa_grade && i.market_price != null && +i.buy_price > 0)
+      .map(i => {
+        const cost      = +i.buy_price + +(i.grading_cost ?? 0);
+        const rawMkt    = i.market_price!;
+        const gradedEst = rawMkt * EST_MULT;
+        const extraProfit = gradedEst - rawMkt - EST_FEE;
+        const ratio     = rawMkt / cost;
+        return { item: i, cost, rawMkt, gradedEst, extraProfit, ratio };
+      })
+      .filter(x => x.ratio >= 2.5 && x.extraProfit > 0)
+      .sort((a, b) => b.extraProfit - a.extraProfit)
+      .slice(0, 5);
+  }, [s.items]);
+
   const avgHoldDays = useMemo(() => {
     const sold = s.items.filter(i => i.status === "sold" && i.sold_at);
     if (sold.length === 0) return null;
@@ -889,6 +909,19 @@ export default function CollectPro() {
     [s.partnerForm]
   );
 
+  const updateItemNotes = useCallback(async (itemId: string, notes: string) => {
+    const item = s.items.find(i => i.id === itemId);
+    if (!item) return;
+    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, notes: notes || undefined, updated_at: new Date().toISOString() } });
+    const { error } = await supabase.from("coll_items").update({ notes: notes || null }).eq("id", itemId);
+    if (error) {
+      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      toast.error(error.message);
+      throw error;
+    }
+    toast.success("Notes saved");
+  }, [s.items]);
+
   // ── Modal item ─────────────────────────────────────────────────────────────
 
   const modalItem = s.modal ? s.items.find((i) => i.id === s.modal) ?? null : null;
@@ -987,6 +1020,7 @@ export default function CollectPro() {
           partner={modalPartner}
           onClose={() => d({ t: "SET_MODAL", id: null })}
           onArena={(id) => { addToArena(id); d({ t: "SET_MODAL", id: null }); }}
+          onUpdateNotes={updateItemNotes}
         />
       )}
 
@@ -1238,6 +1272,44 @@ export default function CollectPro() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Grading Candidates ────────────────────────────────────────────── */}
+            {gradingCandidates.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>🔬 Grade-Up Candidates</span>
+                  <span className="text-xs text-gray-600 font-normal normal-case">raw × 2.5 est. — PSA 10 premium</span>
+                </div>
+                <div className="space-y-2">
+                  {gradingCandidates.map(({ item, rawMkt, gradedEst, extraProfit, ratio }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center justify-between gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {item.image_url && (
+                          <img src={item.image_url} alt={item.name} loading="lazy" className="w-7 h-9 object-cover rounded flex-shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <p className="text-xs text-gray-500">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""} · {ratio.toFixed(1)}× upside</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0 text-right">
+                        <div>
+                          <div className="text-xs text-gray-500">{fmt$(rawMkt)} → {fmt$(gradedEst)}</div>
+                          <div className="text-xs font-semibold text-indigo-400">+{fmt$(extraProfit)} est.</div>
+                        </div>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-900/60 text-indigo-300">Grade</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-700 mt-2">Estimates use raw × 2.5 premium and $25 grading fee. Actual results may vary.</p>
               </div>
             )}
 
