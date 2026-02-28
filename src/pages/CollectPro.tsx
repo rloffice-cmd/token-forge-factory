@@ -2394,103 +2394,162 @@ export default function CollectPro() {
               </form>
             </div>}
 
-            {partnerStats.map(({ partner, stats: ps }) => (
-              <div key={partner.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <div className="font-bold text-base">{partner.name}</div>
-                    {partner.email && <div className="text-xs text-gray-500">{partner.email}</div>}
-                    <div className="text-xs text-gray-600 mt-0.5">
-                      {ps.activeCount} active · {ps.gradingCount} grading · {ps.soldCount} sold
+            {partnerStats.map(({ partner, stats: ps }) => {
+              const partnerItems  = s.items.filter(i => i.partner_id === partner.id);
+              const activeItems   = partnerItems.filter(i => i.status !== "sold");
+              const soldItems     = partnerItems
+                .filter(i => i.status === "sold" && i.sell_price != null)
+                .sort((a, b) => new Date(b.sold_at ?? b.updated_at).getTime() - new Date(a.sold_at ?? a.updated_at).getTime());
+              const isExpanded    = expandedPartners.has(partner.id);
+              const PREVIEW       = 4;
+              const displayed     = isExpanded ? activeItems : activeItems.slice(0, PREVIEW);
+
+              return (
+                <div key={partner.id} className="bg-gray-900 border border-gray-800 rounded-xl p-5">
+                  {/* Header row */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <div className="font-bold text-base">{partner.name}</div>
+                      {partner.email && <div className="text-xs text-gray-500">{partner.email}</div>}
+                      <div className="text-xs text-gray-600 mt-0.5">
+                        {ps.activeCount} active · {ps.gradingCount} grading · {ps.soldCount} sold
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button size="sm" variant="outline"
+                        onClick={() => exportCSV(partnerItems, s.partners, `${partner.name}.csv`)}
+                        title="Standard CSV">⬇ CSV</Button>
+                      <Button size="sm" variant="outline"
+                        onClick={() => exportEbayCSV(partnerItems, `${partner.name}-ebay.csv`)}
+                        title="eBay Bulk Upload CSV">eBay</Button>
+                      <Button size="sm" variant="outline"
+                        onClick={() => exportCardmarketCSV(partnerItems, `${partner.name}-cm.csv`)}
+                        title="Cardmarket CSV">CM</Button>
                     </div>
                   </div>
-                  <div className="flex gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => exportCSV(s.items.filter((i) => i.partner_id === partner.id), s.partners, `${partner.name}.csv`)}
-                      title="Standard CSV"
-                    >⬇ CSV</Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => exportEbayCSV(s.items.filter((i) => i.partner_id === partner.id), `${partner.name}-ebay.csv`)}
-                      title="eBay Bulk Upload CSV"
-                    >eBay</Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => exportCardmarketCSV(s.items.filter((i) => i.partner_id === partner.id), `${partner.name}-cm.csv`)}
-                      title="Cardmarket CSV"
-                    >CM</Button>
+
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                    {[
+                      { label: "Total Invested",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
+                      { label: "Active Market Est.", value: fmt$(ps.estimatedValue),   cls: "text-blue-400" },
+                      { label: "Sale Revenue",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
+                      { label: "Net Profit + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
+                        cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                    ].map(st => (
+                      <div key={st.label} className="bg-gray-800 rounded-lg p-3">
+                        <div className="text-xs text-gray-500 mb-1">{st.label}</div>
+                        <div className={`text-sm font-bold ${st.cls}`}>{st.value}</div>
+                      </div>
+                    ))}
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
-                  {[
-                    { label: "Total Invested", value: fmt$(ps.totalCost), cls: "text-amber-400" },
-                    { label: "Active Market Est.", value: fmt$(ps.estimatedValue), cls: "text-blue-400" },
-                    { label: "Sale Revenue", value: fmt$(ps.realisedRevenue), cls: "text-emerald-400" },
-                    { label: "Net Profit + ROI", value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`, cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-                  ].map((st) => (
-                    <div key={st.label} className="bg-gray-800 rounded-lg p-3">
-                      <div className="text-xs text-gray-500 mb-1">{st.label}</div>
-                      <div className={`text-sm font-bold ${st.cls}`}>{st.value}</div>
+                  {/* Realized ROI bar */}
+                  {ps.soldCount > 0 && (
+                    <div className="mb-3">
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-gray-600">Realized ROI</span>
+                        <span className={ps.roiPct >= 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>{fmtPct(ps.roiPct)}</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${ps.roiPct >= 0 ? "bg-emerald-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.min(100, Math.abs(ps.roiPct))}%` }}
+                        />
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  )}
 
-                {(() => {
-                  const partnerItems = s.items.filter((i) => i.partner_id === partner.id);
-                  const isExpanded   = expandedPartners.has(partner.id);
-                  const PREVIEW      = 4;
-                  const displayed    = isExpanded ? partnerItems : partnerItems.slice(0, PREVIEW);
-                  return (
-                    <>
-                      {displayed.map((i) => {
-                        const base   = +i.buy_price + +(i.grading_cost ?? 0);
-                        const value  = i.status === "sold" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
-                        const profit = value - base;
-                        return (
-                          <div key={i.id} className="flex items-center justify-between py-1.5 border-t border-gray-800 text-sm gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="font-medium truncate">{i.name}</span>
-                              <StatusBadge status={i.status} />
-                            </div>
-                            <div className="flex items-center gap-3 flex-shrink-0">
-                              <span className="text-xs text-gray-500">{fmt$(base)}</span>
-                              {i.market_price != null && (
-                                <span className="text-xs text-blue-400">~{fmt$(i.market_price)}</span>
-                              )}
-                              <span className={`text-xs font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                {profit >= 0 ? "+" : ""}{fmt$(profit)}
-                              </span>
-                              <button
-                                onClick={() => d({ t: "SET_MODAL", id: i.id })}
-                                className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white transition-colors"
-                                title="Detail"
-                              >🔍</button>
-                            </div>
-                          </div>
-                        );
+                  {/* Active / Grading items */}
+                  {displayed.map(i => {
+                    const base   = +i.buy_price + +(i.grading_cost ?? 0);
+                    const value  = i.status === "sold" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
+                    const profit = value - base;
+                    return (
+                      <div key={i.id} className="flex items-center justify-between py-1.5 border-t border-gray-800 text-sm gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium truncate">{i.name}</span>
+                          <StatusBadge status={i.status} />
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-xs text-gray-500">{fmt$(base)}</span>
+                          {i.market_price != null && (
+                            <span className="text-xs text-blue-400">~{fmt$(i.market_price)}</span>
+                          )}
+                          <span className={`text-xs font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                          </span>
+                          <button
+                            onClick={() => d({ t: "SET_MODAL", id: i.id })}
+                            className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white transition-colors"
+                          >🔍</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {activeItems.length > PREVIEW && (
+                    <button
+                      onClick={() => setExpandedPartners(prev => {
+                        const next = new Set(prev);
+                        isExpanded ? next.delete(partner.id) : next.add(partner.id);
+                        return next;
                       })}
-                      {partnerItems.length > PREVIEW && (
-                        <button
-                          onClick={() => setExpandedPartners((prev) => {
-                            const next = new Set(prev);
-                            isExpanded ? next.delete(partner.id) : next.add(partner.id);
-                            return next;
-                          })}
-                          className="w-full text-center py-2 mt-1 text-xs text-gray-500 hover:text-gray-300 border-t border-gray-800 transition-colors"
-                        >
-                          {isExpanded ? "▲ Show less" : `▼ Show ${partnerItems.length - PREVIEW} more cards`}
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            ))}
+                      className="w-full text-center py-2 mt-1 text-xs text-gray-500 hover:text-gray-300 border-t border-gray-800 transition-colors"
+                    >
+                      {isExpanded ? "▲ Show less" : `▼ Show ${activeItems.length - PREVIEW} more cards`}
+                    </button>
+                  )}
+
+                  {/* Sold transactions mini table */}
+                  {soldItems.length > 0 && (
+                    <div className="mt-4 border-t border-gray-800 pt-3">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center justify-between">
+                        <span>Sold Transactions</span>
+                        <span className="text-gray-600 font-normal">{soldItems.length} sales</span>
+                      </div>
+                      <div className="space-y-1">
+                        {soldItems.slice(0, 5).map(i => {
+                          const base   = +i.buy_price + +(i.grading_cost ?? 0);
+                          const profit = +(i.sell_price!) - base;
+                          const roi    = base > 0 ? (profit / base) * 100 : 0;
+                          return (
+                            <button
+                              key={i.id}
+                              type="button"
+                              onClick={() => d({ t: "SET_MODAL", id: i.id })}
+                              className="w-full flex items-center justify-between text-xs py-1.5 px-2 bg-gray-800/40 rounded-lg hover:bg-gray-800 transition-colors text-left gap-2"
+                            >
+                              <div className="flex-1 min-w-0 flex items-center gap-2">
+                                <span className="font-medium truncate">{i.name}</span>
+                                {i.sold_at && (
+                                  <span className="text-gray-600 flex-shrink-0">
+                                    {new Date(i.sold_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <span className="text-gray-400">{fmt$(i.sell_price!)}</span>
+                                <span className={`font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                                </span>
+                                <span className={`${roi >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                                  {fmtPct(roi)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {soldItems.length > 5 && (
+                          <div className="text-xs text-gray-700 text-center py-1">
+                            … and {soldItems.length - 5} more sold items
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {s.partners.length === 0 && (
               <div className="text-center py-16 text-gray-600">
