@@ -294,6 +294,17 @@ export default function CollectPro() {
       .map(([month, data]) => ({ month, ...data }));
   }, [s.items]);
 
+  // Partner P&L comparison data for bar chart
+  const partnerPnL = useMemo(() =>
+    s.partners
+      .map(p => {
+        const ps = computeStats(s.items.filter(i => i.partner_id === p.id));
+        return { name: p.name.length > 12 ? p.name.slice(0, 12) + "…" : p.name, profit: ps.realisedProfit, roi: ps.roiPct, count: ps.activeCount + ps.gradingCount + ps.soldCount };
+      })
+      .filter(p => p.count > 0)
+      .sort((a, b) => b.profit - a.profit),
+  [s.partners, s.items]);
+
   // Sales velocity: avg days between sales, and days since last sale
   const salesVelocity = useMemo(() => {
     const sold = s.items
@@ -621,6 +632,37 @@ export default function CollectPro() {
   const watchlistItems = useMemo(() =>
     s.items.filter(i => i.status !== "sold" && (i.notes ?? "").toLowerCase().includes("[watch]")),
   [s.items]);
+
+  // Sell score: composite 0-100 score for active items — higher = stronger sell signal
+  const sellScores = useMemo(() => {
+    const now = Date.now();
+    return s.items
+      .filter(i => i.status === "active" && i.market_price != null && +i.buy_price > 0)
+      .map(i => {
+        const cost    = +i.buy_price + +(i.grading_cost ?? 0);
+        const mkt     = i.market_price!;
+        const ageDays = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
+        const roi     = (mkt - cost) / cost;
+
+        // 5 factors, each 0-20 pts
+        // 1. ROI magnitude: 20 pts for roi ≥ 100%, scaled linearly
+        const roiScore    = Math.min(20, Math.max(0, roi * 20));
+        // 2. Hold time: 20 pts for >90d, 10 pts for >30d, 0 for <30d
+        const ageScore    = ageDays > 90 ? 20 : ageDays > 30 ? 10 : 0;
+        // 3. Upside multiple: 20 pts for mkt/cost ≥ 3, scaled
+        const multScore   = Math.min(20, Math.max(0, ((mkt / cost) - 1) * 10));
+        // 4. Condition bonus: NM/M cards sell easier
+        const condScore   = ["M", "NM"].includes(i.condition) ? 20 : ["LP"].includes(i.condition) ? 10 : 0;
+        // 5. Franchise popularity (Pokemon/One Piece sell fastest)
+        const franScore   = i.franchise?.toLowerCase().includes("pokemon") || i.franchise?.toLowerCase().includes("one piece") ? 20 : 10;
+
+        const total = Math.round(roiScore + ageScore + multScore + condScore + franScore);
+        return { item: i, score: Math.min(100, total), cost, mkt, roi, ageDays };
+      })
+      .filter(x => x.score >= 40 && x.roi > 0) // only genuine opportunities
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }, [s.items]);
 
   // Concentration risk: top items by portfolio weight
   const concentrationRisk = useMemo(() => {
@@ -1578,6 +1620,49 @@ export default function CollectPro() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Sell Score ───────────────────────────────────────────────────── */}
+            {sellScores.length > 0 && (
+              <div className="bg-gray-900 border border-emerald-800/30 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>💰 Top Sell Candidates</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">composite score: ROI + age + upside + condition</span>
+                </div>
+                <div className="space-y-2">
+                  {sellScores.map(({ item, score, cost, mkt, roi, ageDays }) => {
+                    const profit = mkt - cost;
+                    const scoreColor = score >= 80 ? "text-emerald-400" : score >= 60 ? "text-blue-400" : "text-gray-400";
+                    const barColor   = score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-blue-500" : "bg-gray-600";
+                    return (
+                      <div key={item.id} className="flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="text-sm font-medium truncate">{item.name}</span>
+                            <span className={`text-xs font-bold ml-2 flex-shrink-0 ${scoreColor}`}>{score}</span>
+                          </div>
+                          <div className="h-1 bg-gray-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${score}%` }} />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {ageDays}d · cost {fmt$(cost)} · mkt {fmt$(mkt)} · {roi >= 0 ? "+" : ""}{fmtPct(roi * 100)}
+                          </p>
+                        </button>
+                        <button
+                          onClick={() => markSold(item)}
+                          className="text-xs px-2 py-1 rounded bg-emerald-900/60 text-emerald-300 hover:bg-emerald-800 transition-colors flex-shrink-0"
+                          title="Mark sold"
+                        >✓ Sell</button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-700 mt-2">Score = ROI 20 + hold time 20 + upside multiple 20 + condition 20 + franchise 20. Higher = stronger sell signal.</p>
               </div>
             )}
 
@@ -2693,6 +2778,29 @@ export default function CollectPro() {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* ── Partner P&L Comparison ───────────────────────────────── */}
+            {partnerPnL.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Partner Realized Profit Comparison</p>
+                <ResponsiveContainer width="100%" height={Math.max(80, partnerPnL.length * 44)}>
+                  <BarChart data={partnerPnL} layout="vertical" margin={{ top: 0, right: 48, left: 0, bottom: 0 }}>
+                    <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} />
+                    <YAxis type="category" dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} width={88} />
+                    <Tooltip
+                      formatter={(v: number) => [fmt$(v), "Net Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Bar dataKey="profit" name="profit" radius={[0, 3, 3, 0]}>
+                      {partnerPnL.map((entry, i) => (
+                        <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.85} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             )}
 
