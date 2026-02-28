@@ -222,11 +222,12 @@ export default function CollectPro() {
   }, [s.items]);
 
   const portfolioAlerts = useMemo(() => {
-    const alerts: { level: "warn" | "info"; msg: string }[] = [];
+    const alerts: { level: "warn" | "info"; msg: string; filter: "all" | ItemStatus }[] = [];
     const noPrice = s.items.filter(i => i.status === "active" && i.market_price == null);
     if (noPrice.length > 0) alerts.push({
       level: "warn",
       msg: `${noPrice.length} active card${noPrice.length > 1 ? "s have" : " has"} no market price — portfolio estimate may be inaccurate`,
+      filter: "active",
     });
     const now = Date.now();
     const longGrading = s.items.filter(i => {
@@ -236,6 +237,7 @@ export default function CollectPro() {
     if (longGrading.length > 0) alerts.push({
       level: "warn",
       msg: `${longGrading.length} card${longGrading.length > 1 ? "s have" : " has"} been in grading for over 60 days`,
+      filter: "grading",
     });
     const underwater = s.items.filter(i => {
       if (i.status !== "active" || i.market_price == null) return false;
@@ -244,6 +246,7 @@ export default function CollectPro() {
     if (underwater.length > 0) alerts.push({
       level: "info",
       msg: `${underwater.length} active card${underwater.length > 1 ? "s are" : " is"} underwater (market price < cost)`,
+      filter: "active",
     });
     return alerts;
   }, [s.items]);
@@ -972,15 +975,21 @@ export default function CollectPro() {
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Portfolio Alerts</div>
                 {portfolioAlerts.map((a, idx) => (
-                  <div
+                  <button
                     key={idx}
-                    className={`flex items-start gap-2 text-xs px-3 py-2 rounded-lg ${
+                    type="button"
+                    onClick={() => {
+                      setStatusFilter(a.filter);
+                      d({ t: "SET_TAB", tab: "inv" });
+                    }}
+                    className={`w-full flex items-start gap-2 text-xs px-3 py-2 rounded-lg text-left transition-opacity hover:opacity-80 ${
                       a.level === "warn" ? "bg-amber-950/60 border border-amber-800/50 text-amber-300" : "bg-blue-950/60 border border-blue-800/50 text-blue-300"
                     }`}
                   >
                     <span className="text-base leading-none mt-0.5">{a.level === "warn" ? "⚠" : "ℹ"}</span>
-                    <span>{a.msg}</span>
-                  </div>
+                    <span className="flex-1">{a.msg}</span>
+                    <span className="text-xs opacity-60 whitespace-nowrap mt-0.5">→ View</span>
+                  </button>
                 ))}
               </div>
             )}
