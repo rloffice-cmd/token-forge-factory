@@ -369,6 +369,24 @@ export default function CollectPro() {
       .sort((a, b) => b.profit - a.profit),
   [s.partners, s.items]);
 
+  // Win rate: % of sales that turned a profit
+  const winRate = useMemo(() => {
+    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null);
+    if (sold.length === 0) return null;
+    const wins = sold.filter(i => +(i.sell_price!) > +i.buy_price + +(i.grading_cost ?? 0)).length;
+    return { wins, total: sold.length, pct: (wins / sold.length) * 100 };
+  }, [s.items]);
+
+  // Needs re-pricing: active items with a market price not updated in > 30 days
+  const needsRepricing = useMemo(() => {
+    const now = Date.now();
+    return s.items
+      .filter(i => i.status === "active" && i.market_price != null)
+      .filter(i => Math.round((now - new Date(i.updated_at).getTime()) / 86400000) > 30)
+      .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime())
+      .slice(0, 6);
+  }, [s.items]);
+
   // Sales velocity: avg days between sales, and days since last sale
   const salesVelocity = useMemo(() => {
     const sold = s.items
@@ -2043,6 +2061,38 @@ export default function CollectPro() {
             )}
 
             {/* ── Grading Candidates ────────────────────────────────────────────── */}
+            {/* ── Needs Re-Pricing ─────────────────────────────────────────────── */}
+            {needsRepricing.length > 0 && (
+              <div className="bg-gray-900 border border-amber-800/30 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>⏱ Needs Re-Pricing</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">price not updated in &gt;30d</span>
+                </div>
+                <div className="space-y-1.5">
+                  {needsRepricing.map(item => {
+                    const daysSince = Math.round((Date.now() - new Date(item.updated_at).getTime()) / 86400000);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => { d({ t: "SET_TAB", tab: "market" }); d({ t: "MARKET_QUERY", q: `What is the current market price of "${item.name}" ${item.condition} ${item.card_set ?? ""}?` }); }}
+                        className="w-full flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <p className="text-xs text-gray-500">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 text-xs">
+                          <span className="text-blue-400">{fmt$(item.market_price!)}</span>
+                          <span className="text-amber-600 font-mono">{daysSince}d old</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {gradingCandidates.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
@@ -3190,6 +3240,9 @@ export default function CollectPro() {
                 ] : []),
                 ...(profitPerDay != null ? [
                   { label: "💵 Profit / Hold-Day", value: fmt$(profitPerDay), cls: profitPerDay >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
+                ] : []),
+                ...(winRate ? [
+                  { label: "🎯 Win Rate", value: `${winRate.wins}/${winRate.total} (${winRate.pct.toFixed(0)}%)`, cls: winRate.pct >= 50 ? "text-emerald-400" as const : "text-amber-400" as const },
                 ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
