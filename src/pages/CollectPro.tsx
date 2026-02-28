@@ -405,6 +405,30 @@ export default function CollectPro() {
     });
   }, [s.items]);
 
+  // Recent activity feed — last 8 changes sorted by updated_at
+  const recentActivity = useMemo(() => {
+    return [...s.items]
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 8)
+      .map(i => {
+        const isNew       = new Date(i.created_at).getTime() === new Date(i.updated_at).getTime();
+        const isSold      = i.status === "sold";
+        const isGrading   = i.status === "grading";
+        const cost        = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit      = isSold && i.sell_price != null ? +(i.sell_price) - cost : null;
+        const hoursAgo    = (Date.now() - new Date(i.updated_at).getTime()) / 3600000;
+        const timeLabel   = hoursAgo < 1 ? "just now"
+          : hoursAgo < 24 ? `${Math.round(hoursAgo)}h ago`
+          : `${Math.round(hoursAgo / 24)}d ago`;
+        const badge       = isNew ? "Added" : isSold ? "Sold" : isGrading ? "→ Grading" : "Updated";
+        const badgeCls    = isNew ? "bg-blue-900/60 text-blue-300"
+          : isSold ? "bg-emerald-900/60 text-emerald-300"
+          : isGrading ? "bg-amber-900/60 text-amber-300"
+          : "bg-gray-800 text-gray-400";
+        return { item: i, profit, timeLabel, badge, badgeCls };
+      });
+  }, [s.items]);
+
   const holdTimeBreakdown = useMemo(() => {
     const BUCKETS = [
       { label: "< 30d",   min: 0,   max: 30   },
@@ -1503,6 +1527,41 @@ export default function CollectPro() {
                 }
               </div>
             </div>
+
+            {/* ── Recent Activity ──────────────────────────────────────── */}
+            {recentActivity.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Recent Activity</div>
+                <div className="space-y-1.5">
+                  {recentActivity.map(({ item, profit, timeLabel, badge, badgeCls }) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                      className="w-full flex items-center gap-3 py-1.5 px-2 rounded-lg hover:bg-gray-800/60 transition-colors text-left"
+                    >
+                      {item.image_url && (
+                        <img src={item.image_url} alt={item.name} loading="lazy" className="w-7 h-9 object-cover rounded flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{item.name}</p>
+                        <p className="text-xs text-gray-600">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {profit != null && (
+                          <span className={`text-xs font-semibold ${profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                          </span>
+                        )}
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${badgeCls}`}>{badge}</span>
+                        <span className="text-xs text-gray-700">{timeLabel}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
