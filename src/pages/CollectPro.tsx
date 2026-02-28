@@ -48,6 +48,7 @@ import type {
 import { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
 import { callAI } from "@/lib/collectpro/ai";
 import type { CardScanResult } from "@/lib/collectpro/ai";
+import { useCollectProRealtime } from "@/lib/collectpro/realtime";
 import { compressImage, uploadCardImage } from "@/lib/collectpro/image";
 import CameraScanner from "@/components/collectpro/CameraScanner";
 import GradingStudio from "@/components/collectpro/GradingStudio";
@@ -1591,22 +1592,21 @@ export default function CollectPro() {
     })();
   }, []);
 
-  // ── Event bus — Supabase Realtime ──────────────────────────────────────────
+  // ── Realtime sync (reconnect + DELETE fix) ────────────────────────────────
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("collectpro-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "coll_items" },
-        (payload) => {
-          d({ t: "RT_ITEM", event: payload.eventType, item: (payload.new ?? payload.old) as CollectionItem });
-        })
-      .on("postgres_changes", { event: "*", schema: "public", table: "coll_partners" },
-        (payload) => {
-          d({ t: "RT_PARTNER", event: payload.eventType, partner: (payload.new ?? payload.old) as Partner });
-        })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+  const refetch = useCallback(async () => {
+    const [{ data: items }, { data: partners }] = await Promise.all([
+      supabase.from("coll_items").select("*").order("buy_date", { ascending: false }),
+      supabase.from("coll_partners").select("*").order("name"),
+    ]);
+    d({ t: "LOAD_OK", items: (items as CollectionItem[]) ?? [], partners: (partners as Partner[]) ?? [] });
   }, []);
+
+  const connState = useCollectProRealtime({
+    onItem:    (event, item)    => d({ t: "RT_ITEM",    event, item }),
+    onPartner: (event, partner) => d({ t: "RT_PARTNER", event, partner }),
+    onRefetch: refetch,
+  });
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1793,8 +1793,15 @@ export default function CollectPro() {
       try {
         let itemId: string;
         if (s.inv.editId) {
+          const originalItem = s.items.find((i) => i.id === s.inv.editId);
+          if (originalItem) {
+            d({ t: "RT_ITEM", event: "UPDATE", item: { ...originalItem, ...payload, updated_at: new Date().toISOString() } });
+          }
           const { error } = await supabase.from("coll_items").update(payload).eq("id", s.inv.editId);
-          if (error) throw error;
+          if (error) {
+            if (originalItem) d({ t: "RT_ITEM", event: "UPDATE", item: originalItem }); // rollback
+            throw error;
+          }
           itemId = s.inv.editId;
           toast.success("Item updated");
         } else {
@@ -1876,11 +1883,17 @@ export default function CollectPro() {
 
   const markSoldConfirm = useCallback(async (item: CollectionItem, price: number) => {
     const soldAt = new Date().toISOString();
+    // Optimistic update — item moves to sold immediately without waiting for DB round-trip
+    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, status: "sold" as ItemStatus, sell_price: price, sold_at: soldAt } });
     const { error } = await supabase
       .from("coll_items")
       .update({ status: "sold", sell_price: price, sold_at: soldAt })
       .eq("id", item.id);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      toast.error(error.message);
+      return;
+    }
 
     // Record sell price in price history
     supabase.from("cp_price_history").insert({
@@ -2220,7 +2233,17 @@ export default function CollectPro() {
       <div className="bg-gradient-to-r from-gray-900 via-blue-950 to-gray-900 border-b border-gray-800 px-4 py-4">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-extrabold text-white">CollectPro</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-extrabold text-white">CollectPro</h1>
+              <span
+                className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                  connState === "live"    ? "bg-emerald-400" :
+                  connState === "offline" ? "bg-red-500" :
+                  "bg-amber-400 animate-pulse"
+                }`}
+                title={`Sync: ${connState}`}
+              />
+            </div>
             <p className="text-xs text-gray-500 mt-0.5">TCG Card Portfolio Manager</p>
           </div>
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
