@@ -941,6 +941,23 @@ export default function CollectPro() {
     return buckets.filter(b => b.count > 0);
   }, [s.items]);
 
+  // Portfolio CAGR: compound annual growth rate from first purchase to now
+  const portfolioCAGR = useMemo(() => {
+    if (s.items.length === 0) return null;
+    const firstItem = s.items.reduce<CollectionItem | null>((earliest, i) =>
+      (!earliest || new Date(i.buy_date) < new Date(earliest.buy_date)) ? i : earliest, null);
+    if (!firstItem) return null;
+    const years = (Date.now() - new Date(firstItem.buy_date).getTime()) / (365.25 * 86400000);
+    if (years < 0.5) return null; // not enough time for CAGR to be meaningful
+    const totalInvested = s.items.reduce((acc, i) => acc + +i.buy_price + +(i.grading_cost ?? 0), 0);
+    if (totalInvested <= 0) return null;
+    const activeValue = s.items.filter(i => i.status !== "sold").reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
+    const soldRevenue = s.items.filter(i => i.status === "sold" && i.sell_price != null).reduce((acc, i) => acc + +(i.sell_price!), 0);
+    const currentValue = activeValue + soldRevenue;
+    const cagr = (Math.pow(currentValue / totalInvested, 1 / years) - 1) * 100;
+    return { cagr, years: Math.round(years * 10) / 10 };
+  }, [s.items]);
+
   // Underwater items: active items where market_price < cost (currently losing)
   const underwaterItems = useMemo(() =>
     s.items
@@ -3329,9 +3346,18 @@ export default function CollectPro() {
                               );
                             })()}
                           </td>
-                          {/* Sell score column */}
+                          {/* Sell score / realized ROI column */}
                           <td className="px-3 py-2.5 text-right">
                             {(() => {
+                              if (item.status === "sold" && item.sell_price != null) {
+                                const roi = cost > 0 ? ((+(item.sell_price) - cost) / cost) * 100 : 0;
+                                return (
+                                  <span className={`text-xs font-semibold ${roi >= 0 ? "text-emerald-500" : "text-red-400"}`}
+                                    title={`Realized ROI: ${roi.toFixed(1)}%`}>
+                                    {roi >= 0 ? "+" : ""}{roi.toFixed(0)}%
+                                  </span>
+                                );
+                              }
                               const sc = sellScores.find(x => x.item.id === item.id);
                               if (!sc) return <span className="text-gray-700">—</span>;
                               return (
@@ -3520,6 +3546,9 @@ export default function CollectPro() {
                 ] : []),
                 ...(monthlyScoreboard ? [
                   { label: "📅 Green Months", value: `${monthlyScoreboard.green}/${monthlyScoreboard.total}`, cls: monthlyScoreboard.green >= monthlyScoreboard.red ? "text-emerald-400" as const : "text-amber-400" as const },
+                ] : []),
+                ...(portfolioCAGR ? [
+                  { label: "📊 Portfolio CAGR", value: `${portfolioCAGR.cagr >= 0 ? "+" : ""}${portfolioCAGR.cagr.toFixed(1)}%/yr`, cls: portfolioCAGR.cagr >= 0 ? "text-emerald-400" as const : "text-red-400" as const },
                 ] : []),
               ]).map((st) => (
                 <div key={st.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
