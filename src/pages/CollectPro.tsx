@@ -186,24 +186,6 @@ export default function CollectPro() {
     });
   }, [s.items]);
 
-  const franchiseBreakdown = useMemo(() => {
-    const active = s.items.filter(i => i.status === "active");
-    const totalVal = active.reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
-    const map = new Map<string, { value: number; count: number }>();
-    active.forEach(i => {
-      const key = i.franchise ?? "Other";
-      const e = map.get(key) ?? { value: 0, count: 0 };
-      map.set(key, { value: e.value + (i.market_price ?? +i.buy_price), count: e.count + 1 });
-    });
-    return [...map.entries()]
-      .map(([name, { value, count }]) => ({
-        name, value, count,
-        pct: totalVal > 0 ? (value / totalVal) * 100 : 0,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
-  }, [s.items]);
-
   const topPerformers = useMemo(() => {
     return s.items
       .filter(i => +i.buy_price > 0)
@@ -885,14 +867,16 @@ export default function CollectPro() {
       const entry = map.get(key) ?? { cost: 0, value: 0, count: 0, sold: 0, profit: 0 };
       map.set(key, { ...entry, sold: entry.sold + 1, profit: entry.profit + profit });
     });
-    return [...map.entries()]
+    const entries = [...map.entries()].filter(([, d]) => d.count > 0 || d.sold > 0);
+    const totalVal = entries.reduce((acc, [, d]) => acc + d.value, 0);
+    return entries
       .map(([name, data]) => ({
         name: name.length > 14 ? name.slice(0, 13) + "…" : name,
         fullName: name,
         cost: data.cost, value: data.value, count: data.count, sold: data.sold, profit: data.profit,
         pnl: data.value - data.cost,
+        pct: totalVal > 0 ? (data.value / totalVal) * 100 : 0,
       }))
-      .filter(x => x.count > 0 || x.sold > 0)
       .sort((a, b) => b.count - a.count);
   }, [s.items]);
 

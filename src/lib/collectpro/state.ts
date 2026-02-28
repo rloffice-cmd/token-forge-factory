@@ -76,6 +76,9 @@ export type Action =
   | { t: "UNDO_SET";   u: UndoBuffer | null }
   | { t: "SET_ADMIN";  v: boolean };
 
+/** Items per page in the inventory table */
+export const PAGE = 25;
+
 export function today() { return new Date().toISOString().slice(0, 10); }
 
 export function emptyForm(partnerId: string): ItemForm {
