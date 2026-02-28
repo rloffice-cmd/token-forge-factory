@@ -73,7 +73,7 @@ export default function CollectPro() {
 
   // Modal state for sell dialog, batch operations, and grading studio
   const [sellTarget,     setSellTarget]     = useState<CollectionItem | null>(null);
-  const [batchOp,        setBatchOp]        = useState<"status" | "price" | null>(null);
+  const [batchOp,        setBatchOp]        = useState<"status" | "price" | "partner" | null>(null);
   const [gradingForItem,        setGradingForItem]        = useState<CollectionItem | null>(null);
   const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
   const [expandedPartners,    setExpandedPartners]    = useState<Set<string>>(new Set());
@@ -735,6 +735,21 @@ export default function CollectPro() {
     setBatchDeleteTarget(false);
   }, [s.inv.selected]);
 
+  const batchPartnerReassign = useCallback(() => {
+    setBatchOp("partner" as "status" | "price");
+  }, []);
+
+  const executeBatchPartner = useCallback(async (partnerId: string) => {
+    const { error } = await supabase
+      .from("coll_items")
+      .update({ partner_id: partnerId })
+      .in("id", s.inv.selected);
+    if (error) { toast.error(error.message); return; }
+    const partnerName = s.partners.find(p => p.id === partnerId)?.name ?? partnerId;
+    d({ t: "INV_SEL_CLEAR" });
+    toast.success(`${s.inv.selected.length} items reassigned to ${partnerName}`);
+  }, [s.inv.selected, s.partners]);
+
   // ── AI — Brain chat ────────────────────────────────────────────────────────
 
   const sendChatMessage = useCallback(async (text: string) => {
@@ -885,8 +900,10 @@ export default function CollectPro() {
         <BatchOperationModal
           type={batchOp}
           count={s.inv.selected.length}
+          partners={s.partners}
           onStatusUpdate={executeBatchStatus}
           onPriceUpdate={executeBatchPrice}
+          onPartnerUpdate={executeBatchPartner}
           onClose={() => setBatchOp(null)}
         />
       )}
@@ -2381,6 +2398,7 @@ export default function CollectPro() {
           onAIPriceRefresh={() =>
             setBatchPriceRefreshItems(s.items.filter((i) => s.inv.selected.includes(i.id)))
           }
+          onPartnerReassign={batchPartnerReassign}
           onExport={() => exportCSV(s.items.filter((i) => s.inv.selected.includes(i.id)), s.partners)}
           onDelete={batchDelete}
           onClear={() => d({ t: "INV_SEL_CLEAR" })}

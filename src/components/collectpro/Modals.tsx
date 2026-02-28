@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
-import type { CollectionItem, ItemStatus } from "@/lib/collectpro/types";
+import type { CollectionItem, ItemStatus, Partner } from "@/lib/collectpro/types";
 import { itemCost } from "@/lib/collectpro/helpers";
 import { fmt$, fmtPct } from "@/lib/collectpro/stats";
 import { callAI, buildMarketPricePrompt, parseAIPrice, saveMarketPrice } from "@/lib/collectpro/ai";
@@ -165,18 +165,23 @@ export function SellDialog({
 export function BatchOperationModal({
   type,
   count,
+  partners,
   onStatusUpdate,
   onPriceUpdate,
+  onPartnerUpdate,
   onClose,
 }: {
-  type: "status" | "price";
+  type: "status" | "price" | "partner";
   count: number;
+  partners?: Partner[];
   onStatusUpdate: (status: ItemStatus) => Promise<void>;
   onPriceUpdate: (price: number) => Promise<void>;
+  onPartnerUpdate?: (partnerId: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const [statusVal, setStatusVal] = useState<ItemStatus>("active");
-  const [priceVal, setPriceVal] = useState("");
+  const [statusVal,  setStatusVal]  = useState<ItemStatus>("active");
+  const [priceVal,   setPriceVal]   = useState("");
+  const [partnerVal, setPartnerVal] = useState(partners?.[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -185,16 +190,21 @@ export function BatchOperationModal({
     try {
       if (type === "status") {
         await onStatusUpdate(statusVal);
-      } else {
+      } else if (type === "price") {
         const p = +priceVal;
         if (isNaN(p) || p < 0) { toast.error("Invalid price"); return; }
         await onPriceUpdate(p);
+      } else if (type === "partner" && onPartnerUpdate) {
+        if (!partnerVal) { toast.error("Select a partner"); return; }
+        await onPartnerUpdate(partnerVal);
       }
       onClose();
     } finally {
       setBusy(false);
     }
   };
+
+  const titles = { status: "Update Status", price: "Update Market Price", partner: "Reassign Partner" };
 
   return (
     <div
@@ -205,9 +215,7 @@ export function BatchOperationModal({
         className="bg-gray-900 border border-gray-700 rounded-2xl p-5 w-full max-w-sm"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-bold text-white mb-0.5">
-          {type === "status" ? "Update Status" : "Update Market Price"}
-        </h3>
+        <h3 className="font-bold text-white mb-0.5">{titles[type]}</h3>
         <p className="text-sm text-gray-400 mb-4">{count} items selected</p>
         <form onSubmit={handleSubmit} className="space-y-3">
           {type === "status" ? (
@@ -223,7 +231,7 @@ export function BatchOperationModal({
                 <option value="sold">Sold</option>
               </select>
             </div>
-          ) : (
+          ) : type === "price" ? (
             <div>
               <label className="text-xs text-gray-400 block mb-1">Market Price ($)</label>
               <Input
@@ -237,11 +245,25 @@ export function BatchOperationModal({
                 placeholder="Enter price…"
               />
             </div>
+          ) : (
+            <div>
+              <label className="text-xs text-gray-400 block mb-1">Reassign to Partner</label>
+              <select
+                className="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm text-white"
+                value={partnerVal}
+                onChange={(e) => setPartnerVal(e.target.value)}
+              >
+                <option value="">Select partner…</option>
+                {(partners ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
           )}
           <div className="flex gap-2">
             <Button
               type="submit"
-              disabled={busy || (type === "price" && !priceVal)}
+              disabled={busy || (type === "price" && !priceVal) || (type === "partner" && !partnerVal)}
               className="flex-1"
             >
               {busy ? "Applying…" : "Apply to All"}

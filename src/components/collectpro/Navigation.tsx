@@ -11,6 +11,7 @@ export function BatchBar({
   onStatusUpdate,
   onPriceUpdate,
   onAIPriceRefresh,
+  onPartnerReassign,
   onExport,
   onDelete,
   onClear,
@@ -19,6 +20,7 @@ export function BatchBar({
   onStatusUpdate: () => void;
   onPriceUpdate: () => void;
   onAIPriceRefresh: () => void;
+  onPartnerReassign: () => void;
   onExport: () => void;
   onDelete: () => void;
   onClear: () => void;
@@ -33,6 +35,7 @@ export function BatchBar({
         <Button size="sm" variant="outline" onClick={onStatusUpdate}>Status</Button>
         <Button size="sm" variant="outline" onClick={onPriceUpdate}>Price</Button>
         <Button size="sm" variant="outline" onClick={onAIPriceRefresh} title="Refresh market prices via AI web search">📊 AI Prices</Button>
+        <Button size="sm" variant="outline" onClick={onPartnerReassign} title="Reassign to a different partner">Partner</Button>
         <Button size="sm" variant="outline" onClick={onExport}>Export</Button>
         <Button size="sm" variant="destructive" onClick={onDelete}>Delete All</Button>
       </div>
