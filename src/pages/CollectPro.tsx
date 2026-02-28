@@ -956,6 +956,20 @@ export default function CollectPro() {
       .slice(0, 3),
   [s.items]);
 
+  // Monthly P&L: profit/loss grouped by calendar month
+  const monthlyPnL = useMemo(() => {
+    const map = new Map<string, number>();
+    s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at).forEach(i => {
+      const dt  = new Date(i.sold_at!);
+      const key = dt.toLocaleDateString("en-US", { year: "numeric", month: "short" });
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      map.set(key, (map.get(key) ?? 0) + +(i.sell_price!) - cost);
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => new Date(`1 ${a}`).getTime() - new Date(`1 ${b}`).getTime())
+      .map(([month, profit]) => ({ month, profit }));
+  }, [s.items]);
+
   // Portfolio CAGR: compound annual growth rate from first purchase to now
   const portfolioCAGR = useMemo(() => {
     if (s.items.length === 0) return null;
@@ -2493,6 +2507,37 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Best Franchise to Double Down On ─────────────────────────────── */}
+            {(() => {
+              const candidates = franchiseBreakdown
+                .filter(f => f.sold >= 2 && f.cost > 0)
+                .map(f => ({ ...f, roiPct: (f.profit / f.cost) * 100 }))
+                .filter(f => f.roiPct > 0)
+                .sort((a, b) => b.roiPct - a.roiPct)
+                .slice(0, 3);
+              if (candidates.length === 0) return null;
+              return (
+                <div className="bg-gray-900 border border-indigo-900/30 rounded-xl p-4">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                    <span>🎯 Best Franchises to Buy</span>
+                    <span className="text-xs font-normal normal-case text-gray-600">based on your sold history</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {candidates.map((f, idx) => (
+                      <div key={f.fullName} className="flex items-center gap-3 py-1.5 px-3 bg-gray-800/50 rounded-lg">
+                        <span className="text-indigo-400 font-bold text-sm w-4 flex-shrink-0">{idx + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{f.fullName}</p>
+                          <p className="text-xs text-gray-500">{f.sold} sold · {f.count} active</p>
+                        </div>
+                        <span className="text-emerald-400 text-xs font-bold flex-shrink-0">{fmtPct(f.roiPct)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ── Hall of Fame ─────────────────────────────────────────────────── */}
             {hallOfFame.length > 0 && (
               <div className="bg-gray-900 border border-amber-900/30 rounded-xl p-4">
@@ -3833,6 +3878,30 @@ export default function CollectPro() {
                     <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
                     <Bar dataKey="profit" name="profit" radius={[3, 3, 0, 0]}>
                       {quarterlyPerformance.map((entry, i) => (
+                        <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* ── Monthly P&L ───────────────────────────────────────────── */}
+            {monthlyPnL.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly P&amp;L</p>
+                <ResponsiveContainer width="100%" height={130}>
+                  <BarChart data={monthlyPnL} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
+                    <Tooltip
+                      formatter={(v: number) => [fmt$(v), "Profit"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
+                    <Bar dataKey="profit" radius={[3, 3, 0, 0]}>
+                      {monthlyPnL.map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
                       ))}
                     </Bar>
