@@ -455,6 +455,7 @@ export default function CollectPro() {
       );
       if (dup) toast.warning(`"${f.name}" already exists for this partner`);
 
+      const isSold = f.status === "sold";
       const payload = {
         name: f.name.trim(),
         card_set: f.card_set || null,
@@ -463,7 +464,8 @@ export default function CollectPro() {
         buy_price: +f.buy_price,
         grading_cost: +(f.grading_cost) || 0,
         market_price: f.market_price ? +f.market_price : null,
-        sell_price: null as number | null,
+        sell_price: isSold && f.sell_price ? +f.sell_price : null,
+        sold_at: isSold && f.sold_at ? f.sold_at : null,
         buy_date: f.buy_date || today(),
         status: f.status as ItemStatus,
         partner_id: f.partner_id,
@@ -526,6 +528,8 @@ export default function CollectPro() {
         buy_price: String(item.buy_price),
         grading_cost: String(item.grading_cost ?? 0),
         market_price: item.market_price != null ? String(item.market_price) : "",
+        sell_price: item.sell_price != null ? String(item.sell_price) : "",
+        sold_at: item.sold_at ? item.sold_at.slice(0, 10) : "",
         buy_date: item.buy_date,
         status: item.status,
         partner_id: item.partner_id,
@@ -1391,6 +1395,33 @@ export default function CollectPro() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Sale fields — only shown when status = sold */}
+                  {s.inv.form.status === "sold" && (
+                    <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-lg">
+                      <div>
+                        <label className="text-xs text-emerald-400 block mb-1">Sale Price ($)</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="bg-gray-800 border-gray-700"
+                          value={s.inv.form.sell_price}
+                          onChange={(e) => d({ t: "INV_FORM_PATCH", p: { sell_price: e.target.value } })}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-emerald-400 block mb-1">Sold Date</label>
+                        <Input
+                          type="date"
+                          className="bg-gray-800 border-gray-700"
+                          value={s.inv.form.sold_at}
+                          onChange={(e) => d({ t: "INV_FORM_PATCH", p: { sold_at: e.target.value } })}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-xs text-gray-400 block mb-1">Notes</label>

@@ -82,6 +82,7 @@ export function emptyForm(partnerId: string): ItemForm {
   return {
     name: "", card_set: "", franchise: "", condition: "NM",
     buy_price: "", grading_cost: "0", market_price: "",
+    sell_price: "", sold_at: "",
     buy_date: today(), status: "active" as ItemStatus, partner_id: partnerId,
     notes: "", image_url: "", psa_grade: "",
   };

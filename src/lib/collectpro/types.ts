@@ -96,6 +96,8 @@ export interface ItemForm {
   buy_price: string;
   grading_cost: string;
   market_price: string;
+  sell_price: string;
+  sold_at: string;
   buy_date: string;
   status: ItemStatus;
   partner_id: string;
