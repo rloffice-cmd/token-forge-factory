@@ -1210,6 +1210,31 @@ export default function CollectPro() {
               {st.sub && <div className="text-xs text-amber-600 mt-0.5">{st.sub}</div>}
             </div>
           ))}
+          <button
+            onClick={() => {
+              const health = portfolioHealth ? `${portfolioHealth.grade} (${portfolioHealth.total}/100)` : "N/A";
+              const text = [
+                "📊 CollectPro Portfolio Summary",
+                "─".repeat(32),
+                `Total Invested:    ${fmt$(stats.totalCost)}`,
+                `Active Mkt Est.:   ${fmt$(stats.estimatedValue)} (estimate)`,
+                `Unrealized P&L:    ${stats.unrealisedPnL >= 0 ? "+" : ""}${fmt$(stats.unrealisedPnL)}`,
+                `Realized Profit:   ${stats.realisedProfit >= 0 ? "+" : ""}${fmt$(stats.realisedProfit)} (${fmtPct(stats.roiPct)} ROI)`,
+                `Sales:             ${stats.soldCount} transactions`,
+                `Portfolio Health:  ${health}`,
+                `Cards:             ${s.items.length} total (${s.items.filter(i => i.status === "active").length} active)`,
+                "─".repeat(32),
+                `Generated: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`,
+              ].join("\n");
+              navigator.clipboard.writeText(text);
+              toast.success("Portfolio summary copied to clipboard");
+            }}
+            className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-gray-500 hover:text-gray-300 hover:border-white/20 transition-colors text-xs flex flex-col items-center justify-center gap-1 min-w-[52px]"
+            title="Copy portfolio summary to clipboard"
+          >
+            <span className="text-base">⎘</span>
+            <span>Share</span>
+          </button>
         </div>
       </div>
 
