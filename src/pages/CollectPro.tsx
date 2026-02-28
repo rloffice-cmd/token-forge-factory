@@ -53,27 +53,6 @@ import CameraScanner from "@/components/collectpro/CameraScanner";
 import { exportCSV, exportEbayCSV, exportCardmarketCSV } from "@/lib/collectpro/export";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock card data for Quick Scan
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MOCK_CARDS = [
-  { name: "Charizard", card_set: "Base Set", franchise: "Pokemon", condition: "NM", buy_price: "120", grading_cost: "25", market_price: "380", psa_grade: "9" },
-  { name: "Blastoise", card_set: "Base Set", franchise: "Pokemon", condition: "LP", buy_price: "80", grading_cost: "25", market_price: "220", psa_grade: "" },
-  { name: "Pikachu Illustrator", card_set: "Promo", franchise: "Pokemon", condition: "NM", buy_price: "5000", grading_cost: "50", market_price: "18000", psa_grade: "8" },
-  { name: "Lugia", card_set: "Neo Genesis", franchise: "Pokemon", condition: "NM", buy_price: "200", grading_cost: "25", market_price: "650", psa_grade: "" },
-  { name: "Rayquaza Gold Star", card_set: "EX Deoxys", franchise: "Pokemon", condition: "MP", buy_price: "350", grading_cost: "25", market_price: "1200", psa_grade: "7" },
-  { name: "Umbreon VMAX Alt Art", card_set: "Evolving Skies", franchise: "Pokemon", condition: "NM", buy_price: "180", grading_cost: "20", market_price: "420", psa_grade: "" },
-  { name: "Charizard VMAX Rainbow", card_set: "Champions Path", franchise: "Pokemon", condition: "NM", buy_price: "95", grading_cost: "20", market_price: "280", psa_grade: "" },
-  { name: "Mew ex SAR", card_set: "151", franchise: "Pokemon", condition: "NM", buy_price: "45", grading_cost: "20", market_price: "130", psa_grade: "" },
-  { name: "Monkey D. Luffy OP01-001", card_set: "Romance Dawn", franchise: "One Piece", condition: "NM", buy_price: "35", grading_cost: "20", market_price: "90", psa_grade: "" },
-  { name: "Shanks OP01-118 Secret", card_set: "Romance Dawn", franchise: "One Piece", condition: "NM", buy_price: "120", grading_cost: "25", market_price: "380", psa_grade: "" },
-  { name: "Kaido Parallel", card_set: "Paramount War", franchise: "One Piece", condition: "NM", buy_price: "55", grading_cost: "20", market_price: "160", psa_grade: "" },
-  { name: "Nami Full Art OP02-101", card_set: "Paramount War", franchise: "One Piece", condition: "NM", buy_price: "40", grading_cost: "20", market_price: "95", psa_grade: "" },
-  { name: "Enel OP04-020 Special", card_set: "Kingdoms of Intrigue", franchise: "One Piece", condition: "NM", buy_price: "30", grading_cost: "20", market_price: "75", psa_grade: "" },
-  { name: "Rob Lucci Alt Art", card_set: "Wings of the Captain", franchise: "One Piece", condition: "LP", buy_price: "25", grading_cost: "20", market_price: "65", psa_grade: "" },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Helper functions
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -122,11 +101,22 @@ function genPriceHistory(item: CollectionItem): PricePoint[] {
   return result;
 }
 
-function mockScan(): Partial<ItemForm> {
-  const card = MOCK_CARDS[Math.floor(Math.random() * MOCK_CARDS.length)];
-  return { ...card, status: "active", buy_date: new Date().toISOString().slice(0, 10), notes: "Quick Scan", image_url: "" };
+/** Extract the first USD price from AI result text, e.g. "$1,234.56" → 1234.56 */
+function extractFirstPrice(text: string): number | null {
+  const m = text.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/);
+  return m ? parseFloat(m[1].replace(/,/g, "")) : null;
 }
 
+/** Items whose name appears (partially) in the query string */
+function findMatchingItems(query: string, items: CollectionItem[]): CollectionItem[] {
+  const q = query.toLowerCase();
+  return items.filter((item) => {
+    const name = item.name.toLowerCase();
+    // exact substring or each significant word appears in query
+    if (q.includes(name)) return true;
+    return name.split(/\s+/).filter((w) => w.length > 3).some((w) => q.includes(w));
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State shape & reducer
@@ -1315,6 +1305,26 @@ export default function CollectPro() {
     d({ t: "MKT_BUSY", v: false });
   }, []);
 
+  // ── Apply AI price to inventory item ────────────────────────────────────────
+
+  const applyMarketPrice = useCallback(async (item: CollectionItem, price: number) => {
+    const { error } = await supabase
+      .from("coll_items")
+      .update({ market_price: price })
+      .eq("id", item.id);
+    if (error) { toast.error(error.message); return; }
+
+    // Record in price history
+    await supabase.from("cp_price_history").insert({
+      item_id: item.id,
+      price,
+      source: "market_ai",
+      note: `Market AI scan: ${s.market.query.slice(0, 120)}`,
+    });
+
+    toast.success(`${item.name} → market price updated to ${fmt$(price)}`);
+  }, [s.market.query]);
+
   // ── Partner CRUD ───────────────────────────────────────────────────────────
 
   const addPartner = useCallback(
@@ -2075,11 +2085,35 @@ export default function CollectPro() {
               <p className="text-sm text-gray-500 mt-3">Scanning… (15–30 seconds)</p>
             )}
 
-            {s.market.result && (
-              <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
-                {s.market.result}
-              </div>
-            )}
+            {s.market.result && (() => {
+              const price  = extractFirstPrice(s.market.result);
+              const matches = findMatchingItems(s.market.query, s.items.filter((i) => i.status === "active"));
+              return (
+                <>
+                  {price != null && matches.length > 0 && (
+                    <div className="mt-3 p-3 bg-green-950/50 border border-green-800 rounded-xl">
+                      <p className="text-xs text-green-400 font-semibold mb-2">
+                        📌 Apply {fmt$(price)} to inventory?
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {matches.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => applyMarketPrice(item, price)}
+                            className="px-2 py-1 rounded-lg bg-green-800/60 hover:bg-green-700 text-white text-xs font-medium transition-colors"
+                          >
+                            {item.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl p-4 text-sm whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
+                    {s.market.result}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 

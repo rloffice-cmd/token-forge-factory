@@ -59,5 +59,23 @@
   ],
   "categories": ["finance", "business", "productivity"],
   "lang": "he",
-  "dir": "rtl"
+  "dir": "rtl",
+  "shortcuts": [
+    {
+      "name": "CollectPro",
+      "short_name": "CollectPro",
+      "description": "TCG card portfolio manager",
+      "url": "/collectpro",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "CollectPro — TCG Card Portfolio"
+    }
+  ]
 }
