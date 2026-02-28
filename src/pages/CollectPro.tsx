@@ -2510,6 +2510,36 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Partner Profit Leaderboard ────────────────────────────────── */}
+            {partnerPnL.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">🏆 Partner Leaderboard</div>
+                <div className="space-y-2">
+                  {partnerPnL.map((p, i) => {
+                    const maxProfit = Math.max(1, ...partnerPnL.map(x => Math.abs(x.profit)));
+                    return (
+                      <div key={p.name} className="flex items-center gap-2">
+                        <span className="text-xs text-gray-600 w-4 flex-shrink-0">{i + 1}.</span>
+                        <span className="text-xs text-gray-400 w-20 flex-shrink-0 truncate">{p.name}</span>
+                        <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${p.profit >= 0 ? "bg-emerald-500/70" : "bg-red-500/70"}`}
+                            style={{ width: `${(Math.abs(p.profit) / maxProfit) * 100}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs font-semibold w-16 text-right flex-shrink-0 ${p.profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {p.profit >= 0 ? "+" : ""}{fmt$(p.profit)}
+                        </span>
+                        <span className={`text-xs w-10 text-right flex-shrink-0 ${p.roi >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {fmtPct(p.roi)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* ── Chat ────────────────────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
@@ -2525,6 +2555,11 @@ export default function CollectPro() {
                     "איזה קלף מסוכן לשמירה?",
                     "מה ה-ROI הממוצע שלי?",
                     "השוואת פרנצ'ייזים",
+                    // Dynamic: context-aware suggestions
+                    ...(needsRepricing.length > 0 ? [`עדכן מחיר עבור ${needsRepricing[0].name}`] : []),
+                    ...(sellScores.length > 0 ? [`מה הציון מכירה של ${sellScores[0].item.name}?`] : []),
+                    ...(concentrationRisk.length > 0 ? ["ניתוח ריכוז פורטפוליו"] : []),
+                    ...(gradingPipeline.some(x => x.isStale) ? ["אילו קלפים תקועים בגריידינג?"] : []),
                   ].map((q) => (
                     <button
                       key={q}
