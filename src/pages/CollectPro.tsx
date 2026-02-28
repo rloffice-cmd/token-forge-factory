@@ -77,6 +77,7 @@ export default function CollectPro() {
   const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
   const [expandedPartners, setExpandedPartners] = useState<Set<string>>(new Set());
   const [statusFilter,     setStatusFilter]     = useState<"all" | ItemStatus>("all");
+  const [scanHistory,      setScanHistory]      = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
 
   // ── Initial data load ──────────────────────────────────────────────────────
 
@@ -678,6 +679,10 @@ export default function CollectPro() {
         { signal: scanAbort.current.signal, cacheKey: query }
       );
       d({ t: "MKT_RESULT", v: result });
+      setScanHistory((prev) => [
+        { query, mode: s.market.mode, result, ts: Date.now() },
+        ...prev.filter((h) => h.query !== query),
+      ].slice(0, 5));
     } catch (err: unknown) {
       if ((err as Error).message !== "ABORTED") toast.error(`Scan: ${(err as Error).message}`);
     } finally {
@@ -1087,26 +1092,33 @@ export default function CollectPro() {
             </div>
 
             {/* Status filter chips */}
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {([
-                { key: "all",     label: "All",     count: s.items.length },
-                { key: "active",  label: "Active",  count: s.items.filter(i => i.status === "active").length },
-                { key: "grading", label: "Grading", count: s.items.filter(i => i.status === "grading").length },
-                { key: "sold",    label: "Sold",    count: s.items.filter(i => i.status === "sold").length },
-              ] as const).map(({ key, label, count }) => (
-                <button
-                  key={key}
-                  onClick={() => { setStatusFilter(key); d({ t: "INV_PAGE", n: 1 }); }}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                    statusFilter === key
-                      ? "bg-blue-700 text-white"
-                      : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
-                  }`}
-                >
-                  {label} <span className={statusFilter === key ? "text-blue-200" : "text-gray-600"}>{count}</span>
-                </button>
-              ))}
-            </div>
+            {(() => {
+              const activeItems  = s.items.filter(i => i.status === "active");
+              const noPriceCount = activeItems.filter(i => i.market_price == null).length;
+              return (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {([
+                    { key: "all",     label: "All",     count: s.items.length,                                   badge: null },
+                    { key: "active",  label: "Active",  count: activeItems.length,                               badge: noPriceCount > 0 ? `${noPriceCount} no price` : null },
+                    { key: "grading", label: "Grading", count: s.items.filter(i => i.status === "grading").length, badge: null },
+                    { key: "sold",    label: "Sold",    count: s.items.filter(i => i.status === "sold").length,   badge: null },
+                  ] as const).map(({ key, label, count, badge }) => (
+                    <button
+                      key={key}
+                      onClick={() => { setStatusFilter(key); d({ t: "INV_PAGE", n: 1 }); }}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        statusFilter === key
+                          ? "bg-blue-700 text-white"
+                          : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                      }`}
+                    >
+                      {label} <span className={statusFilter === key ? "text-blue-200" : "text-gray-600"}>{count}</span>
+                      {badge && <span className="ml-1 text-amber-500/80 text-xs">· {badge}</span>}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Batch select all button */}
             {sortedItems.length > 0 && (
@@ -1786,6 +1798,32 @@ export default function CollectPro() {
                 </>
               );
             })()}
+
+            {/* ── Scan History ─────────────────────────────────────────── */}
+            {scanHistory.length > 0 && (
+              <div className="mt-4 border-t border-gray-800 pt-4">
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Scans</div>
+                <div className="space-y-1.5">
+                  {scanHistory.map((h, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        d({ t: "MKT_QUERY", v: h.query });
+                        d({ t: "MKT_RESULT", v: h.result });
+                        d({ t: "MKT_MODE", v: h.mode as "market" | "arbitrage" });
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg bg-gray-800/60 hover:bg-gray-800 text-xs transition-colors group"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-300 truncate group-hover:text-white">{h.query}</span>
+                        <span className="text-gray-600 flex-shrink-0">{new Date(h.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+                      </div>
+                      <div className="text-gray-600 mt-0.5">{h.mode === "market" ? "🔍 Prices" : "⚡ Arbitrage"}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
