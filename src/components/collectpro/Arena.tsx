@@ -114,6 +114,24 @@ export function ArenaView({
   const roiA = profitA != null && costA > 0 ? (profitA / costA) * 100 : null;
   const roiB = profitB != null && costB > 0 ? (profitB / costB) * 100 : null;
 
+  const daysHeld = (item: CollectionItem) => {
+    const from = new Date(item.buy_date).getTime();
+    const to   = item.sold_at ? new Date(item.sold_at).getTime() : Date.now();
+    return Math.round((to - from) / 86400000);
+  };
+  const daysA = itemA ? daysHeld(itemA) : null;
+  const daysB = itemB ? daysHeld(itemB) : null;
+
+  const upsideA = itemA && costA > 0 && itemA.market_price != null ? itemA.market_price / costA : null;
+  const upsideB = itemB && costB > 0 && itemB.market_price != null ? itemB.market_price / costB : null;
+
+  // winner: "a" | "b" | null — the slot with the better value for a given numeric pair
+  const winner = (a: number | null, b: number | null, higherIsBetter = true): "a" | "b" | null => {
+    if (a == null || b == null) return null;
+    if (a === b) return null;
+    return higherIsBetter ? (a > b ? "a" : "b") : (a < b ? "a" : "b");
+  };
+
   let gradingRec = "";
   if (itemA && itemB) {
     const bothRaw = !itemA.psa_grade && !itemB.psa_grade;
@@ -198,40 +216,65 @@ export function ArenaView({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-white/10">
-                <th className="text-right px-3 py-2.5 text-xs text-gray-500 font-medium">Metric</th>
-                <th className="text-right px-3 py-2.5 text-xs text-blue-400 font-medium">Slot A{itemA ? ` — ${itemA.name}` : ""}</th>
-                <th className="text-right px-3 py-2.5 text-xs text-purple-400 font-medium">Slot B{itemB ? ` — ${itemB.name}` : ""}</th>
+                <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Metric</th>
+                <th className="text-right px-3 py-2.5 text-xs text-blue-400 font-medium">Slot A{itemA ? ` — ${itemA.name.slice(0, 18)}` : ""}</th>
+                <th className="text-right px-3 py-2.5 text-xs text-purple-400 font-medium">Slot B{itemB ? ` — ${itemB.name.slice(0, 18)}` : ""}</th>
               </tr>
             </thead>
             <tbody>
-              {[
-                { label: "Total Cost", a: itemA ? fmt$(costA) : "—", b: itemB ? fmt$(costB) : "—" },
+              {([
+                {
+                  label: "Total Cost",
+                  a: itemA ? fmt$(costA) : "—",
+                  b: itemB ? fmt$(costB) : "—",
+                  w: winner(costA, costB, false), // lower cost is better
+                },
                 {
                   label: "Market Est.",
                   a: itemA ? (itemA.market_price != null ? fmt$(itemA.market_price) : "N/A") : "—",
                   b: itemB ? (itemB.market_price != null ? fmt$(itemB.market_price) : "N/A") : "—",
+                  w: winner(itemA?.market_price ?? null, itemB?.market_price ?? null),
+                },
+                {
+                  label: "Upside ×",
+                  a: itemA ? (upsideA != null ? `${upsideA.toFixed(2)}×` : "—") : "—",
+                  b: itemB ? (upsideB != null ? `${upsideB.toFixed(2)}×` : "—") : "—",
+                  w: winner(upsideA, upsideB),
                 },
                 {
                   label: "Est. Profit",
                   a: itemA ? (profitA != null ? `${profitA >= 0 ? "+" : ""}${fmt$(profitA)}` : "—") : "—",
                   b: itemB ? (profitB != null ? `${profitB >= 0 ? "+" : ""}${fmt$(profitB)}` : "—") : "—",
+                  w: winner(profitA, profitB),
                 },
                 {
                   label: "ROI",
                   a: itemA ? (roiA != null ? fmtPct(roiA) : "—") : "—",
                   b: itemB ? (roiB != null ? fmtPct(roiB) : "—") : "—",
+                  w: winner(roiA, roiB),
                 },
-                { label: "Condition", a: itemA ? itemA.condition : "—", b: itemB ? itemB.condition : "—" },
+                {
+                  label: "Days Held",
+                  a: itemA ? `${daysA}d` : "—",
+                  b: itemB ? `${daysB}d` : "—",
+                  w: null as "a" | "b" | null, // subjective
+                },
+                { label: "Condition", a: itemA ? itemA.condition : "—", b: itemB ? itemB.condition : "—", w: null as "a" | "b" | null },
                 {
                   label: "PSA Grade",
                   a: itemA ? (itemA.psa_grade ? `PSA ${itemA.psa_grade}` : "Raw") : "—",
                   b: itemB ? (itemB.psa_grade ? `PSA ${itemB.psa_grade}` : "Raw") : "—",
+                  w: winner(itemA?.psa_grade ?? null, itemB?.psa_grade ?? null),
                 },
-              ].map((row) => (
+              ] as const).map((row) => (
                 <tr key={row.label} className="border-b border-white/5 hover:bg-white/[0.02]">
                   <td className="px-3 py-2 text-xs text-gray-400 font-medium">{row.label}</td>
-                  <td className="px-3 py-2 text-xs text-white">{row.a}</td>
-                  <td className="px-3 py-2 text-xs text-white">{row.b}</td>
+                  <td className={`px-3 py-2 text-xs font-medium text-right ${row.w === "a" ? "text-emerald-400" : row.w === "b" ? "text-red-400/80" : "text-white"}`}>
+                    {row.a}{row.w === "a" && " ★"}
+                  </td>
+                  <td className={`px-3 py-2 text-xs font-medium text-right ${row.w === "b" ? "text-emerald-400" : row.w === "a" ? "text-red-400/80" : "text-white"}`}>
+                    {row.b}{row.w === "b" && " ★"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -277,17 +320,24 @@ export function ArenaTab({
   addToArena: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [franchiseFilter, setFranchiseFilter] = useState<string | null>(null);
+
+  const franchises = useMemo(() => {
+    const s = new Set(items.map(i => i.franchise).filter(Boolean) as string[]);
+    return [...s].sort();
+  }, [items]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return !q
-      ? items
-      : items.filter(
-          (i) =>
-            i.name.toLowerCase().includes(q) ||
-            (i.card_set ?? "").toLowerCase().includes(q) ||
-            (i.franchise ?? "").toLowerCase().includes(q)
-        );
-  }, [items, search]);
+    return items.filter(
+      (i) =>
+        (!q ||
+          i.name.toLowerCase().includes(q) ||
+          (i.card_set ?? "").toLowerCase().includes(q) ||
+          (i.franchise ?? "").toLowerCase().includes(q)) &&
+        (!franchiseFilter || i.franchise === franchiseFilter)
+    );
+  }, [items, search, franchiseFilter]);
 
   return (
     <div>
@@ -308,13 +358,33 @@ export function ArenaTab({
             <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">PICK CARDS FOR ARENA</div>
             <span className="text-xs text-gray-600">{filtered.length} cards</span>
           </div>
+
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="🔍 Filter cards…"
-            className="w-full mb-3 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+            className="w-full mb-2 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-gray-500"
           />
+
+          {franchises.length > 1 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              <button
+                onClick={() => setFranchiseFilter(null)}
+                className={`px-2.5 py-1 rounded-full text-xs transition-colors ${franchiseFilter === null ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+              >All</button>
+              {franchises.map(f => (
+                <button
+                  key={f}
+                  onClick={() => setFranchiseFilter(prev => prev === f ? null : f)}
+                  className={`px-2.5 py-1 rounded-full text-xs transition-colors ${franchiseFilter === f ? "bg-blue-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
             {filtered.map((item) => (
               <CollectibleCard
