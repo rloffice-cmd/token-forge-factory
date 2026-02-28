@@ -300,6 +300,13 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
+  // New this week: items bought in the last 7 days
+  const newThisWeek = useMemo(() =>
+    s.items
+      .filter(i => (Date.now() - new Date(i.buy_date).getTime()) < 7 * 86400000)
+      .sort((a, b) => new Date(b.buy_date).getTime() - new Date(a.buy_date).getTime()),
+  [s.items]);
+
   // Purchase frequency: items bought per month (for velocity/trend insight)
   const purchaseFrequency = useMemo(() => {
     const map = new Map<string, number>();
@@ -1585,6 +1592,51 @@ export default function CollectPro() {
                 </button>
               ))}
             </div>
+
+            {/* ── New This Week ─────────────────────────────────────────────────── */}
+            {newThisWeek.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>🆕 New This Week</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">{newThisWeek.length} item{newThisWeek.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="space-y-1.5">
+                  {newThisWeek.map(item => {
+                    const cost = +item.buy_price + +(item.grading_cost ?? 0);
+                    const ageDays = Math.round((Date.now() - new Date(item.buy_date).getTime()) / 86400000);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                        className="w-full flex items-center gap-3 py-1.5 px-3 bg-gray-800/40 rounded-lg hover:bg-gray-800 transition-colors text-left"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name}</p>
+                          <p className="text-xs text-gray-500">{item.condition}{item.card_set ? ` · ${item.card_set}` : ""}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-amber-400">{fmt$(cost)}</span>
+                          <span className="text-xs text-gray-700">{ageDays === 0 ? "today" : `${ageDays}d ago`}</span>
+                          {item.market_price == null && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const q = `What is the current market price of "${item.name}"${item.card_set ? ` from ${item.card_set}` : ""} ${item.condition} TCG card? Search eBay sold listings.`;
+                                d({ t: "SET_TAB", tab: "market" });
+                                d({ t: "MKT_QUERY", v: q });
+                              }}
+                              className="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors"
+                              title="Quick price scan"
+                            >Scan</button>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* ── Next Action Banner ────────────────────────────────────────────── */}
             {(() => {
@@ -3355,7 +3407,27 @@ export default function CollectPro() {
         {/* ══ MARKET ═════════════════════════════════════════════════════════ */}
         {s.tab === "market" && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-            <h2 className="font-bold mb-1">🌐 Market Scan — Forensic Truth</h2>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold">🌐 Market Scan — Forensic Truth</h2>
+              {s.items.filter(i => i.status === "active" && i.market_price == null).length > 0 && (
+                <button
+                  onClick={() => {
+                    const unpriced = s.items
+                      .filter(i => i.status === "active" && i.market_price == null)
+                      .slice(0, 1); // Start with first unpriced item
+                    if (unpriced.length > 0) {
+                      const item = unpriced[0];
+                      const q = `What is the current market price of "${item.name}"${item.card_set ? ` from ${item.card_set}` : ""} ${item.condition} TCG card? Search eBay sold listings and give me the exact current price.`;
+                      d({ t: "MKT_QUERY", v: q });
+                      d({ t: "MKT_MODE", v: "market" });
+                    }
+                  }}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-blue-900/60 text-blue-300 hover:bg-blue-800 border border-blue-700/40 transition-colors"
+                >
+                  ⚡ Auto-scan next unpriced ({s.items.filter(i => i.status === "active" && i.market_price == null).length})
+                </button>
+              )}
+            </div>
             <p className="text-xs text-gray-500 mb-4">
               AI with web search. Searches eBay, TCGPlayer, PSA Registry and cites sources.
               Results are automatically saved to the knowledge base.
