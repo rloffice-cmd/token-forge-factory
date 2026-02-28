@@ -372,6 +372,39 @@ export default function CollectPro() {
     [s.items]
   );
 
+  // Cost composition: buy vs grading split across all items
+  const costComposition = useMemo(() => {
+    const totalBuy     = s.items.reduce((acc, i) => acc + +i.buy_price, 0);
+    const totalGrading = s.items.reduce((acc, i) => acc + +(i.grading_cost ?? 0), 0);
+    const total        = totalBuy + totalGrading;
+    const gradedItems  = s.items.filter(i => +(i.grading_cost ?? 0) > 0);
+    return {
+      total, totalBuy, totalGrading,
+      buyPct:     total > 0 ? (totalBuy     / total) * 100 : 100,
+      gradingPct: total > 0 ? (totalGrading / total) * 100 : 0,
+      avgBuy:     s.items.length > 0 ? totalBuy / s.items.length : 0,
+      avgGrading: gradedItems.length > 0 ? totalGrading / gradedItems.length : 0,
+      gradedCount: gradedItems.length,
+    };
+  }, [s.items]);
+
+  // Buy-price distribution buckets
+  const priceDistribution = useMemo(() => {
+    const BUCKETS = [
+      { label: "< $10",    min: 0,   max: 10  },
+      { label: "$10–50",   min: 10,  max: 50  },
+      { label: "$50–200",  min: 50,  max: 200 },
+      { label: "$200+",    min: 200, max: Infinity },
+    ];
+    const maxCount = Math.max(1, ...BUCKETS.map(b =>
+      s.items.filter(i => +i.buy_price >= b.min && +i.buy_price < b.max).length
+    ));
+    return BUCKETS.map(b => {
+      const items = s.items.filter(i => +i.buy_price >= b.min && +i.buy_price < b.max);
+      return { label: b.label, count: items.length, pct: (items.length / maxCount) * 100 };
+    });
+  }, [s.items]);
+
   const holdTimeBreakdown = useMemo(() => {
     const BUCKETS = [
       { label: "< 30d",   min: 0,   max: 30   },
@@ -2210,6 +2243,54 @@ export default function CollectPro() {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* ── Cost Composition ─────────────────────────────────────── */}
+            {costComposition.total > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Cost Composition</p>
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-400">Buy cost <span className="text-gray-600">({costComposition.buyPct.toFixed(0)}%)</span></span>
+                    <span className="text-amber-400 font-semibold">{fmt$(costComposition.totalBuy)}</span>
+                  </div>
+                  <div className="h-4 bg-gray-800 rounded-full overflow-hidden flex">
+                    <div className="h-full bg-amber-600 transition-all" style={{ width: `${costComposition.buyPct}%` }} />
+                    <div className="h-full bg-indigo-600 transition-all" style={{ width: `${costComposition.gradingPct}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs mt-1">
+                    <span className="text-gray-400">Grading cost <span className="text-gray-600">({costComposition.gradingPct.toFixed(0)}%)</span></span>
+                    <span className="text-indigo-400 font-semibold">{fmt$(costComposition.totalGrading)}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="bg-gray-800/60 rounded-lg p-2 text-center">
+                    <div className="text-amber-400 font-bold">{fmt$(costComposition.avgBuy)}</div>
+                    <div className="text-gray-600 mt-0.5">avg buy</div>
+                  </div>
+                  <div className="bg-gray-800/60 rounded-lg p-2 text-center">
+                    <div className="text-indigo-400 font-bold">{fmt$(costComposition.avgGrading)}</div>
+                    <div className="text-gray-600 mt-0.5">avg grading ({costComposition.gradedCount})</div>
+                  </div>
+                  <div className="bg-gray-800/60 rounded-lg p-2 text-center">
+                    <div className="text-gray-300 font-bold">{fmt$(costComposition.total / Math.max(1, s.items.length))}</div>
+                    <div className="text-gray-600 mt-0.5">avg total cost</div>
+                  </div>
+                </div>
+
+                {/* Buy-price distribution */}
+                <div className="mt-3 space-y-1.5">
+                  {priceDistribution.filter(b => b.count > 0).map(b => (
+                    <div key={b.label} className="flex items-center gap-3">
+                      <span className="text-xs text-gray-500 w-16 text-right font-mono flex-shrink-0">{b.label}</span>
+                      <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-700/70 rounded-full" style={{ width: `${b.pct}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500 w-8 text-right flex-shrink-0">{b.count}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
