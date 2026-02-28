@@ -29,7 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 
 import type {
   CollectionItem,
@@ -492,6 +492,66 @@ export default function CollectPro() {
       }, 0);
       return { label: b.label, count: items.length, avgProfit: items.length > 0 ? totalProfit / items.length : 0 };
     }).filter(b => b.count > 0);
+  }, [s.items]);
+
+  // Condition ROI: realized ROI grouped by condition (raw sold cards only)
+  const conditionROI = useMemo(() => {
+    const ORDER = ["M", "NM", "LP", "MP", "HP", "D"];
+    const map = new Map<string, { profit: number; cost: number; count: number }>();
+    s.items
+      .filter(i => i.status === "sold" && i.sell_price != null && !i.psa_grade)
+      .forEach(i => {
+        const key    = i.condition;
+        const cost   = +i.buy_price + +(i.grading_cost ?? 0);
+        const profit = +(i.sell_price!) - cost;
+        const entry  = map.get(key) ?? { profit: 0, cost: 0, count: 0 };
+        map.set(key, { profit: entry.profit + profit, cost: entry.cost + cost, count: entry.count + 1 });
+      });
+    return ORDER
+      .filter(c => map.has(c))
+      .map(c => {
+        const { profit, cost, count } = map.get(c)!;
+        return { condition: c, profit, count, roi: cost > 0 ? (profit / cost) * 100 : 0 };
+      });
+  }, [s.items]);
+
+  // Action Required: items needing attention, sorted high→medium priority
+  const actionItems = useMemo(() => {
+    const now = Date.now();
+    const actions: Array<{
+      priority: "high" | "medium";
+      action: string;
+      item: CollectionItem;
+      detail: string;
+      tab?: Tab;
+      query?: string;
+    }> = [];
+    s.items.forEach(i => {
+      if (i.status === "sold") return;
+      const ageDays = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      // High: stale grading (>60d)
+      if (i.status === "grading" && ageDays > 60) {
+        actions.push({ priority: "high", action: "Check grading status", item: i, detail: `${ageDays}d in queue` });
+      }
+      // High: big upside + long hold — strong sell candidate
+      if (i.status === "active" && i.market_price != null && i.market_price > cost * 2 && ageDays > 60) {
+        const profit = i.market_price - cost;
+        actions.push({ priority: "high", action: "Consider selling", item: i, detail: `${ageDays}d hold · +${fmt$(profit)} est.` });
+      }
+      // Medium: expensive card with no price
+      if (i.status === "active" && i.market_price == null && cost >= 20) {
+        const q = `What is the current market price of "${i.name}"${i.card_set ? ` from ${i.card_set}` : ""} ${i.condition} TCG card? Search eBay sold listings.`;
+        actions.push({ priority: "medium", action: "Price missing", item: i, detail: `Cost: ${fmt$(cost)}`, tab: "market", query: q });
+      }
+      // Medium: underwater item held >90d
+      if (i.status === "active" && ageDays > 90 && i.market_price != null && i.market_price < cost) {
+        actions.push({ priority: "medium", action: "Underwater >90d", item: i, detail: `${ageDays}d · mkt ${fmt$(i.market_price)} < cost ${fmt$(cost)}` });
+      }
+    });
+    return actions
+      .sort((a, b) => (a.priority === "high" ? 0 : 1) - (b.priority === "high" ? 0 : 1))
+      .slice(0, 8);
   }, [s.items]);
 
   const conditionBreakdown = useMemo(() => {
@@ -1572,6 +1632,49 @@ export default function CollectPro() {
               </div>
             )}
 
+            {/* ── Action Required ──────────────────────────────────────────────── */}
+            {actionItems.length > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
+                  <span>⚡ Action Required</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">{actionItems.length} item{actionItems.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div className="space-y-2">
+                  {actionItems.map(({ priority, action, item, detail, tab: actionTab, query }) => (
+                    <div
+                      key={item.id}
+                      className={`flex items-center gap-3 py-1.5 px-3 rounded-lg ${
+                        priority === "high"
+                          ? "bg-red-950/30 border border-red-900/30"
+                          : "bg-amber-950/20 border border-amber-900/20"
+                      }`}
+                    >
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold flex-shrink-0 ${
+                        priority === "high" ? "bg-red-900/60 text-red-300" : "bg-amber-900/60 text-amber-300"
+                      }`}>{priority === "high" ? "!" : "·"}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-gray-300 truncate">{item.name}</div>
+                        <div className="text-xs text-gray-500">{action} · {detail}</div>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => d({ t: "SET_MODAL", id: item.id })}
+                          className="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400 hover:text-white transition-colors"
+                        >🔍</button>
+                        {actionTab && query && (
+                          <button
+                            onClick={() => { d({ t: "SET_TAB", tab: actionTab }); d({ t: "MKT_QUERY", v: query }); }}
+                            className="text-xs px-2 py-1 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors"
+                            title="Open Market Scan for this card"
+                          >Scan</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Chat ────────────────────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
@@ -2376,9 +2479,9 @@ export default function CollectPro() {
             {/* ── Monthly Revenue Bar Chart ──────────────────────────────── */}
             {monthlyRevenue.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly Sales Revenue</p>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={monthlyRevenue} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly Revenue & Net Profit</p>
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={monthlyRevenue} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
                     <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
                     <Tooltip
@@ -2386,9 +2489,18 @@ export default function CollectPro() {
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
+                    <Legend
+                      iconSize={8}
+                      formatter={(value) => <span style={{ color: "#9ca3af", fontSize: 10 }}>{value === "revenue" ? "Revenue" : "Net Profit"}</span>}
+                    />
                     <Bar dataKey="revenue" name="revenue" radius={[3, 3, 0, 0]}>
+                      {monthlyRevenue.map((_, i) => (
+                        <Cell key={i} fill="#3b82f6" />
+                      ))}
+                    </Bar>
+                    <Bar dataKey="profit" name="profit" radius={[3, 3, 0, 0]}>
                       {monthlyRevenue.map((entry, i) => (
-                        <Cell key={i} fill={entry.profit >= 0 ? "#3b82f6" : "#ef4444"} />
+                        <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.85} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -2424,6 +2536,39 @@ export default function CollectPro() {
                     </div>
                   </button>
                 ))}
+              </div>
+            )}
+
+            {/* ── Condition ROI Analysis ───────────────────────────────── */}
+            {conditionROI.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">
+                  Realized ROI by Condition
+                  <span className="ml-1 font-normal normal-case">raw sold cards</span>
+                </p>
+                <div className="space-y-2.5">
+                  {(() => {
+                    const maxAbs = Math.max(1, ...conditionROI.map(c => Math.abs(c.roi)));
+                    return conditionROI.map(({ condition, profit, count, roi }) => (
+                      <div key={condition} className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 w-8 text-right font-mono flex-shrink-0">{condition}</span>
+                        <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${roi >= 0 ? "bg-emerald-500" : "bg-red-500"}`}
+                            style={{ width: `${(Math.abs(roi) / maxAbs) * 100}%` }}
+                          />
+                        </div>
+                        <span className={`text-xs font-semibold w-14 text-right flex-shrink-0 ${roi >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {roi >= 0 ? "+" : ""}{fmtPct(roi)}
+                        </span>
+                        <span className={`text-xs w-16 text-right flex-shrink-0 ${profit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {profit >= 0 ? "+" : ""}{fmt$(profit)}
+                        </span>
+                        <span className="text-xs text-gray-700 w-8 text-right flex-shrink-0">({count})</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             )}
 
