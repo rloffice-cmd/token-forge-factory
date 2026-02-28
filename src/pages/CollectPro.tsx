@@ -291,6 +291,45 @@ export default function CollectPro() {
     return alerts;
   }, [s.items]);
 
+  // Portfolio health score (0–100) — composite of 5 factors, each max 20pts
+  const portfolioHealth = useMemo(() => {
+    if (s.items.length === 0) return null;
+    const active = s.items.filter(i => i.status === "active");
+    if (active.length === 0) return null;
+
+    // 1. Price coverage — % of active cards with a market price (0–20)
+    const withPrice = active.filter(i => i.market_price != null).length;
+    const priceCoverage = active.length > 0 ? Math.round((withPrice / active.length) * 20) : 0;
+
+    // 2. Profitability — % of items (active+sold) with positive P&L (0–20)
+    const evaluated = s.items.filter(i => +i.buy_price > 0);
+    const profitable = evaluated.filter(i => {
+      const cost = +i.buy_price + +(i.grading_cost ?? 0);
+      const val  = i.status === "sold" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
+      return val >= cost;
+    });
+    const profitScore = evaluated.length > 0 ? Math.round((profitable.length / evaluated.length) * 20) : 0;
+
+    // 3. Diversification — points for having 2+ franchises and 2+ partners (max 20)
+    const franchises = new Set(s.items.map(i => i.franchise).filter(Boolean)).size;
+    const partners   = new Set(s.items.map(i => i.partner_id)).size;
+    const diverseScore = Math.min(20, (franchises >= 3 ? 10 : franchises * 4) + (partners >= 2 ? 10 : 0));
+
+    // 4. No stale grading — deduct for cards in grading > 60 days (0–20)
+    const now = Date.now();
+    const staleGrading = s.items.filter(i =>
+      i.status === "grading" && (now - new Date(i.buy_date).getTime()) / 86400000 > 60
+    ).length;
+    const gradingScore = Math.max(0, 20 - staleGrading * 5);
+
+    // 5. ROI positivity — 20 pts if realised ROI > 0, scaled by magnitude (0–20)
+    const roiScore = stats.roiPct > 20 ? 20 : stats.roiPct > 0 ? Math.round(stats.roiPct) : 0;
+
+    const total = priceCoverage + profitScore + diverseScore + gradingScore + roiScore;
+    const grade = total >= 80 ? "A" : total >= 60 ? "B" : total >= 40 ? "C" : "D";
+    return { total, grade, priceCoverage, profitScore, diverseScore, gradingScore, roiScore };
+  }, [s.items, stats]);
+
   const filteredItems = useMemo(() => {
     const q = s.inv.search.toLowerCase();
     return s.items.filter((i) =>
@@ -308,6 +347,19 @@ export default function CollectPro() {
     () => [...new Set(s.items.map((i) => i.franchise).filter(Boolean) as string[])].sort(),
     [s.items]
   );
+
+  const conditionBreakdown = useMemo(() => {
+    const ORDER = ["M", "NM", "LP", "MP", "HP", "D", "PSA"];
+    const map   = new Map<string, number>();
+    s.items.filter(i => i.status !== "sold").forEach(i => {
+      map.set(i.condition, (map.get(i.condition) ?? 0) + 1);
+    });
+    const total = [...map.values()].reduce((a, b) => a + b, 0);
+    if (total === 0) return [];
+    return ORDER
+      .filter(c => map.has(c))
+      .map(c => ({ condition: c, count: map.get(c)!, pct: (map.get(c)! / total) * 100 }));
+  }, [s.items]);
 
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
@@ -1001,6 +1053,51 @@ export default function CollectPro() {
         {/* ══ BRAIN ══════════════════════════════════════════════════════════ */}
         {s.tab === "brain" && (
           <div className="space-y-3">
+
+            {/* ── Health Score ──────────────────────────────────────────────────── */}
+            {portfolioHealth && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Portfolio Health Score</div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-3xl font-extrabold ${
+                      portfolioHealth.grade === "A" ? "text-emerald-400" :
+                      portfolioHealth.grade === "B" ? "text-blue-400" :
+                      portfolioHealth.grade === "C" ? "text-amber-400" : "text-red-400"
+                    }`}>{portfolioHealth.grade}</span>
+                    <span className="text-lg font-bold text-gray-300">{portfolioHealth.total}<span className="text-xs text-gray-600">/100</span></span>
+                  </div>
+                </div>
+                <div className="h-2 bg-gray-800 rounded-full overflow-hidden mb-3">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      portfolioHealth.total >= 80 ? "bg-emerald-500" :
+                      portfolioHealth.total >= 60 ? "bg-blue-500" :
+                      portfolioHealth.total >= 40 ? "bg-amber-500" : "bg-red-500"
+                    }`}
+                    style={{ width: `${portfolioHealth.total}%` }}
+                  />
+                </div>
+                <div className="grid grid-cols-5 gap-1 text-xs">
+                  {[
+                    { label: "Prices",  score: portfolioHealth.priceCoverage  },
+                    { label: "P&L",     score: portfolioHealth.profitScore     },
+                    { label: "Diverse", score: portfolioHealth.diverseScore    },
+                    { label: "Grading", score: portfolioHealth.gradingScore    },
+                    { label: "ROI",     score: portfolioHealth.roiScore        },
+                  ].map((f) => (
+                    <div key={f.label} className="text-center">
+                      <div className="h-1 bg-gray-800 rounded-full overflow-hidden mb-1">
+                        <div className="h-full bg-blue-600/70 rounded-full" style={{ width: `${(f.score / 20) * 100}%` }} />
+                      </div>
+                      <span className="text-gray-600">{f.label}</span>
+                      <span className="block text-gray-400 font-mono">{f.score}/20</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* ── Portfolio snapshot ──────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">Portfolio Snapshot</div>
@@ -1771,6 +1868,24 @@ export default function CollectPro() {
                           style={{ width: `${pct}%` }}
                         />
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Condition Distribution ────────────────────────────────── */}
+            {conditionBreakdown.length > 1 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-4">Condition Distribution (active + grading)</p>
+                <div className="space-y-2.5">
+                  {conditionBreakdown.map(({ condition, count, pct }) => (
+                    <div key={condition} className="flex items-center gap-3">
+                      <span className="text-xs text-gray-400 w-8 text-right font-mono flex-shrink-0">{condition}</span>
+                      <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-blue-600 rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-gray-500 w-14 text-right flex-shrink-0">{count} ({pct.toFixed(0)}%)</span>
                     </div>
                   ))}
                 </div>
