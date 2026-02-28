@@ -300,6 +300,19 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
+  // Purchase frequency: items bought per month (for velocity/trend insight)
+  const purchaseFrequency = useMemo(() => {
+    const map = new Map<string, number>();
+    s.items.forEach(i => {
+      const key = new Date(i.buy_date).toLocaleDateString("en-US", { year: "numeric", month: "short" });
+      map.set(key, (map.get(key) ?? 0) + 1);
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+      .slice(-8) // last 8 months
+      .map(([month, count]) => ({ month, count }));
+  }, [s.items]);
+
   // Sell streak: longest and current consecutive profitable sale runs
   const sellStreak = useMemo(() => {
     const sold = s.items
@@ -2612,14 +2625,26 @@ export default function CollectPro() {
                                 className="w-20 bg-gray-800 border border-blue-600 rounded px-2 py-0.5 text-xs text-blue-300 focus:outline-none"
                               />
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => { setInlineEditId(item.id); setInlineEditVal(item.market_price != null ? String(item.market_price) : ""); }}
-                                className="text-blue-400 hover:text-blue-300 transition-colors"
-                                title="Click to edit market price"
-                              >
-                                {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600 text-xs">+ price</span>}
-                              </button>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => { setInlineEditId(item.id); setInlineEditVal(item.market_price != null ? String(item.market_price) : ""); }}
+                                  className="text-blue-400 hover:text-blue-300 transition-colors block"
+                                  title="Click to edit market price"
+                                >
+                                  {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600 text-xs">+ price</span>}
+                                </button>
+                                {item.status !== "sold" && (() => {
+                                  const breakeven = Math.ceil((cost * 1.13) * 100) / 100; // 13% platform fees
+                                  const isAbove = item.market_price != null && item.market_price > breakeven;
+                                  return (
+                                    <div className={`text-xs font-mono mt-0.5 ${isAbove ? "text-emerald-700" : "text-gray-700"}`}
+                                      title="Break-even incl. ~13% fees">
+                                      BE {fmt$(breakeven)}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             )}
                           </td>
                           <td className="px-3 py-2.5">
@@ -3150,6 +3175,25 @@ export default function CollectPro() {
                   })()}
                 </div>
                 <p className="text-xs text-gray-700 mt-2">Hold time = sold date − buy date. Avg profit shown per bucket.</p>
+              </div>
+            )}
+
+            {/* ── Purchase Activity ────────────────────────────────────────── */}
+            {purchaseFrequency.length >= 2 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Purchase Activity (last 8 months)</p>
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart data={purchaseFrequency} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
+                    <Tooltip
+                      formatter={(v: number) => [v, "Cards bought"]}
+                      contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
+                      labelStyle={{ color: "#9ca3af" }}
+                    />
+                    <Bar dataKey="count" radius={[3, 3, 0, 0]} fill="#6366f1" fillOpacity={0.8} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             )}
 
