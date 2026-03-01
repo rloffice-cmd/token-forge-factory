@@ -1,5 +1,5 @@
 /**
- * CollectPro — Monster Mode
+ * CollectPro — Monster Mode 
  * מנהל תיק קלפים TCG with Arena, Cards View, Quick Scan, and Mobile Nav.h
  */
 
