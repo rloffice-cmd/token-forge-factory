@@ -7,7 +7,7 @@ import React, {
   useReducer,
   useEffect,
   useState,
-  useMemo,h
+  useMemo,hh
   useRef,
   useCallback,
 } from "react";
@@ -74,11 +74,11 @@ export default function CollectPro() {
 
   // Modal state for sell dialog, batch operations, and grading studio
   const [sellTarget,     setSellTarget]     = useState<CollectionItem | null>(null);
-  const [batchOp,        setBatchOp]        = useState<"status" | "price" | "partner" | null>(null);
+  const [batchOp,        setBatchOp]        = useState<"סטטוס" | "price" | "שותף" | null>(null);
   const [gradingForItem,        setGradingForItem]        = useState<CollectionItem | null>(null);
   const [batchPriceRefreshItems, setBatchPriceRefreshItems] = useState<CollectionItem[] | null>(null);
   const [expandedPartners,    setExpandedPartners]    = useState<Set<string>>(new Set());
-  const [statusFilter,        setStatusFilter]        = useState<"all" | ItemStatus>("all");
+  const [statusFilter,        setStatusFilter]        = useState<"הכל" | ItemStatus>("הכל");
   const [franchiseFilterInv,  setFranchiseFilterInv]  = useState<string | null>(null);
   const [scanHistory,         setScanHistory]         = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
   const [showImportCSV,       setShowImportCSV]       = useState(false);
@@ -87,7 +87,7 @@ export default function CollectPro() {
   const [watchlistFilter,     setWatchlistFilter]     = useState(false);
   const [compactTable,        setCompactTable]        = useState(false);
 
-  // ── Keyboard shortcuts ─────────────────────────────────────────────────────
+  // ── קיצורי מקלדת ─────────────────────────────────────────────────────
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Ignore when typing in an input/textarea/select
@@ -173,7 +173,7 @@ export default function CollectPro() {
 
   const pnlTimeline = useMemo(() => {
     const sold = s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .sort((a, b) => new Date(a.sold_at!).getTime() - new Date(b.sold_at!).getTime());
     let cum = 0;
     return sold.map(i => {
@@ -191,7 +191,7 @@ export default function CollectPro() {
       .filter(i => +i.buy_price > 0)
       .map(i => {
         const cost   = +i.buy_price + +(i.grading_cost ?? 0);
-        const val    = i.status === "sold" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
+        const val    = i.status === "נמכר" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
         const profit = val - cost;
         const roi    = cost > 0 ? (profit / cost) * 100 : 0;
         return { item: i, roi, profit };
@@ -205,7 +205,7 @@ export default function CollectPro() {
       .filter(i => +i.buy_price > 0)
       .map(i => {
         const cost   = +i.buy_price + +(i.grading_cost ?? 0);
-        const val    = i.status === "sold" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
+        const val    = i.status === "נמכר" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
         const profit = val - cost;
         const roi    = cost > 0 ? (profit / cost) * 100 : 0;
         return { item: i, roi, profit };
@@ -217,7 +217,7 @@ export default function CollectPro() {
   // Active items with known market price sorted by upside multiple (market / cost)
   const bestUpside = useMemo(() => {
     return s.items
-      .filter(i => i.status === "active" && i.market_price != null && +i.buy_price > 0)
+      .filter(i => i.status === "פעיל" && i.market_price != null && +i.buy_price > 0)
       .map(i => {
         const cost     = +i.buy_price + +(i.grading_cost ?? 0);
         const upside   = i.market_price! / cost;
@@ -235,7 +235,7 @@ export default function CollectPro() {
     const EST_FEE = 25; // typical PSA basic tier fee
     const EST_MULT = 2.5; // conservative PSA 10 premium over raw
     return s.items
-      .filter(i => i.status === "active" && !i.psa_grade && i.market_price != null && +i.buy_price > 0)
+      .filter(i => i.status === "פעיל" && !i.psa_grade && i.market_price != null && +i.buy_price > 0)
       .map(i => {
         const cost      = +i.buy_price + +(i.grading_cost ?? 0);
         const rawMkt    = i.market_price!;
@@ -250,7 +250,7 @@ export default function CollectPro() {
   }, [s.items]);
 
   const avgHoldDays = useMemo(() => {
-    const sold = s.items.filter(i => i.status === "sold" && i.sold_at);
+    const sold = s.items.filter(i => i.status === "נמכר" && i.sold_at);
     if (sold.length === 0) return null;
     const total = sold.reduce((acc, i) => {
       const days = (new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000;
@@ -262,7 +262,7 @@ export default function CollectPro() {
   const monthlyRevenue = useMemo(() => {
     const map = new Map<string, { revenue: number; profit: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .forEach(i => {
         const month = new Date(i.sold_at!).toLocaleDateString("en-US", { year: "numeric", month: "short" });
         const cost  = +i.buy_price + +(i.grading_cost ?? 0);
@@ -282,10 +282,10 @@ export default function CollectPro() {
     return sorted;
   }, [s.items]);
 
-  // Quarterly performance: profit and sales count per calendar quarter
+  // ביצועים רבעוניים: profit and sales count per calendar quarter
   const quarterlyPerformance = useMemo(() => {
     const map = new Map<string, { profit: number; count: number }>();
-    s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at).forEach(i => {
+    s.items.filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at).forEach(i => {
       const dt = new Date(i.sold_at!);
       const q = `Q${Math.ceil((dt.getMonth() + 1) / 3)} ${dt.getFullYear()}`;
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -304,7 +304,7 @@ export default function CollectPro() {
   // Cumulative P&L: running total of realized profit sorted by sold_at date
   const cumulativePnL = useMemo(() => {
     const sold = s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .sort((a, b) => new Date(a.sold_at!).getTime() - new Date(b.sold_at!).getTime());
     if (sold.length < 2) return [];
     let running = 0;
@@ -323,7 +323,7 @@ export default function CollectPro() {
     const now = Date.now();
     const since90d = now - 90 * 86400000;
     const recent = s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at && new Date(i.sold_at).getTime() >= since90d);
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at && new Date(i.sold_at).getTime() >= since90d);
     if (recent.length < 2) return null;
     const profit90d = recent.reduce((acc, i) => {
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -356,7 +356,7 @@ export default function CollectPro() {
   // Sell streak: longest and current consecutive profitable sale runs
   const sellStreak = useMemo(() => {
     const sold = s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .sort((a, b) => new Date(a.sold_at!).getTime() - new Date(b.sold_at!).getTime())
       .map(i => {
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -389,7 +389,7 @@ export default function CollectPro() {
 
   // Win rate: % of sales that turned a profit
   const winRate = useMemo(() => {
-    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null);
+    const sold = s.items.filter(i => i.status === "נמכר" && i.sell_price != null);
     if (sold.length === 0) return null;
     const wins = sold.filter(i => +(i.sell_price!) > +i.buy_price + +(i.grading_cost ?? 0)).length;
     return { wins, total: sold.length, pct: (wins / sold.length) * 100 };
@@ -398,7 +398,7 @@ export default function CollectPro() {
   // Monthly profit scoreboard: how many calendar months were profitable vs loss-making
   const monthlyScoreboard = useMemo(() => {
     const map = new Map<string, number>();
-    s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at).forEach(i => {
+    s.items.filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at).forEach(i => {
       const key = new Date(i.sold_at!).toLocaleDateString("en-US", { year: "numeric", month: "short" });
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
       map.set(key, (map.get(key) ?? 0) + +(i.sell_price!) - cost);
@@ -410,11 +410,11 @@ export default function CollectPro() {
     return { green, red, total: values.length };
   }, [s.items]);
 
-  // This month: sales and purchases since calendar month start
+  // החודש: sales and purchases since calendar month start
   const thisMonth = useMemo(() => {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at && new Date(i.sold_at).getTime() >= monthStart);
+    const sold = s.items.filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at && new Date(i.sold_at).getTime() >= monthStart);
     const bought = s.items.filter(i => new Date(i.buy_date).getTime() >= monthStart).length;
     if (sold.length === 0 && bought === 0) return null;
     const profit = sold.reduce((acc, i) => acc + +(i.sell_price!) - (+i.buy_price + +(i.grading_cost ?? 0)), 0);
@@ -425,16 +425,16 @@ export default function CollectPro() {
   const needsRepricing = useMemo(() => {
     const now = Date.now();
     return s.items
-      .filter(i => i.status === "active" && i.market_price != null)
+      .filter(i => i.status === "פעיל" && i.market_price != null)
       .filter(i => Math.round((now - new Date(i.updated_at).getTime()) / 86400000) > 30)
       .sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime())
       .slice(0, 6);
   }, [s.items]);
 
-  // Sales velocity: avg days between sales, and days since last sale
+  // Sales velocity: ימים ממוצע בין מכירות, and ימים מאז המכירה האחרונה
   const salesVelocity = useMemo(() => {
     const sold = s.items
-      .filter(i => i.status === "sold" && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sold_at)
       .map(i => new Date(i.sold_at!).getTime())
       .sort((a, b) => a - b);
     if (sold.length < 2) return null;
@@ -445,12 +445,12 @@ export default function CollectPro() {
     return { avgGapDays: Math.round(avgGap), daysSinceLast };
   }, [s.items]);
 
-  // Best sale month by average ROI
+  // חודש המכירה הטוב ביותר by average ROI
   const bestSaleMonth = useMemo(() => {
     const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const map = new Map<number, { profit: number; cost: number; count: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .forEach(i => {
         const mo   = new Date(i.sold_at!).getMonth(); // 0-11
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -475,7 +475,7 @@ export default function CollectPro() {
     const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const map = new Map<number, { profit: number; cost: number; count: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .forEach(i => {
         const dow = new Date(i.sold_at!).getDay();
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -500,7 +500,7 @@ export default function CollectPro() {
       { label: "180d+",   min: 181, max: Infinity,  count: 0, profit: 0 },
     ];
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .forEach(i => {
         const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -512,39 +512,39 @@ export default function CollectPro() {
   }, [s.items]);
 
   const portfolioAlerts = useMemo(() => {
-    const alerts: { level: "warn" | "info"; msg: string; filter: "all" | ItemStatus }[] = [];
-    const noPrice = s.items.filter(i => i.status === "active" && i.market_price == null);
+    const alerts: { level: "warn" | "info"; msg: string; filter: "הכל" | ItemStatus }[] = [];
+    const noPrice = s.items.filter(i => i.status === "פעיל" && i.market_price == null);
     if (noPrice.length > 0) alerts.push({
       level: "warn",
       msg: `${noPrice.length} active card${noPrice.length > 1 ? "s have" : " has"} no market price — portfolio estimate may be inaccurate`,
-      filter: "active",
+      filter: "פעיל",
     });
     const now = Date.now();
     const longGrading = s.items.filter(i => {
-      if (i.status !== "grading") return false;
+      if (i.status !== "גריידינג") return false;
       return (now - new Date(i.buy_date).getTime()) / 86400000 > 60;
     });
     if (longGrading.length > 0) alerts.push({
       level: "warn",
       msg: `${longGrading.length} card${longGrading.length > 1 ? "s have" : " has"} been in grading for over 60 days`,
-      filter: "grading",
+      filter: "גריידינג",
     });
     const underwater = s.items.filter(i => {
-      if (i.status !== "active" || i.market_price == null) return false;
+      if (i.status !== "פעיל" || i.market_price == null) return false;
       return i.market_price < (+i.buy_price + +(i.grading_cost ?? 0));
     });
     if (underwater.length > 0) alerts.push({
       level: "info",
       msg: `${underwater.length} active card${underwater.length > 1 ? "s are" : " is"} underwater (market price < cost)`,
-      filter: "active",
+      filter: "פעיל",
     });
     return alerts;
   }, [s.items]);
 
-  // Portfolio health score (0–100) — composite of 5 factors, each max 20pts
+  // ציון בריאות הפורטפוליו (0–100) — composite of 5 factors, each max 20pts
   const portfolioHealth = useMemo(() => {
     if (s.items.length === 0) return null;
-    const active = s.items.filter(i => i.status === "active");
+    const active = s.items.filter(i => i.status === "פעיל");
     if (active.length === 0) return null;
 
     // 1. Price coverage — % of active cards with a market price (0–20)
@@ -555,7 +555,7 @@ export default function CollectPro() {
     const evaluated = s.items.filter(i => +i.buy_price > 0);
     const profitable = evaluated.filter(i => {
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
-      const val  = i.status === "sold" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
+      const val  = i.status === "נמכר" ? +(i.sell_price ?? 0) : (i.market_price ?? +i.buy_price);
       return val >= cost;
     });
     const profitScore = evaluated.length > 0 ? Math.round((profitable.length / evaluated.length) * 20) : 0;
@@ -568,11 +568,11 @@ export default function CollectPro() {
     // 4. No stale grading — deduct for cards in grading > 60 days (0–20)
     const now = Date.now();
     const staleGrading = s.items.filter(i =>
-      i.status === "grading" && (now - new Date(i.buy_date).getTime()) / 86400000 > 60
+      i.status === "גריידינג" && (now - new Date(i.buy_date).getTime()) / 86400000 > 60
     ).length;
     const gradingScore = Math.max(0, 20 - staleGrading * 5);
 
-    // 5. ROI positivity — 20 pts if realised ROI > 0, scaled by magnitude (0–20)
+    // 5. ROI positivity — 20 pts if ROI ממומש > 0, scaled by magnitude (0–20)
     const roiScore = stats.roiPct > 20 ? 20 : stats.roiPct > 0 ? Math.round(stats.roiPct) : 0;
 
     const total = priceCoverage + profitScore + diverseScore + gradingScore + roiScore;
@@ -591,7 +591,7 @@ export default function CollectPro() {
         (i.condition).toLowerCase().includes(q) ||
         (i.psa_grade != null && `psa ${i.psa_grade}`.includes(q))) &&
       (!s.franchise || !!i.franchise) &&
-      (statusFilter === "all" || i.status === statusFilter) &&
+      (statusFilter === "הכל" || i.status === statusFilter) &&
       (!franchiseFilterInv || i.franchise === franchiseFilterInv) &&
       (!watchlistFilter || (i.notes ?? "").toLowerCase().includes("[watch]"))
     );
@@ -608,7 +608,7 @@ export default function CollectPro() {
     const EST_FEE  = 25;   // fallback PSA fee if grading_cost not set
     const EST_MULT = 2.5;  // conservative PSA 10 premium over raw market price
     return s.items
-      .filter(i => i.status === "grading")
+      .filter(i => i.status === "גריידינג")
       .map(i => {
         const daysIn = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
         const cost   = +i.buy_price + +(i.grading_cost ?? EST_FEE);
@@ -623,9 +623,9 @@ export default function CollectPro() {
   const franchiseROI = useMemo(() => {
     const map = new Map<string, { profit: number; cost: number; count: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null)
+      .filter(i => i.status === "נמכר" && i.sell_price != null)
       .forEach(i => {
-        const key    = i.franchise ?? "Other";
+        const key    = i.franchise ?? "אחר";
         const cost   = +i.buy_price + +(i.grading_cost ?? 0);
         const profit = +(i.sell_price!) - cost;
         const entry  = map.get(key) ?? { profit: 0, cost: 0, count: 0 };
@@ -639,7 +639,7 @@ export default function CollectPro() {
       .sort((a, b) => b.roi - a.roi);
   }, [s.items]);
 
-  // Cost composition: buy vs grading split across all items
+  // הרכב עלויות: buy vs grading split across all items
   const costComposition = useMemo(() => {
     const totalBuy     = s.items.reduce((acc, i) => acc + +i.buy_price, 0);
     const totalGrading = s.items.reduce((acc, i) => acc + +(i.grading_cost ?? 0), 0);
@@ -672,22 +672,22 @@ export default function CollectPro() {
     });
   }, [s.items]);
 
-  // Recent activity feed — last 8 changes sorted by updated_at
+  // פעילות אחרונה feed — last 8 changes sorted by updated_at
   const recentActivity = useMemo(() => {
     return [...s.items]
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       .slice(0, 8)
       .map(i => {
         const isNew       = new Date(i.created_at).getTime() === new Date(i.updated_at).getTime();
-        const isSold      = i.status === "sold";
-        const isGrading   = i.status === "grading";
+        const isSold      = i.status === "נמכר";
+        const isGrading   = i.status === "גריידינג";
         const cost        = +i.buy_price + +(i.grading_cost ?? 0);
         const profit      = isSold && i.sell_price != null ? +(i.sell_price) - cost : null;
         const hoursAgo    = (Date.now() - new Date(i.updated_at).getTime()) / 3600000;
-        const timeLabel   = hoursAgo < 1 ? "just now"
+        const timeLabel   = hoursAgo < 1 ? "ממש עכשיו"
           : hoursAgo < 24 ? `${Math.round(hoursAgo)}h ago`
           : `${Math.round(hoursAgo / 24)}d ago`;
-        const badge       = isNew ? "Added" : isSold ? "Sold" : isGrading ? "→ Grading" : "Updated";
+        const badge       = isNew ? "נוסף" : isSold ? "נמכר" : isGrading ? "→ Grading" : "עודכן";
         const badgeCls    = isNew ? "bg-blue-900/60 text-blue-300"
           : isSold ? "bg-emerald-900/60 text-emerald-300"
           : isGrading ? "bg-amber-900/60 text-amber-300"
@@ -704,7 +704,7 @@ export default function CollectPro() {
       { label: "6–12 mo", min: 180, max: 365  },
       { label: "1y+",     min: 365, max: Infinity },
     ];
-    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at);
+    const sold = s.items.filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at);
     return BUCKETS.map(b => {
       const items = sold.filter(i => {
         const days = (new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000;
@@ -722,7 +722,7 @@ export default function CollectPro() {
     const ORDER = ["M", "NM", "LP", "MP", "HP", "D"];
     const map = new Map<string, { profit: number; cost: number; count: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && !i.psa_grade)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && !i.psa_grade)
       .forEach(i => {
         const key    = i.condition;
         const cost   = +i.buy_price + +(i.grading_cost ?? 0);
@@ -750,25 +750,25 @@ export default function CollectPro() {
       query?: string;
     }> = [];
     s.items.forEach(i => {
-      if (i.status === "sold") return;
+      if (i.status === "נמכר") return;
       const ageDays = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
       // High: stale grading (>60d)
-      if (i.status === "grading" && ageDays > 60) {
-        actions.push({ priority: "high", action: "Check grading status", item: i, detail: `${ageDays}d in queue` });
+      if (i.status === "גריידינג" && ageDays > 60) {
+        actions.push({ priority: "high", action: "בדוק סטטוס גריידינג", item: i, detail: `${ageDays}d in queue` });
       }
       // High: big upside + long hold — strong sell candidate
-      if (i.status === "active" && i.market_price != null && i.market_price > cost * 2 && ageDays > 60) {
+      if (i.status === "פעיל" && i.market_price != null && i.market_price > cost * 2 && ageDays > 60) {
         const profit = i.market_price - cost;
-        actions.push({ priority: "high", action: "Consider selling", item: i, detail: `${ageDays}d hold · +${fmt$(profit)} est.` });
+        actions.push({ priority: "high", action: "שקול מכירה", item: i, detail: `${ageDays}d hold · +${fmt$(profit)} est.` });
       }
       // Medium: expensive card with no price
-      if (i.status === "active" && i.market_price == null && cost >= 20) {
+      if (i.status === "פעיל" && i.market_price == null && cost >= 20) {
         const q = `What is the current market price of "${i.name}"${i.card_set ? ` from ${i.card_set}` : ""} ${i.condition} TCG card? Search eBay sold listings.`;
-        actions.push({ priority: "medium", action: "Price missing", item: i, detail: `Cost: ${fmt$(cost)}`, tab: "market", query: q });
+        actions.push({ priority: "medium", action: "מחיר חסר", item: i, detail: `Cost: ${fmt$(cost)}`, tab: "market", query: q });
       }
       // Medium: underwater item held >90d
-      if (i.status === "active" && ageDays > 90 && i.market_price != null && i.market_price < cost) {
+      if (i.status === "פעיל" && ageDays > 90 && i.market_price != null && i.market_price < cost) {
         actions.push({ priority: "medium", action: "Underwater >90d", item: i, detail: `${ageDays}d · mkt ${fmt$(i.market_price)} < cost ${fmt$(cost)}` });
       }
     });
@@ -781,7 +781,7 @@ export default function CollectPro() {
   const cardSetROI = useMemo(() => {
     const map = new Map<string, { profit: number; cost: number; count: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.card_set)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.card_set)
       .forEach(i => {
         const key    = i.card_set!;
         const cost   = +i.buy_price + +(i.grading_cost ?? 0);
@@ -801,14 +801,14 @@ export default function CollectPro() {
 
   // Watchlist: items tagged with [watch] in notes
   const watchlistItems = useMemo(() =>
-    s.items.filter(i => i.status !== "sold" && (i.notes ?? "").toLowerCase().includes("[watch]")),
+    s.items.filter(i => i.status !== "נמכר" && (i.notes ?? "").toLowerCase().includes("[watch]")),
   [s.items]);
 
   // Sell score: composite 0-100 score for active items — higher = stronger sell signal
   const sellScores = useMemo(() => {
     const now = Date.now();
     return s.items
-      .filter(i => i.status === "active" && i.market_price != null && +i.buy_price > 0)
+      .filter(i => i.status === "פעיל" && i.market_price != null && +i.buy_price > 0)
       .map(i => {
         const cost    = +i.buy_price + +(i.grading_cost ?? 0);
         const mkt     = i.market_price!;
@@ -837,7 +837,7 @@ export default function CollectPro() {
 
   // Concentration risk: top items by portfolio weight
   const concentrationRisk = useMemo(() => {
-    const active = s.items.filter(i => i.status === "active");
+    const active = s.items.filter(i => i.status === "פעיל");
     const totalVal = active.reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
     if (totalVal <= 0 || active.length < 3) return [];
     return active
@@ -853,15 +853,15 @@ export default function CollectPro() {
   // Franchise breakdown: active portfolio distribution + realized profit per franchise
   const franchiseBreakdown = useMemo(() => {
     const map = new Map<string, { cost: number; value: number; count: number; sold: number; profit: number }>();
-    s.items.filter(i => i.status !== "sold").forEach(i => {
-      const key = i.franchise ?? "Other";
+    s.items.filter(i => i.status !== "נמכר").forEach(i => {
+      const key = i.franchise ?? "אחר";
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
       const val = i.market_price ?? +i.buy_price;
       const entry = map.get(key) ?? { cost: 0, value: 0, count: 0, sold: 0, profit: 0 };
       map.set(key, { ...entry, cost: entry.cost + cost, value: entry.value + val, count: entry.count + 1 });
     });
-    s.items.filter(i => i.status === "sold" && i.sell_price != null).forEach(i => {
-      const key = i.franchise ?? "Other";
+    s.items.filter(i => i.status === "נמכר" && i.sell_price != null).forEach(i => {
+      const key = i.franchise ?? "אחר";
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
       const profit = +(i.sell_price!) - cost;
       const entry = map.get(key) ?? { cost: 0, value: 0, count: 0, sold: 0, profit: 0 };
@@ -883,7 +883,7 @@ export default function CollectPro() {
   // Quick-flip detector: sold items held ≤30 days with profit
   const quickFlips = useMemo(() =>
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .map(i => {
         const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -897,7 +897,7 @@ export default function CollectPro() {
 
   // Profit-per-hold-day: capital efficiency across all sold items
   const profitPerDay = useMemo(() => {
-    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at && i.buy_date);
+    const sold = s.items.filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at && i.buy_date);
     if (sold.length === 0) return null;
     const totalProfit = sold.reduce((acc, i) => acc + +(i.sell_price!) - (+i.buy_price + +(i.grading_cost ?? 0)), 0);
     const totalDays = sold.reduce((acc, i) => {
@@ -911,12 +911,12 @@ export default function CollectPro() {
   const inventoryAging = useMemo(() => {
     const now = Date.now();
     const buckets = [
-      { label: "Fresh (≤30d)",    min: 0,   max: 30,       count: 0, cost: 0, cls: "bg-emerald-600/70" as const },
-      { label: "Active (31-90d)", min: 31,  max: 90,        count: 0, cost: 0, cls: "bg-blue-600/70" as const },
-      { label: "Stale (91-180d)", min: 91,  max: 180,       count: 0, cost: 0, cls: "bg-amber-600/70" as const },
-      { label: "Old (180d+)",     min: 181, max: Infinity,  count: 0, cost: 0, cls: "bg-red-600/70" as const },
+      { label: "טרי (≤30 ימים)",    min: 0,   max: 30,       count: 0, cost: 0, cls: "bg-emerald-600/70" as const },
+      { label: "פעיל (31-90 ימים)", min: 31,  max: 90,        count: 0, cost: 0, cls: "bg-blue-600/70" as const },
+      { label: "מיושן (91-180 ימים)", min: 91,  max: 180,       count: 0, cost: 0, cls: "bg-amber-600/70" as const },
+      { label: "ישן (180+ ימים)",     min: 181, max: Infinity,  count: 0, cost: 0, cls: "bg-red-600/70" as const },
     ];
-    s.items.filter(i => i.status !== "sold").forEach(i => {
+    s.items.filter(i => i.status !== "נמכר").forEach(i => {
       const ageDays = Math.round((now - new Date(i.buy_date).getTime()) / 86400000);
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
       const bucket = buckets.find(b => ageDays >= b.min && ageDays <= b.max);
@@ -928,7 +928,7 @@ export default function CollectPro() {
   // Hall of Fame: top 3 sold trades by realized ROI %
   const hallOfFame = useMemo(() =>
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null)
+      .filter(i => i.status === "נמכר" && i.sell_price != null)
       .map(i => {
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
         const profit = +(i.sell_price!) - cost;
@@ -943,7 +943,7 @@ export default function CollectPro() {
   // Monthly P&L: profit/loss grouped by calendar month
   const monthlyPnL = useMemo(() => {
     const map = new Map<string, number>();
-    s.items.filter(i => i.status === "sold" && i.sell_price != null && i.sold_at).forEach(i => {
+    s.items.filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at).forEach(i => {
       const dt  = new Date(i.sold_at!);
       const key = dt.toLocaleDateString("en-US", { year: "numeric", month: "short" });
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
@@ -964,8 +964,8 @@ export default function CollectPro() {
     if (years < 0.5) return null; // not enough time for CAGR to be meaningful
     const totalInvested = s.items.reduce((acc, i) => acc + +i.buy_price + +(i.grading_cost ?? 0), 0);
     if (totalInvested <= 0) return null;
-    const activeValue = s.items.filter(i => i.status !== "sold").reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
-    const soldRevenue = s.items.filter(i => i.status === "sold" && i.sell_price != null).reduce((acc, i) => acc + +(i.sell_price!), 0);
+    const activeValue = s.items.filter(i => i.status !== "נמכר").reduce((acc, i) => acc + (i.market_price ?? +i.buy_price), 0);
+    const soldRevenue = s.items.filter(i => i.status === "נמכר" && i.sell_price != null).reduce((acc, i) => acc + +(i.sell_price!), 0);
     const currentValue = activeValue + soldRevenue;
     const cagr = (Math.pow(currentValue / totalInvested, 1 / years) - 1) * 100;
     return { cagr, years: Math.round(years * 10) / 10 };
@@ -974,7 +974,7 @@ export default function CollectPro() {
   // Underwater items: active items where market_price < cost (currently losing)
   const underwaterItems = useMemo(() =>
     s.items
-      .filter(i => i.status === "active" && i.market_price != null)
+      .filter(i => i.status === "פעיל" && i.market_price != null)
       .map(i => {
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
         const loss = i.market_price! - cost;
@@ -995,7 +995,7 @@ export default function CollectPro() {
       { label: "50–100%", min: 50,        max: 100,      count: 0 },
       { label: "100%+",   min: 100,       max: Infinity, count: 0 },
     ];
-    s.items.filter(i => i.status === "sold" && i.sell_price != null).forEach(i => {
+    s.items.filter(i => i.status === "נמכר" && i.sell_price != null).forEach(i => {
       const cost = +i.buy_price + +(i.grading_cost ?? 0);
       const roi = cost > 0 ? ((+(i.sell_price!) - cost) / cost) * 100 : 0;
       const bucket = buckets.find(b => roi >= b.min && roi < b.max);
@@ -1012,7 +1012,7 @@ export default function CollectPro() {
       const cost   = items.reduce((acc, i) => acc + +i.buy_price + +(i.grading_cost ?? 0), 0);
       return { count: items.length, profit, roi: cost > 0 ? (profit / cost) * 100 : 0 };
     };
-    const sold = s.items.filter(i => i.status === "sold" && i.sell_price != null);
+    const sold = s.items.filter(i => i.status === "נמכר" && i.sell_price != null);
     const psa  = calc(sold.filter(i => i.psa_grade != null));
     const raw  = calc(sold.filter(i => i.psa_grade == null));
     if (!psa || !raw) return null;
@@ -1022,7 +1022,7 @@ export default function CollectPro() {
   // Breakout cards: active items with לא ממומש gain ≥100% (2× or better)
   const breakoutCards = useMemo(() =>
     s.items
-      .filter(i => i.status !== "sold" && i.market_price != null)
+      .filter(i => i.status !== "נמכר" && i.market_price != null)
       .map(i => {
         const cost    = +i.buy_price + +(i.grading_cost ?? 0);
         const gain    = i.market_price! - cost;
@@ -1038,9 +1038,9 @@ export default function CollectPro() {
   const flipSpeedByFranchise = useMemo(() => {
     const map = new Map<string, { totalDays: number; count: number; profit: number }>();
     s.items
-      .filter(i => i.status === "sold" && i.sell_price != null && i.sold_at)
+      .filter(i => i.status === "נמכר" && i.sell_price != null && i.sold_at)
       .forEach(i => {
-        const key = i.franchise ?? "Other";
+        const key = i.franchise ?? "אחר";
         const holdDays = Math.round((new Date(i.sold_at!).getTime() - new Date(i.buy_date).getTime()) / 86400000);
         const cost = +i.buy_price + +(i.grading_cost ?? 0);
         const profit = +(i.sell_price!) - cost;
@@ -1061,7 +1061,7 @@ export default function CollectPro() {
   const conditionBreakdown = useMemo(() => {
     const ORDER = ["M", "NM", "LP", "MP", "HP", "D", "PSA"];
     const map   = new Map<string, number>();
-    s.items.filter(i => i.status !== "sold").forEach(i => {
+    s.items.filter(i => i.status !== "נמכר").forEach(i => {
       map.set(i.condition, (map.get(i.condition) ?? 0) + 1);
     });
     const total = [...map.values()].reduce((a, b) => a + b, 0);
@@ -1077,7 +1077,7 @@ export default function CollectPro() {
     // Compute רווח/הפסד לא ממומש for sorting purposes
     const pnl = (i: CollectionItem) => {
       const c = +i.buy_price + +(i.grading_cost ?? 0);
-      if (i.status === "sold") return +(i.sell_price ?? 0) - c;
+      if (i.status === "נמכר") return +(i.sell_price ?? 0) - c;
       return (i.market_price ?? +i.buy_price) - c;
     };
     const age = (i: CollectionItem) => new Date(i.buy_date).getTime();
@@ -1120,13 +1120,13 @@ export default function CollectPro() {
   );
 
   const portfolioCtx = useMemo(() => {
-    const partnerName = (id: string) => s.partners.find((p) => p.id === id)?.name ?? "Unknown";
+    const partnerName = (id: string) => s.partners.find((p) => p.id === id)?.name ?? "לא ידוע";
     const cost = (i: CollectionItem) => +i.buy_price + +(i.grading_cost ?? 0);
     const pct  = (val: number, base: number) => base > 0 ? ` (${val >= base ? "+" : ""}${(((val - base) / base) * 100).toFixed(1)}%)` : "";
 
-    const active  = s.items.filter((i) => i.status === "active");
-    const grading = s.items.filter((i) => i.status === "grading");
-    const sold    = s.items.filter((i) => i.status === "sold" && i.sell_price != null);
+    const active  = s.items.filter((i) => i.status === "פעיל");
+    const grading = s.items.filter((i) => i.status === "גריידינג");
+    const sold    = s.items.filter((i) => i.status === "נמכר" && i.sell_price != null);
 
     const lines: string[] = [
       "=== PORTFOLIO SUMMARY ===",
@@ -1156,9 +1156,9 @@ export default function CollectPro() {
       );
     });
 
-    // Grading queue
+    // תור גריידינג
     if (grading.length > 0) {
-      lines.push("", "=== GRADING QUEUE ===");
+      lines.push("", "=== תור גריידינג ===");
       grading.forEach((i) => {
         lines.push(
           `• ${i.name}${i.card_set ? ` [${i.card_set}]` : ""} | ${i.condition} | Cost so far: ${fmt$(cost(i))}` +
@@ -1169,7 +1169,7 @@ export default function CollectPro() {
 
     // Sold history
     if (sold.length > 0) {
-      lines.push("", "=== SOLD TRANSACTIONS ===");
+      lines.push("", "=== עסקאות שנמכרו ===");
       sold.forEach((i) => {
         const c = cost(i);
         const profit = +(i.sell_price ?? 0) - c;
@@ -1222,9 +1222,9 @@ export default function CollectPro() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       const f = s.inv.form;
-      if (!f.name.trim()) { toast.error("Name is required"); return; }
-      if (!f.buy_price || isNaN(+f.buy_price)) { toast.error("Valid buy price required"); return; }
-      if (!f.partner_id) { toast.error("Partner is required"); return; }
+      if (!f.name.trim()) { toast.error("שם הוא שדה חובה"); return; }
+      if (!f.buy_price || isNaN(+f.buy_price)) { toast.error("נדרש מחיר קנייה תקין"); return; }
+      if (!f.partner_id) { toast.error("שותף הוא שדה חובה"); return; }
 
       const dup = s.items.some(
         (i) =>
@@ -1234,7 +1234,7 @@ export default function CollectPro() {
       );
       if (dup) toast.warning(`"${f.name}" already exists for this partner`);
 
-      const isSold = f.status === "sold";
+      const isSold = f.status === "נמכר";
       const payload = {
         name: f.name.trim(),
         card_set: f.card_set || null,
@@ -1258,15 +1258,15 @@ export default function CollectPro() {
         if (s.inv.editId) {
           const originalItem = s.items.find((i) => i.id === s.inv.editId);
           if (originalItem) {
-            d({ t: "RT_ITEM", event: "UPDATE", item: { ...originalItem, ...payload, updated_at: new Date().toISOString() } });
+            d({ t: "RT_ITEM", event: "עדכן", item: { ...originalItem, ...payload, updated_at: new Date().toISOString() } });
           }
           const { error } = await supabase.from("coll_items").update(payload).eq("id", s.inv.editId);
           if (error) {
-            if (originalItem) d({ t: "RT_ITEM", event: "UPDATE", item: originalItem }); // rollback
+            if (originalItem) d({ t: "RT_ITEM", event: "עדכן", item: originalItem }); // rollback
             throw error;
           }
           itemId = s.inv.editId;
-          toast.success("Item updated");
+          toast.success("פריט עודכן");
         } else {
           itemId = crypto.randomUUID();
           const { error } = await supabase.from("coll_items").insert({ ...payload, id: itemId });
@@ -1280,7 +1280,7 @@ export default function CollectPro() {
             item_id: itemId,
             price: payload.market_price,
             source: "manual",
-            note: "Market estimate updated via form",
+            note: "הערכת שוק עודכנה דרך הטופס",
           }).then(({ error }) => {
             if (error) console.warn("Price history insert failed:", error.message);
           });
@@ -1334,7 +1334,7 @@ export default function CollectPro() {
         sell_price: "",
         sold_at: "",
         buy_date: today(),
-        status: "active",
+        status: "פעיל",
         partner_id: item.partner_id,
         notes: item.notes ?? "",
         image_url: item.image_url ?? "",
@@ -1356,7 +1356,7 @@ export default function CollectPro() {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => d({ t: "UNDO_SET", u: null }), 30_000);
     d({ t: "DEL_TARGET", id: null });
-    toast("Item deleted — you have 30s to undo");
+    toast("פריט נמחק — יש לך 30 שניות לביטול");
   }, [s.deleteTarget, s.items]);
 
   const undoDelete = useCallback(async (item: CollectionItem) => {
@@ -1364,7 +1364,7 @@ export default function CollectPro() {
     if (error) { toast.error(`Restore error: ${error.message}`); return; }
     d({ t: "UNDO_SET", u: null });
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    toast.success("Item restored");
+    toast.success("פריט שוחזר");
   }, []);
 
   const markSold = useCallback((item: CollectionItem) => {
@@ -1374,13 +1374,13 @@ export default function CollectPro() {
   const markSoldConfirm = useCallback(async (item: CollectionItem, price: number) => {
     const soldAt = new Date().toISOString();
     // Optimistic update — item moves to sold immediately without waiting for DB round-trip
-    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, status: "sold" as ItemStatus, sell_price: price, sold_at: soldAt } });
+    d({ t: "RT_ITEM", event: "עדכן", item: { ...item, status: "נמכר" as ItemStatus, sell_price: price, sold_at: soldAt } });
     const { error } = await supabase
       .from("coll_items")
-      .update({ status: "sold", sell_price: price, sold_at: soldAt })
+      .update({ status: "נמכר", sell_price: price, sold_at: soldAt })
       .eq("id", item.id);
     if (error) {
-      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      d({ t: "RT_ITEM", event: "עדכן", item }); // rollback
       toast.error(error.message);
       return;
     }
@@ -1405,7 +1405,7 @@ export default function CollectPro() {
 
     // Show local preview immediately while uploading
     const preview = await compressImage(file).catch(() => null);
-    if (!preview) { toast.error("Image processing error"); return; }
+    if (!preview) { toast.error("שגיאה בעיבוד תמונה"); return; }
     d({ t: "INV_FORM_PATCH", p: { image_url: preview } });
 
     // Upload to Supabase Storage in background; replace preview URL with CDN URL
@@ -1435,7 +1435,7 @@ export default function CollectPro() {
   // ── Batch handlers ─────────────────────────────────────────────────────────
 
   const batchUpdateStatus = useCallback(() => {
-    setBatchOp("status");
+    setBatchOp("סטטוס");
   }, []);
 
   const executeBatchStatus = useCallback(async (newStatus: ItemStatus) => {
@@ -1488,7 +1488,7 @@ export default function CollectPro() {
   }, [s.inv.selected]);
 
   const batchPartnerReassign = useCallback(() => {
-    setBatchOp("partner" as "status" | "price");
+    setBatchOp("שותף" as "סטטוס" | "price");
   }, []);
 
   const executeBatchPartner = useCallback(async (partnerId: string) => {
@@ -1503,13 +1503,13 @@ export default function CollectPro() {
   }, [s.inv.selected, s.partners]);
 
   const quickStatusChange = useCallback(async (item: CollectionItem, newStatus: ItemStatus) => {
-    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, status: newStatus, updated_at: new Date().toISOString() } });
+    d({ t: "RT_ITEM", event: "עדכן", item: { ...item, status: newStatus, updated_at: new Date().toISOString() } });
     const { error } = await supabase.from("coll_items").update({ status: newStatus }).eq("id", item.id);
     if (error) {
-      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      d({ t: "RT_ITEM", event: "עדכן", item }); // rollback
       toast.error(error.message);
     } else {
-      const labels: Record<ItemStatus, string> = { active: "Active", grading: "Grading", sold: "Sold" };
+      const labels: Record<ItemStatus, string> = { active: "פעיל", grading: "גריידינג", sold: "נמכר" };
       toast.success(`${item.name} → ${labels[newStatus]}`);
     }
   }, []);
@@ -1529,15 +1529,15 @@ export default function CollectPro() {
     const item = s.items.find(i => i.id === itemId);
     if (!item) return;
     // Optimistic update
-    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, market_price: price, updated_at: new Date().toISOString() } });
+    d({ t: "RT_ITEM", event: "עדכן", item: { ...item, market_price: price, updated_at: new Date().toISOString() } });
     const { error } = await supabase.from("coll_items").update({ market_price: price }).eq("id", itemId);
     if (error) {
-      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      d({ t: "RT_ITEM", event: "עדכן", item }); // rollback
       toast.error(error.message);
       return;
     }
     supabase.from("cp_price_history").insert({
-      item_id: itemId, price, source: "manual", note: "Inline price edit",
+      item_id: itemId, price, source: "manual", note: "עריכת מחיר מובנית",
     }).then(() => {});
     toast.success("Market price updated");
   }, [s.items]);
@@ -1634,7 +1634,7 @@ export default function CollectPro() {
   const addPartner = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (!s.partnerForm.name.trim()) { toast.error("Name is required"); return; }
+      if (!s.partnerForm.name.trim()) { toast.error("שם הוא שדה חובה"); return; }
       d({ t: "PF_BUSY", v: true });
       const { error } = await supabase.from("coll_partners").insert({
         id: crypto.randomUUID(),
@@ -1644,7 +1644,7 @@ export default function CollectPro() {
       d({ t: "PF_BUSY", v: false });
       if (error) { toast.error(error.message); return; }
       d({ t: "PF_PATCH", p: { name: "", email: "" } });
-      toast.success("Partner added");
+      toast.success("שותף נוסף");
     },
     [s.partnerForm]
   );
@@ -1652,10 +1652,10 @@ export default function CollectPro() {
   const updateItemNotes = useCallback(async (itemId: string, notes: string) => {
     const item = s.items.find(i => i.id === itemId);
     if (!item) return;
-    d({ t: "RT_ITEM", event: "UPDATE", item: { ...item, notes: notes || undefined, updated_at: new Date().toISOString() } });
+    d({ t: "RT_ITEM", event: "עדכן", item: { ...item, notes: notes || undefined, updated_at: new Date().toISOString() } });
     const { error } = await supabase.from("coll_items").update({ notes: notes || null }).eq("id", itemId);
     if (error) {
-      d({ t: "RT_ITEM", event: "UPDATE", item }); // rollback
+      d({ t: "RT_ITEM", event: "עדכן", item }); // rollback
       toast.error(error.message);
       throw error;
     }
@@ -1725,7 +1725,7 @@ export default function CollectPro() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={executeBatchDelete}>
-              Delete All
+              מחק הכל
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1743,7 +1743,7 @@ export default function CollectPro() {
                 franchise:   card.franchise,
                 condition:   (card.condition as ItemForm["condition"]) || "NM",
                 notes:       card.notes,
-                status:      "active",
+                status:      "פעיל",
                 buy_date:    new Date().toISOString().slice(0, 10),
               },
             });
@@ -1768,7 +1768,7 @@ export default function CollectPro() {
       <AlertDialog open={!!s.deleteTarget} onOpenChange={() => d({ t: "DEL_TARGET", id: null })}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Permanent Delete</AlertDialogTitle>
+            <AlertDialogTitle>מחיקה קבועה</AlertDialogTitle>
             <AlertDialogDescription>
               This item will be permanently deleted. You have 30 seconds to restore it after deletion.
             </AlertDialogDescription>
@@ -1852,7 +1852,7 @@ export default function CollectPro() {
                 `Realized Profit:   ${stats.realisedProfit >= 0 ? "+" : ""}${fmt$(stats.realisedProfit)} (${fmtPct(stats.roiPct)} ROI)`,
                 `Sales:             ${stats.soldCount} transactions`,
                 `Portfolio Health:  ${health}`,
-                `Cards:             ${s.items.length} total (${s.items.filter(i => i.status === "active").length} active)`,
+                `Cards:             ${s.items.length} total (${s.items.filter(i => i.status === "פעיל").length} active)`,
                 "─".repeat(32),
                 `Generated: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`,
               ].join("\n");
@@ -1910,11 +1910,11 @@ export default function CollectPro() {
             {/* ── תמונת מצב הפורטפוליו ────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
-                { label: "Active", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} market` },
+                { label: "פעיל", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} market` },
                 { label: "גריידינג", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} invested` },
-                { label: "Sold", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} profit` },
-                { label: "Portfolio", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} invested` },
-                ...(thisMonth ? [{ label: "This Month", value: `${fmt$(thisMonth.profit)}`, cls: thisMonth.profit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${thisMonth.sold} sold · ${thisMonth.bought} bought` }] : []),
+                { label: "נמכר", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} profit` },
+                { label: "פורטפוליו", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} invested` },
+                ...(thisMonth ? [{ label: "החודש", value: `${fmt$(thisMonth.profit)}`, cls: thisMonth.profit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${thisMonth.sold} sold · ${thisMonth.bought} bought` }] : []),
               ].map(({ label, value, cls, sub }) => (
                 <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5">
                   <div className="text-xs text-gray-500 mb-0.5">{label}</div>
@@ -1930,7 +1930,7 @@ export default function CollectPro() {
                 {
                   label: "📦 מלאי",
                   action: () => d({ t: "SET_TAB", tab: "inventory" }),
-                  badge: s.items.filter(i => i.status === "active").length.toString(),
+                  badge: s.items.filter(i => i.status === "פעיל").length.toString(),
                 },
                 {
                   label: "📈 ROI",
@@ -1940,8 +1940,8 @@ export default function CollectPro() {
                 {
                   label: "🌐 סריקת שוק",
                   action: () => d({ t: "SET_TAB", tab: "market" }),
-                  badge: s.items.filter(i => i.status === "active" && i.market_price == null).length > 0
-                    ? `${s.items.filter(i => i.status === "active" && i.market_price == null).length} unpriced`
+                  badge: s.items.filter(i => i.status === "פעיל" && i.market_price == null).length > 0
+                    ? `${s.items.filter(i => i.status === "פעיל" && i.market_price == null).length} unpriced`
                     : null,
                 },
                 {
@@ -2044,7 +2044,7 @@ export default function CollectPro() {
                                 d({ t: "MKT_QUERY", v: q });
                               }}
                               className="text-xs px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors"
-                              title="Quick price scan"
+                              title="סריקת מחיר מהירה"
                             >Scan</button>
                           )}
                         </div>
@@ -2059,7 +2059,7 @@ export default function CollectPro() {
             {(() => {
               // Determine single most important action for the user right now
               const highAction = actionItems[0];
-              if (!highAction && sellScores.length === 0 && s.items.filter(i => i.status === "active" && i.market_price == null).length === 0) return null;
+              if (!highAction && sellScores.length === 0 && s.items.filter(i => i.status === "פעיל" && i.market_price == null).length === 0) return null;
               let msg = "";
               let color = "from-blue-900/60 to-indigo-900/60 border-blue-700/40 text-blue-200";
               let onClick: (() => void) | null = null;
@@ -2092,7 +2092,7 @@ export default function CollectPro() {
             {portfolioHealth && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Portfolio Health Score</div>
+                  <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">ציון בריאות הפורטפוליו</div>
                   <div className="flex items-center gap-2">
                     <span className={`text-3xl font-extrabold ${
                       portfolioHealth.grade === "A" ? "text-emerald-400" :
@@ -2114,9 +2114,9 @@ export default function CollectPro() {
                 </div>
                 <div className="grid grid-cols-5 gap-1 text-xs">
                   {[
-                    { label: "Prices",  score: portfolioHealth.priceCoverage  },
-                    { label: "P&L",     score: portfolioHealth.profitScore     },
-                    { label: "Diverse", score: portfolioHealth.diverseScore    },
+                    { label: "מחירים",  score: portfolioHealth.priceCoverage  },
+                    { label: "רווח/הפסד",     score: portfolioHealth.profitScore     },
+                    { label: "מגוון", score: portfolioHealth.diverseScore    },
                     { label: "גריידינג", score: portfolioHealth.gradingScore    },
                     { label: "תשואה",     score: portfolioHealth.roiScore        },
                   ].map((f) => (
@@ -2137,9 +2137,9 @@ export default function CollectPro() {
               <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">תמונת מצב הפורטפוליו</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "Active",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
+                  { label: "פעיל",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
                   { label: "גריידינג",  value: stats.gradingCount.toString(),       sub: "cards",         color: "text-amber-400" },
-                  { label: "Invested", value: fmt$(stats.totalCost),               sub: "קנייה + גריידינג", color: "text-gray-200" },
+                  { label: "הושקע", value: fmt$(stats.totalCost),               sub: "קנייה + גריידינג", color: "text-gray-200" },
                   { label: "הערכת רווח/הפסד", value: fmt$(stats.לא ממומשPnL),           sub: "לא ממומש",    color: stats.לא ממומשPnL >= 0 ? "text-emerald-400" : "text-red-400" },
                 ].map((st) => (
                   <div key={st.label} className="bg-gray-800/60 rounded-lg px-3 py-2">
@@ -2151,16 +2151,16 @@ export default function CollectPro() {
               </div>
             </div>
 
-            {/* ── Grading Queue ────────────────────────────────────────────────── */}
-            {s.items.filter(i => i.status === "grading").length > 0 && (
+            {/* ── תור גריידינג ────────────────────────────────────────────────── */}
+            {s.items.filter(i => i.status === "גריידינג").length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
-                  <span>Grading Queue</span>
-                  <span className="text-amber-500 font-mono">{s.items.filter(i => i.status === "grading").length} cards</span>
+                  <span>תור גריידינג</span>
+                  <span className="text-amber-500 font-mono">{s.items.filter(i => i.status === "גריידינג").length} cards</span>
                 </div>
                 <div className="space-y-2">
                   {s.items
-                    .filter(i => i.status === "grading")
+                    .filter(i => i.status === "גריידינג")
                     .sort((a, b) => new Date(a.buy_date).getTime() - new Date(b.buy_date).getTime())
                     .map((item) => {
                       const days = Math.round((Date.now() - new Date(item.buy_date).getTime()) / 86400000);
@@ -2221,7 +2221,7 @@ export default function CollectPro() {
                         <button
                           onClick={() => markSold(item)}
                           className="text-xs px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-300 hover:bg-emerald-800 transition-colors"
-                          title="Mark sold"
+                          title="סמן כנמכר"
                         >✓ Sell</button>
                       </div>
                     </div>
@@ -2263,7 +2263,7 @@ export default function CollectPro() {
                         <button
                           onClick={() => markSold(item)}
                           className="text-xs px-2 py-1 rounded bg-emerald-900/60 text-emerald-300 hover:bg-emerald-800 transition-colors flex-shrink-0"
-                          title="Mark sold"
+                          title="סמן כנמכר"
                         >✓ Sell</button>
                       </div>
                     );
@@ -2583,7 +2583,7 @@ export default function CollectPro() {
             {s.partners.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
-                  <span>Partner Overview</span>
+                  <span>סקירת שותפים</span>
                   <button
                     type="button"
                     onClick={() => d({ t: "SET_TAB", tab: "partners" })}
@@ -2705,7 +2705,7 @@ export default function CollectPro() {
             {/* ── Alerts ──────────────────────────────────────────────────────── */}
             {portfolioAlerts.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-2">
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Portfolio Alerts</div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">התראות פורטפוליו</div>
                 {portfolioAlerts.map((a, idx) => (
                   <button
                     key={idx}
@@ -2869,10 +2869,10 @@ export default function CollectPro() {
               </div>
             </div>
 
-            {/* ── Recent Activity ──────────────────────────────────────── */}
+            {/* ── פעילות אחרונה ──────────────────────────────────────── */}
             {recentActivity.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Recent Activity</div>
+                <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">פעילות אחרונה</div>
                 <div className="space-y-1.5">
                   {recentActivity.map(({ item, profit, timeLabel, badge, badgeCls }) => (
                     <button
@@ -2918,13 +2918,13 @@ export default function CollectPro() {
                   className="bg-gray-800 border-gray-700 pr-8 w-full"
                   value={s.inv.search}
                   onChange={(e) => d({ t: "INV_SEARCH", v: e.target.value })}
-                  placeholder="🔍 Search name, set, notes… ( / )"
+                  placeholder="🔍 חפש שם, סט, הערות… ( / )"
                 />
                 {s.inv.search && (
                   <button
                     onClick={() => { d({ t: "INV_SEARCH", v: "" }); searchInputRef.current?.focus(); }}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-sm leading-none"
-                    title="Clear search"
+                    title="נקה חיפוש"
                   >✕</button>
                 )}
               </div>
@@ -2946,7 +2946,7 @@ export default function CollectPro() {
                   <button
                     onClick={() => setCompactTable(v => !v)}
                     className={`px-3 py-2 text-xs transition-colors border-l border-gray-700 ${compactTable ? "bg-indigo-700 text-white" : "bg-gray-800 text-gray-400 hover:text-white"}`}
-                    title="Compact rows"
+                    title="שורות מכווצות"
                   >⊟</button>
                 )}
               </div>
@@ -2959,12 +2959,12 @@ export default function CollectPro() {
                 <Button variant="outline" size="sm" onClick={() => exportCSV(sortedItems, s.partners)}>CSV</Button>
                 <Button variant="outline" size="sm" onClick={() => exportEbayCSV(sortedItems)}>eBay</Button>
                 <Button variant="outline" size="sm" onClick={() => exportCardmarketCSV(sortedItems)}>CM</Button>
-                <Button variant="outline" size="sm" onClick={() => setShowImportCSV(true)} title="Import CSV">📥</Button>
+                <Button variant="outline" size="sm" onClick={() => setShowImportCSV(true)} title="ייבוא CSV">📥</Button>
               </div>
               <div className="group relative">
-                <button className="w-6 h-6 rounded-full bg-gray-800 text-gray-500 hover:text-white text-xs font-bold flex items-center justify-center transition-colors" title="Keyboard shortcuts">?</button>
+                <button className="w-6 h-6 rounded-full bg-gray-800 text-gray-500 hover:text-white text-xs font-bold flex items-center justify-center transition-colors" title="קיצורי מקלדת">?</button>
                 <div className="absolute right-0 top-8 z-30 bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-gray-400 whitespace-nowrap shadow-xl hidden group-hover:block">
-                  <div className="font-semibold text-gray-300 mb-1.5">Keyboard shortcuts</div>
+                  <div className="font-semibold text-gray-300 mb-1.5">קיצורי מקלדת</div>
                   <div className="space-y-1">
                     <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">/</kbd> or <kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">s</kbd> — Focus search</div>
                     <div><kbd className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">n</kbd> — New item</div>
@@ -2980,15 +2980,15 @@ export default function CollectPro() {
 
             {/* Status filter chips */}
             {(() => {
-              const activeItems  = s.items.filter(i => i.status === "active");
+              const activeItems  = s.items.filter(i => i.status === "פעיל");
               const noPriceCount = activeItems.filter(i => i.market_price == null).length;
               return (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {([
-                    { key: "all",     label: "All",     count: s.items.length,                                   badge: null },
-                    { key: "active",  label: "Active",  count: activeItems.length,                               badge: noPriceCount > 0 ? `${noPriceCount} no price` : null },
-                    { key: "grading", label: "גריידינג", count: s.items.filter(i => i.status === "grading").length, badge: null },
-                    { key: "sold",    label: "Sold",    count: s.items.filter(i => i.status === "sold").length,   badge: null },
+                    { key: "הכל",     label: "הכל",     count: s.items.length,                                   badge: null },
+                    { key: "פעיל",  label: "פעיל",  count: activeItems.length,                               badge: noPriceCount > 0 ? `${noPriceCount} no price` : null },
+                    { key: "גריידינג", label: "גריידינג", count: s.items.filter(i => i.status === "גריידינג").length, badge: null },
+                    { key: "נמכר",    label: "נמכר",    count: s.items.filter(i => i.status === "נמכר").length,   badge: null },
                   ] as const).map(({ key, label, count, badge }) => (
                     <button
                       key={key}
@@ -3036,7 +3036,7 @@ export default function CollectPro() {
               </div>
             )}
 
-            {/* Batch select all button */}
+            {/* Batch בחר הכל button */}
             {sortedItems.length > 0 && (
               <div className="flex items-center gap-2 mb-2 text-xs text-gray-500">
                 <button
@@ -3049,7 +3049,7 @@ export default function CollectPro() {
                   }}
                   className="hover:text-white transition-colors"
                 >
-                  {s.inv.selected.length === sortedItems.length ? "Deselect all" : "Select all"}
+                  {s.inv.selected.length === sortedItems.length ? "בטל בחירת הכל" : "בחר הכל"}
                 </button>
                 {s.inv.selected.length > 0 && (
                   <span className="text-blue-400">{s.inv.selected.length} selected</span>
@@ -3074,7 +3074,7 @@ export default function CollectPro() {
                     {[
                       { label: "Name *", key: "name", type: "text" },
                       { label: "Set", key: "card_set", type: "text" },
-                      { label: "Franchise", key: "franchise", type: "text" },
+                      { label: "פרנצ'ייז", key: "פרנצ'ייז", type: "text" },
                     ].map(({ label, key, type }) => (
                       <div key={key}>
                         <label className="text-xs text-gray-400 block mb-1">{label}</label>
@@ -3109,9 +3109,9 @@ export default function CollectPro() {
                         value={s.inv.form.status}
                         onChange={(e) => d({ t: "INV_FORM_PATCH", p: { status: e.target.value as ItemStatus } })}
                       >
-                        <option value="active">Active</option>
-                        <option value="grading">Grading</option>
-                        <option value="sold">Sold</option>
+                        <option value="פעיל">Active</option>
+                        <option value="גריידינג">Grading</option>
+                        <option value="נמכר">Sold</option>
                       </select>
                     </div>
                     <div>
@@ -3129,7 +3129,7 @@ export default function CollectPro() {
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">Buy Date</label>
+                      <label className="text-xs text-gray-400 block mb-1">תאריך קנייה</label>
                       <Input
                         type="date"
                         className="bg-gray-800 border-gray-700"
@@ -3144,7 +3144,7 @@ export default function CollectPro() {
                       { label: "Buy Price ($) *", key: "buy_price" },
                       { label: "Grading Cost ($)", key: "grading_cost" },
                       { label: "Market Est. ($)", key: "market_price" },
-                      { label: "PSA Grade", key: "psa_grade" },
+                      { label: "ציון PSA", key: "psa_grade" },
                     ].map(({ label, key }) => (
                       <div key={key}>
                         <label className="text-xs text-gray-400 block mb-1">{label}</label>
@@ -3161,7 +3161,7 @@ export default function CollectPro() {
                   </div>
 
                   {/* Sale fields — only shown when status = sold */}
-                  {s.inv.form.status === "sold" && (
+                  {s.inv.form.status === "נמכר" && (
                     <div className="grid grid-cols-2 gap-3 p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-lg">
                       <div>
                         <label className="text-xs text-emerald-400 block mb-1">Sale Price ($)</label>
@@ -3176,7 +3176,7 @@ export default function CollectPro() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-emerald-400 block mb-1">Sold Date</label>
+                        <label className="text-xs text-emerald-400 block mb-1">תאריך מכירה</label>
                         <Input
                           type="date"
                           className="bg-gray-800 border-gray-700"
@@ -3211,7 +3211,7 @@ export default function CollectPro() {
                         <Input
                           type="url"
                           className="bg-gray-800 border-gray-700 text-xs"
-                          placeholder="…or paste image URL (https://…)"
+                          placeholder="…או הדבק URL תמונה (https://…)"
                           value={s.inv.form.image_url.startsWith("data:") ? "" : s.inv.form.image_url}
                           onChange={(e) => d({ t: "INV_FORM_PATCH", p: { image_url: e.target.value } })}
                         />
@@ -3227,7 +3227,7 @@ export default function CollectPro() {
                   </div>
 
                   <div className="flex gap-2 pt-1">
-                    <Button type="submit">{s.inv.editId ? "Update" : "Add"}</Button>
+                    <Button type="submit">{s.inv.editId ? "עדכן" : "הוסף"}</Button>
                     <Button type="button" variant="outline" onClick={() => d({ t: "INV_FORM_SHOW", show: false })}>
                       Cancel
                     </Button>
@@ -3268,8 +3268,8 @@ export default function CollectPro() {
                     ) : (
                       <>
                         <div className="text-3xl mb-2">📦</div>
-                        <div className="font-semibold mb-1">No cards yet</div>
-                        <div className="text-sm text-gray-700">Click "Add" or use the 📸 Camera Scan to add your first card</div>
+                        <div className="font-semibold mb-1">אין קלפים עדיין</div>
+                        <div className="text-sm text-gray-700">Click "הוסף" or use the 📸 Camera Scan to add your first card</div>
                       </>
                     )}
                   </div>
@@ -3299,12 +3299,12 @@ export default function CollectPro() {
                       </th>
                       {[
                         { label: "Item", field: "name" as const },
-                        { label: "Status", field: "status" as const },
+                        { label: "סטטוס", field: "סטטוס" as const },
                         { label: "Age ↕", field: "__age__" as const },
                         { label: "Buy", field: "buy_price" as const },
                         { label: "גריידינג", field: "grading_cost" as const },
                         { label: "שוק", field: "market_price" as const },
-                        { label: "P&L", field: "__pnl__" as const },
+                        { label: "רווח/הפסד", field: "__pnl__" as const },
                         { label: "Score ↕", field: "__score__" as const },
                         { label: "Sale", field: "sell_price" as const },
                       ].map(({ label, field }) => (
@@ -3322,7 +3322,7 @@ export default function CollectPro() {
                   <tbody>
                     {pagedItems.map((item) => {
                       const cost   = +item.buy_price + +(item.grading_cost ?? 0);
-                      const profit = item.status === "sold" ? +(item.sell_price ?? 0) - cost : null;
+                      const profit = item.status === "נמכר" ? +(item.sell_price ?? 0) - cost : null;
                       return (
                         <tr key={item.id} className={`border-b border-gray-800/50 hover:bg-white/[0.02] ${compactTable ? "text-xs" : ""}`}>
                           <td className="px-3 py-2.5">
@@ -3377,7 +3377,7 @@ export default function CollectPro() {
                             {item.buy_date}
                             {(() => {
                               const ageDays = Math.round((Date.now() - new Date(item.buy_date).getTime()) / 86400000);
-                              if (item.status === "sold") return null;
+                              if (item.status === "נמכר") return null;
                               const cls = ageDays <= 30 ? "text-gray-600" : ageDays <= 90 ? "text-amber-600" : "text-red-600";
                               return <div className={`font-mono text-xs mt-0.5 ${cls}`}>{ageDays}d old</div>;
                             })()}
@@ -3408,11 +3408,11 @@ export default function CollectPro() {
                                     type="button"
                                     onClick={() => { setInlineEditId(item.id); setInlineEditVal(item.market_price != null ? String(item.market_price) : ""); }}
                                     className="text-blue-400 hover:text-blue-300 transition-colors"
-                                    title="Click to edit market price"
+                                    title="לחץ לעריכת מחיר שוק"
                                   >
                                     {item.market_price != null ? fmt$(item.market_price) : <span className="text-gray-600 text-xs">+ price</span>}
                                   </button>
-                                  {item.market_price != null && item.status !== "sold" && (() => {
+                                  {item.market_price != null && item.status !== "נמכר" && (() => {
                                     const daysSinceUpdate = Math.round((Date.now() - new Date(item.updated_at).getTime()) / 86400000);
                                     if (daysSinceUpdate < 30) return null;
                                     return (
@@ -3420,12 +3420,12 @@ export default function CollectPro() {
                                     );
                                   })()}
                                 </div>
-                                {item.status !== "sold" && (() => {
+                                {item.status !== "נמכר" && (() => {
                                   const breakeven = Math.ceil((cost * 1.13) * 100) / 100; // 13% platform fees
                                   const isAbove = item.market_price != null && item.market_price > breakeven;
                                   return (
                                     <div className={`text-xs font-mono mt-0.5 ${isAbove ? "text-emerald-700" : "text-gray-700"}`}
-                                      title="Break-even incl. ~13% fees">
+                                      title="איזון כולל ~13% עמלות">
                                       BE {fmt$(breakeven)}
                                     </div>
                                   );
@@ -3436,7 +3436,7 @@ export default function CollectPro() {
                           {/* P&L column */}
                           <td className="px-3 py-2.5 text-right">
                             {(() => {
-                              const unrealPnL = item.status !== "sold"
+                              const unrealPnL = item.status !== "נמכר"
                                 ? (item.market_price ?? +item.buy_price) - cost
                                 : null;
                               if (unrealPnL == null) return <span className="text-gray-600">—</span>;
@@ -3450,7 +3450,7 @@ export default function CollectPro() {
                           {/* Sell score / realized ROI column */}
                           <td className="px-3 py-2.5 text-right">
                             {(() => {
-                              if (item.status === "sold" && item.sell_price != null) {
+                              if (item.status === "נמכר" && item.sell_price != null) {
                                 const roi = cost > 0 ? ((+(item.sell_price) - cost) / cost) * 100 : 0;
                                 return (
                                   <span className={`text-xs font-semibold ${roi >= 0 ? "text-emerald-500" : "text-red-400"}`}
@@ -3470,7 +3470,7 @@ export default function CollectPro() {
                             })()}
                           </td>
                           <td className="px-3 py-2.5">
-                            {item.status === "sold" && item.sell_price != null ? (
+                            {item.status === "נמכר" && item.sell_price != null ? (
                               <div>
                                 <div>{fmt$(item.sell_price)}</div>
                                 <div className={`text-xs ${profit! >= 0 ? "text-emerald-400" : "text-red-400"}`}>
@@ -3483,25 +3483,25 @@ export default function CollectPro() {
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="flex gap-1.5 flex-wrap">
-                              {item.status === "active" && (
+                              {item.status === "פעיל" && (
                                 <button
-                                  onClick={() => quickStatusChange(item, "grading")}
+                                  onClick={() => quickStatusChange(item, "גריידינג")}
                                   className="text-xs px-2 py-1 bg-amber-900/60 text-amber-300 rounded hover:bg-amber-800 transition-colors"
-                                  title="Send to grading"
+                                  title="שלח לגריידינג"
                                 >⚗</button>
                               )}
-                              {item.status === "grading" && (
+                              {item.status === "גריידינג" && (
                                 <button
-                                  onClick={() => quickStatusChange(item, "active")}
+                                  onClick={() => quickStatusChange(item, "פעיל")}
                                   className="text-xs px-2 py-1 bg-blue-900/60 text-blue-300 rounded hover:bg-blue-800 transition-colors"
-                                  title="Return to active"
+                                  title="החזר לפעיל"
                                 >↩</button>
                               )}
-                              {item.status !== "sold" && (
+                              {item.status !== "נמכר" && (
                                 <button
                                   onClick={() => markSold(item)}
                                   className="text-xs px-2 py-1 bg-emerald-900/60 text-emerald-300 rounded hover:bg-emerald-800 transition-colors"
-                                  title="Mark sold"
+                                  title="סמן כנמכר"
                                 >✓</button>
                               )}
                               <button
@@ -3511,7 +3511,7 @@ export default function CollectPro() {
                               <button
                                 onClick={() => duplicateItem(item)}
                                 className="text-xs px-2 py-1 bg-gray-800 text-gray-400 rounded hover:bg-gray-700 transition-colors"
-                                title="Duplicate item"
+                                title="שכפל פריט"
                               >⧉</button>
                               <button
                                 onClick={() => d({ t: "DEL_TARGET", id: item.id })}
@@ -3525,12 +3525,12 @@ export default function CollectPro() {
                               <button
                                 onClick={() => d({ t: "SET_MODAL", id: item.id })}
                                 className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded hover:bg-gray-700 transition-colors"
-                                title="Detail"
+                                title="פרטים"
                               >🔍</button>
                               <button
                                 onClick={() => setGradingForItem(item)}
                                 className="text-xs px-2 py-1 bg-indigo-900/60 text-indigo-300 rounded hover:bg-indigo-800 transition-colors"
-                                title="Pre-grade"
+                                title="טרום-גריידינג"
                               >🔬</button>
                             </div>
                           </td>
@@ -3540,7 +3540,7 @@ export default function CollectPro() {
                     {pagedItems.length === 0 && (
                       <tr>
                         <td colSpan={11} className="text-center py-10 text-gray-600">
-                          {s.inv.search ? "No results" : "No items — click Add"}
+                          {s.inv.search ? "אין תוצאות" : "No items — click Add"}
                         </td>
                       </tr>
                     )}
@@ -3621,16 +3621,16 @@ export default function CollectPro() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {([
                 { label: "סה"כ השקעה", value: fmt$(stats.totalCost), cls: "text-amber-400" },
-                { label: "Sale Revenue", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
+                { label: "הכנסות ממכירה", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
                 { label: "Net רווח ממומש", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-                { label: "Realised ROI", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
-                { label: "Avg Hold Time", value: avgHoldDays != null ? `${avgHoldDays}d` : "—", cls: "text-purple-400" },
+                { label: "ROI ממומש", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "זמן החזקה ממוצע", value: avgHoldDays != null ? `${avgHoldDays}d` : "—", cls: "text-purple-400" },
                 ...(salesVelocity ? [
-                  { label: "Avg Days Between Sales", value: `${salesVelocity.avgGapDays}d`, cls: "text-indigo-400" as const },
-                  { label: "Days Since Last Sale",   value: `${salesVelocity.daysSinceLast}d`, cls: salesVelocity.daysSinceLast > salesVelocity.avgGapDays * 1.5 ? "text-amber-400" as const : "text-gray-300" as const },
+                  { label: "ימים ממוצע בין מכירות", value: `${salesVelocity.avgGapDays}d`, cls: "text-indigo-400" as const },
+                  { label: "ימים מאז המכירה האחרונה",   value: `${salesVelocity.daysSinceLast}d`, cls: salesVelocity.daysSinceLast > salesVelocity.avgGapDays * 1.5 ? "text-amber-400" as const : "text-gray-300" as const },
                 ] : []),
                 ...(bestSaleMonth ? [
-                  { label: "Best Sale Month", value: bestSaleMonth.month, cls: "text-emerald-400" as const },
+                  { label: "חודש המכירה הטוב ביותר", value: bestSaleMonth.month, cls: "text-emerald-400" as const },
                 ] : []),
                 ...(sellStreak && sellStreak.current > 1 ? [
                   { label: "🔥 Profit Streak", value: `${sellStreak.current} sales`, cls: "text-orange-400" as const },
@@ -3676,21 +3676,21 @@ export default function CollectPro() {
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false}
                       tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number) => [fmt$(v), "Cumulative Profit"]}
+                      formatter={(v: number) => [fmt$(v), "רווח מצטבר"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
-                    <Area type="monotone" dataKey="profit" stroke="#10b981" strokeWidth={2}
+                    <Area type="monotone" dataKey="רווח" stroke="#10b981" strokeWidth={2}
                       fill="url(#pnl-grad)" dot={{ fill: "#10b981", r: 3, strokeWidth: 0 }} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             )}
 
-            {/* ── Active Portfolio by Franchise ────────────────────────── */}
+            {/* ── פורטפוליו פעיל לפי פרנצ'ייז ────────────────────────── */}
             {franchiseBreakdown.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-4">Active Portfolio by Franchise</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-4">פורטפוליו פעיל לפי פרנצ'ייז</p>
                 <div className="space-y-3">
                   {franchiseBreakdown.map(({ name, value, count, pct }) => (
                     <div key={name}>
@@ -3733,7 +3733,7 @@ export default function CollectPro() {
             {/* ── Best/Worst Deals (by absolute $ profit) ─────────────── */}
             {(() => {
               const sold = s.items
-                .filter(i => i.status === "sold" && i.sell_price != null)
+                .filter(i => i.status === "נמכר" && i.sell_price != null)
                 .map(i => {
                   const cost = +i.buy_price + +(i.grading_cost ?? 0);
                   return { item: i, profit: +(i.sell_price!) - cost };
@@ -3779,7 +3779,7 @@ export default function CollectPro() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.name}</p>
                       <p className="text-xs text-gray-500">
-                        {item.status === "sold" ? "✓ Sold" : item.condition}
+                        {item.status === "נמכר" ? "✓ Sold" : item.condition}
                         {item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}
                       </p>
                     </div>
@@ -3795,17 +3795,17 @@ export default function CollectPro() {
             {/* ── Partner P&L Comparison ───────────────────────────────── */}
             {partnerPnL.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Partner Realized Profit Comparison</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">השוואת רווח ממומש לפי שותף</p>
                 <ResponsiveContainer width="100%" height={Math.max(80, partnerPnL.length * 44)}>
                   <BarChart data={partnerPnL} layout="vertical" margin={{ top: 0, right: 48, left: 0, bottom: 0 }}>
                     <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} />
                     <YAxis type="category" dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} width={88} />
                     <Tooltip
-                      formatter={(v: number) => [fmt$(v), "Net Profit"]}
+                      formatter={(v: number) => [fmt$(v), "רווח נקי"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
-                    <Bar dataKey="profit" name="profit" radius={[0, 3, 3, 0]}>
+                    <Bar dataKey="רווח" name="רווח" radius={[0, 3, 3, 0]}>
                       {partnerPnL.map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.85} />
                       ))}
@@ -3818,26 +3818,26 @@ export default function CollectPro() {
             {/* ── Monthly Revenue Bar Chart ──────────────────────────────── */}
             {monthlyRevenue.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly Revenue & Net Profit</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Monthly Revenue & רווח נקי</p>
                 <ResponsiveContainer width="100%" height={190}>
                   <ComposedChart data={monthlyRevenue} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2}>
                     <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number, name: string) => [fmt$(v), name === "revenue" ? "Revenue" : name === "profit" ? "Net Profit" : "3-mo avg profit"]}
+                      formatter={(v: number, name: string) => [fmt$(v), name === "הכנסה" ? "הכנסה" : name === "רווח" ? "רווח נקי" : "3-mo avg profit"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
                     <Legend
                       iconSize={8}
-                      formatter={(value) => <span style={{ color: "#9ca3af", fontSize: 10 }}>{value === "revenue" ? "Revenue" : value === "profit" ? "Net Profit" : "3-mo avg"}</span>}
+                      formatter={(value) => <span style={{ color: "#9ca3af", fontSize: 10 }}>{value === "הכנסה" ? "הכנסה" : value === "רווח" ? "רווח נקי" : "3-mo avg"}</span>}
                     />
-                    <Bar dataKey="revenue" name="revenue" radius={[3, 3, 0, 0]}>
+                    <Bar dataKey="הכנסה" name="הכנסה" radius={[3, 3, 0, 0]}>
                       {monthlyRevenue.map((_, i) => (
                         <Cell key={i} fill="#3b82f6" />
                       ))}
                     </Bar>
-                    <Bar dataKey="profit" name="profit" radius={[3, 3, 0, 0]}>
+                    <Bar dataKey="רווח" name="רווח" radius={[3, 3, 0, 0]}>
                       {monthlyRevenue.map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.85} />
                       ))}
@@ -3866,7 +3866,7 @@ export default function CollectPro() {
                     <XAxis dataKey="date" tick={{ fill: "#6b7280", fontSize: 9 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number) => [fmt$(v), "Cumulative profit"]}
+                      formatter={(v: number) => [fmt$(v), "רווח מצטבר"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
@@ -3876,21 +3876,21 @@ export default function CollectPro() {
               </div>
             )}
 
-            {/* ── Quarterly Performance ───────────────────────────────────── */}
+            {/* ── ביצועים רבעוניים ───────────────────────────────────── */}
             {quarterlyPerformance.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Quarterly Performance</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">ביצועים רבעוניים</p>
                 <ResponsiveContainer width="100%" height={130}>
                   <BarChart data={quarterlyPerformance} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                     <XAxis dataKey="quarter" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number, name: string) => [name === "count" ? `${v} sales` : fmt$(v), name === "count" ? "Sales" : "Profit"]}
+                      formatter={(v: number, name: string) => [name === "count" ? `${v} sales` : fmt$(v), name === "count" ? "מכירות" : "רווח"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
                     <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
-                    <Bar dataKey="profit" name="profit" radius={[3, 3, 0, 0]}>
+                    <Bar dataKey="רווח" name="רווח" radius={[3, 3, 0, 0]}>
                       {quarterlyPerformance.map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
                       ))}
@@ -3909,12 +3909,12 @@ export default function CollectPro() {
                     <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} width={48} />
                     <Tooltip
-                      formatter={(v: number) => [fmt$(v), "Profit"]}
+                      formatter={(v: number) => [fmt$(v), "רווח"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
                     <ReferenceLine y={0} stroke="#374151" strokeWidth={1} />
-                    <Bar dataKey="profit" radius={[3, 3, 0, 0]}>
+                    <Bar dataKey="רווח" radius={[3, 3, 0, 0]}>
                       {monthlyPnL.map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
                       ))}
@@ -3927,7 +3927,7 @@ export default function CollectPro() {
             {/* ── Franchise ROI ─────────────────────────────────────────── */}
             {franchiseBreakdown.filter(f => f.sold > 0).length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Realized Profit by Franchise</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">רווח ממומש לפי פרנצ'ייז</p>
                 <ResponsiveContainer width="100%" height={Math.max(100, franchiseBreakdown.filter(f => f.sold > 0).length * 30)}>
                   <BarChart
                     data={franchiseBreakdown.filter(f => f.sold > 0).sort((a, b) => b.profit - a.profit)}
@@ -3937,10 +3937,10 @@ export default function CollectPro() {
                     <XAxis type="number" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={fmt$} />
                     <YAxis type="category" dataKey="name" tick={{ fill: "#9ca3af", fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
                     <Tooltip
-                      formatter={(v: number) => [fmt$(v), "Profit"]}
+                      formatter={(v: number) => [fmt$(v), "רווח"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                     />
-                    <Bar dataKey="profit" radius={[0, 4, 4, 0]}>
+                    <Bar dataKey="רווח" radius={[0, 4, 4, 0]}>
                       {franchiseBreakdown.filter(f => f.sold > 0).sort((a, b) => b.profit - a.profit).map((entry, i) => (
                         <Cell key={i} fill={entry.profit >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.8} />
                       ))}
@@ -3968,7 +3968,7 @@ export default function CollectPro() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{item.name}</p>
                       <p className="text-xs text-gray-500">
-                        {item.status === "sold" ? "✓ Sold" : item.condition}
+                        {item.status === "נמכר" ? "✓ Sold" : item.condition}
                         {item.psa_grade ? ` · PSA ${item.psa_grade}` : ""}
                       </p>
                     </div>
@@ -3985,7 +3985,7 @@ export default function CollectPro() {
             {conditionROI.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">
-                  Realized ROI by Condition
+                  ROI ממומש לפי מצב
                   <span className="ml-1 font-normal normal-case">raw sold cards</span>
                 </p>
                 <div className="space-y-2.5">
@@ -4017,7 +4017,7 @@ export default function CollectPro() {
             {/* ── Franchise ROI Breakdown ───────────────────────────────── */}
             {franchiseROI.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Realized ROI by Franchise</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">ROI ממומש לפי פרנצ'ייז</p>
                 <div className="space-y-2.5">
                   {franchiseROI.map(({ name, profit, roi, count }) => (
                     <div key={name} className="flex items-center gap-3">
@@ -4046,7 +4046,7 @@ export default function CollectPro() {
             {cardSetROI.length >= 2 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">
-                  Realized ROI by Card Set
+                  ROI ממומש לפי סט קלפים
                   <span className="ml-1 font-normal normal-case">(≥2 sales)</span>
                 </p>
                 <div className="space-y-2.5">
@@ -4107,10 +4107,10 @@ export default function CollectPro() {
               </div>
             )}
 
-            {/* ── Cost Composition ─────────────────────────────────────── */}
+            {/* ── הרכב עלויות ─────────────────────────────────────── */}
             {costComposition.total > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Cost Composition</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">הרכב עלויות</p>
                 <div className="mb-3">
                   <div className="flex items-center justify-between text-xs mb-1">
                     <span className="text-gray-400">Buy cost <span className="text-gray-600">({costComposition.buyPct.toFixed(0)}%)</span></span>
@@ -4179,7 +4179,7 @@ export default function CollectPro() {
             {/* ── ROI Distribution ─────────────────────────────────────── */}
             {roiDistribution.some(b => b.count > 0) && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Sale ROI Distribution</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">פיזור ROI ממכירות</p>
                 <div className="flex gap-1 items-end h-16">
                   {roiDistribution.map((b) => {
                     const maxCount = Math.max(1, ...roiDistribution.map(x => x.count));
@@ -4226,7 +4226,7 @@ export default function CollectPro() {
                     ));
                   })()}
                 </div>
-                <p className="text-xs text-gray-700 mt-2">Hold time = sold date − buy date. Avg profit shown per bucket.</p>
+                <p className="text-xs text-gray-700 mt-2">Hold time = תאריך מכירה − תאריך קנייה. Avg profit shown per bucket.</p>
               </div>
             )}
 
@@ -4239,7 +4239,7 @@ export default function CollectPro() {
                     <XAxis dataKey="month" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
                     <Tooltip
-                      formatter={(v: number) => [v, "Cards bought"]}
+                      formatter={(v: number) => [v, "קלפים שנרכשו"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
@@ -4252,7 +4252,7 @@ export default function CollectPro() {
             {/* ── Day-of-Week Sales Heatmap ─────────────────────────────── */}
             {dayOfWeekROI.some(d => d.count > 0) && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">Sales by Day of Week</p>
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">מכירות לפי יום בשבוע</p>
                 <div className="flex gap-1 items-end h-20">
                   {dayOfWeekROI.map((d) => {
                     const maxProfit = Math.max(...dayOfWeekROI.map(x => x.profit), 0.01);
@@ -4285,7 +4285,7 @@ export default function CollectPro() {
                     <XAxis dataKey="label" tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: "#6b7280", fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
                     <Tooltip
-                      formatter={(v: number, name: string) => [name === "count" ? `${v} sales` : fmt$(v as number), name === "count" ? "Sales" : "Profit"]}
+                      formatter={(v: number, name: string) => [name === "count" ? `${v} sales` : fmt$(v as number), name === "count" ? "מכירות" : "רווח"]}
                       contentStyle={{ background: "#111827", border: "1px solid #374151", borderRadius: 8 }}
                       labelStyle={{ color: "#9ca3af" }}
                     />
@@ -4301,26 +4301,26 @@ export default function CollectPro() {
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
               <div className="px-4 py-3 border-b border-gray-800 font-semibold text-sm flex items-center justify-between">
-                <span>Sold Transactions</span>
+                <span>עסקאות שנמכרו</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 font-normal">{s.items.filter(i => i.status === "sold").length} sales</span>
+                  <span className="text-xs text-gray-500 font-normal">{s.items.filter(i => i.status === "נמכר").length} sales</span>
                   <button
-                    onClick={() => exportCSV(s.items.filter(i => i.status === "sold"), s.partners, "sold-transactions.csv")}
+                    onClick={() => exportCSV(s.items.filter(i => i.status === "נמכר"), s.partners, "sold-transactions.csv")}
                     className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                    title="Export sold transactions to CSV"
+                    title="ייצוא עסקאות מכירה ל-CSV"
                   >⬇ CSV</button>
                 </div>
               </div>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-800">
-                    {["Item", "Sold Date", "Buy", "Grading", "Base Cost", "Sale", "Net Profit", "ROI", "Hold", "Partner"].map((h) => (
+                    {["Item", "תאריך מכירה", "Buy", "גריידינג", "עלות בסיס", "Sale", "רווח נקי", "ROI", "החזקה", "שותף"].map((h) => (
                       <th key={h} className="text-right px-3 py-2.5 text-xs font-semibold text-gray-400 first:text-left">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {s.items.filter((i) => i.status === "sold" && i.sell_price != null)
+                  {s.items.filter((i) => i.status === "נמכר" && i.sell_price != null)
                     .sort((a, b) => new Date(b.sold_at ?? b.updated_at).getTime() - new Date(a.sold_at ?? a.updated_at).getTime())
                     .map((i) => {
                       const base     = +i.buy_price + +(i.grading_cost ?? 0);
@@ -4354,12 +4354,12 @@ export default function CollectPro() {
                         </tr>
                       );
                     })}
-                  {s.items.filter((i) => i.status === "sold").length === 0 && (
+                  {s.items.filter((i) => i.status === "נמכר").length === 0 && (
                     <tr>
                       <td colSpan={10} className="text-center py-12 text-gray-600">
                         <div className="text-2xl mb-2">📈</div>
-                        <div>No sold transactions yet</div>
-                        <div className="text-xs text-gray-700 mt-1">Mark a card as sold from the Inventory to see ROI here</div>
+                        <div>No עסקאות שנמכרו yet</div>
+                        <div className="text-xs text-gray-700 mt-1">סמן קלף כנמכר מהמלאי כדי לראות ROI כאן</div>
                       </td>
                     </tr>
                   )}
@@ -4386,11 +4386,11 @@ export default function CollectPro() {
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-1">
               <h2 className="font-bold">🌐 סריקת שוק — Forensic Truth</h2>
-              {s.items.filter(i => i.status === "active" && i.market_price == null).length > 0 && (
+              {s.items.filter(i => i.status === "פעיל" && i.market_price == null).length > 0 && (
                 <button
                   onClick={() => {
                     const unpriced = s.items
-                      .filter(i => i.status === "active" && i.market_price == null)
+                      .filter(i => i.status === "פעיל" && i.market_price == null)
                       .slice(0, 1); // Start with first unpriced item
                     if (unpriced.length > 0) {
                       const item = unpriced[0];
@@ -4401,7 +4401,7 @@ export default function CollectPro() {
                   }}
                   className="text-xs px-3 py-1.5 rounded-lg bg-blue-900/60 text-blue-300 hover:bg-blue-800 border border-blue-700/40 transition-colors"
                 >
-                  ⚡ Auto-scan next unpriced ({s.items.filter(i => i.status === "active" && i.market_price == null).length})
+                  ⚡ Auto-scan next unpriced ({s.items.filter(i => i.status === "פעיל" && i.market_price == null).length})
                 </button>
               )}
             </div>
@@ -4427,7 +4427,7 @@ export default function CollectPro() {
             {/* Suggested scans based on unpriced inventory */}
             {s.market.mode === "market" && (() => {
               const unpriced = s.items
-                .filter(i => i.status === "active" && i.market_price == null)
+                .filter(i => i.status === "פעיל" && i.market_price == null)
                 .sort((a, b) => +b.buy_price - +a.buy_price)
                 .slice(0, 8);
               if (unpriced.length === 0) return null;
@@ -4461,13 +4461,13 @@ export default function CollectPro() {
               placeholder={
                 s.market.mode === "market"
                   ? "e.g. What is the price of PSA 10 Charizard Base Set 1st Edition?"
-                  : "e.g. Arbitrage opportunities in One Piece Paramount War cards"
+                  : "לדוגמה: הזדמנויות ארביטראז' בקלפי One Piece Paramount War"
               }
             />
 
             <div className="flex gap-2">
               {s.market.busy
-                ? <Button variant="destructive" onClick={cancelAI}>Cancel Scan</Button>
+                ? <Button variant="destructive" onClick={cancelAI}>בטל סריקה</Button>
                 : <Button onClick={runScan} disabled={!s.market.query.trim()}>🔍 Run Scan</Button>
               }
             </div>
@@ -4481,7 +4481,7 @@ export default function CollectPro() {
 
             {s.market.result && (() => {
               const price  = extractFirstPrice(s.market.result);
-              const matches = findMatchingItems(s.market.query, s.items.filter((i) => i.status === "active"));
+              const matches = findMatchingItems(s.market.query, s.items.filter((i) => i.status === "פעיל"));
               return (
                 <>
                   {price != null && matches.length > 0 && (
@@ -4504,11 +4504,11 @@ export default function CollectPro() {
                   )}
                   <div className="mt-4 bg-gray-800 border border-gray-700 rounded-xl overflow-hidden">
                     <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
-                      <span className="text-xs text-gray-500 font-medium">Scan Result</span>
+                      <span className="text-xs text-gray-500 font-medium">תוצאת סריקה</span>
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(s.market.result);
-                          toast.success("Copied to clipboard");
+                          toast.success("הועתק ללוח");
                         }}
                         className="text-xs text-gray-400 hover:text-white transition-colors px-2 py-1 rounded hover:bg-gray-700"
                       >
@@ -4526,7 +4526,7 @@ export default function CollectPro() {
             {/* ── Scan History ─────────────────────────────────────────── */}
             {scanHistory.length > 0 && (
               <div className="mt-4 border-t border-gray-800 pt-4">
-                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Recent Scans</div>
+                <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">סריקות אחרונות</div>
                 <div className="space-y-1.5">
                   {scanHistory.map((h, idx) => (
                     <button
@@ -4577,16 +4577,16 @@ export default function CollectPro() {
                   />
                 </div>
                 <Button type="submit" disabled={s.addingPartner}>
-                  {s.addingPartner ? "Adding…" : "Add"}
+                  {s.addingPartner ? "Adding…" : "הוסף"}
                 </Button>
               </form>
             </div>}
 
             {partnerStats.map(({ partner, stats: ps }) => {
               const partnerItems  = s.items.filter(i => i.partner_id === partner.id);
-              const activeItems   = partnerItems.filter(i => i.status !== "sold");
+              const activeItems   = partnerItems.filter(i => i.status !== "נמכר");
               const soldItems     = partnerItems
-                .filter(i => i.status === "sold" && i.sell_price != null)
+                .filter(i => i.status === "נמכר" && i.sell_price != null)
                 .sort((a, b) => new Date(b.sold_at ?? b.updated_at).getTime() - new Date(a.sold_at ?? a.updated_at).getTime());
               const isExpanded    = expandedPartners.has(partner.id);
               const PREVIEW       = 4;
@@ -4606,10 +4606,10 @@ export default function CollectPro() {
                     <div className="flex gap-1.5">
                       <Button size="sm" variant="outline"
                         onClick={() => exportCSV(partnerItems, s.partners, `${partner.name}.csv`)}
-                        title="Standard CSV">⬇ CSV</Button>
+                        title="CSV רגיל">⬇ CSV</Button>
                       <Button size="sm" variant="outline"
                         onClick={() => exportEbayCSV(partnerItems, `${partner.name}-ebay.csv`)}
-                        title="eBay Bulk Upload CSV">eBay</Button>
+                        title="eBay CSV להעלאה המונית">eBay</Button>
                       <Button size="sm" variant="outline"
                         onClick={() => exportCardmarketCSV(partnerItems, `${partner.name}-cm.csv`)}
                         title="Cardmarket CSV">CM</Button>
@@ -4621,8 +4621,8 @@ export default function CollectPro() {
                     {([
                       { label: "סה"כ השקעה",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
                       { label: "הערכת שוק פעיל", value: fmt$(ps.estimatedValue),   cls: "text-blue-400" },
-                      { label: "Sale Revenue",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
-                      { label: "Net Profit + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
+                      { label: "הכנסות ממכירה",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
+                      { label: "רווח נקי + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
                         cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
                       ...(ps.soldCount > 0 ? (() => {
                         const totalHold = soldItems.reduce((acc, i) => {
@@ -4632,8 +4632,8 @@ export default function CollectPro() {
                         const avgHold = soldItems.length > 0 ? Math.round(totalHold / soldItems.length) : 0;
                         const margin = ps.realisedRevenue > 0 ? (ps.realisedProfit / ps.realisedRevenue) * 100 : 0;
                         return [
-                          { label: "Avg Sale Margin", value: fmtPct(margin), cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-                          { label: "Avg Hold Time", value: `${avgHold}d`, cls: "text-indigo-400" },
+                          { label: "מרווח מכירה ממוצע", value: fmtPct(margin), cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                          { label: "זמן החזקה ממוצע", value: `${avgHold}d`, cls: "text-indigo-400" },
                         ];
                       })() : []),
                     ] as { label: string; value: string; cls: string }[]).map(st => (
@@ -4663,7 +4663,7 @@ export default function CollectPro() {
                   {/* Active / Grading items */}
                   {displayed.map(i => {
                     const base   = +i.buy_price + +(i.grading_cost ?? 0);
-                    const value  = i.status === "sold" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
+                    const value  = i.status === "נמכר" ? +(i.sell_price ?? 0) : +(i.market_price ?? i.buy_price);
                     const profit = value - base;
                     return (
                       <div key={i.id} className="flex items-center justify-between py-1.5 border-t border-gray-800 text-sm gap-2">
@@ -4700,11 +4700,11 @@ export default function CollectPro() {
                     </button>
                   )}
 
-                  {/* Sold transactions mini table */}
+                  {/* עסקאות שנמכרו mini table */}
                   {soldItems.length > 0 && (
                     <div className="mt-4 border-t border-gray-800 pt-3">
                       <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center justify-between">
-                        <span>Sold Transactions</span>
+                        <span>עסקאות שנמכרו</span>
                         <span className="text-gray-600 font-normal">{soldItems.length} sales</span>
                       </div>
                       <div className="space-y-1">
@@ -4754,9 +4754,9 @@ export default function CollectPro() {
             {s.partners.length === 0 && (
               <div className="text-center py-16 text-gray-600">
                 <div className="text-4xl mb-3">🤝</div>
-                <div className="font-semibold mb-1">No portfolios yet</div>
+                <div className="font-semibold mb-1">אין פורטפוליואים עדיין</div>
                 <div className="text-sm text-gray-700">
-                  {s.isAdmin ? "Add the first portfolio above to get started." : "Ask your admin to add you to a portfolio."}
+                  {s.isAdmin ? "הוסף את הפורטפוליו הראשון למעלה כדי להתחיל." : "בקש מהמנהל שלך להוסיף אותך לפורטפוליו."}
                 </div>
               </div>
             )}
