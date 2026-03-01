@@ -1,13 +1,13 @@
 /**
  * CollectPro — Monster Mode
- * מנהל תיק קלפים TCG with Arena, Cards View, Quick Scan, and Mobile Nav.
+ * מנהל תיק קלפים TCG with Arena, Cards View, Quick Scan, and Mobile Nav.h
  */
 
 import React, {
   useReducer,
   useEffect,
   useState,
-  useMemo,
+  useMemo,h
   useRef,
   useCallback,
 } from "react";
@@ -1928,7 +1928,7 @@ export default function CollectPro() {
             <div className="flex flex-wrap gap-2">
               {[
                 {
-                  label: "📦 Inventory",
+                  label: "📦 מלאי",
                   action: () => d({ t: "SET_TAB", tab: "inventory" }),
                   badge: s.items.filter(i => i.status === "active").length.toString(),
                 },
