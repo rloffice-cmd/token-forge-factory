@@ -1,6 +1,6 @@
 /**
  * CollectPro — Monster Mode
- * TCG Card Portfolio Manager with Arena, Cards View, Quick Scan, and Mobile Nav.
+ * מנהל תיק קלפים TCG with Arena, Cards View, Quick Scan, and Mobile Nav.
  */
 
 import React, {
@@ -64,7 +64,7 @@ import { StatusBadge } from "@/components/collectpro/StatusBadge";
 
 export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
-  // Separate abort controllers — cancelling chat must not kill an in-progress market scan
+  // Separate abort controllers — cancelling chat must not kill an in-progress סריקת שוק
   const chatAbort  = useRef<AbortController | null>(null);
   const scanAbort  = useRef<AbortController | null>(null);
   const chatEndRef    = useRef<HTMLDivElement>(null);
@@ -1019,7 +1019,7 @@ export default function CollectPro() {
     return { psa, raw };
   }, [s.items]);
 
-  // Breakout cards: active items with unrealised gain ≥100% (2× or better)
+  // Breakout cards: active items with לא ממומש gain ≥100% (2× or better)
   const breakoutCards = useMemo(() =>
     s.items
       .filter(i => i.status !== "sold" && i.market_price != null)
@@ -1074,7 +1074,7 @@ export default function CollectPro() {
   const sortedItems = useMemo(() => {
     const arr = [...filteredItems];
     const { field, dir } = s.inv.sort;
-    // Compute unrealised P&L for sorting purposes
+    // Compute רווח/הפסד לא ממומש for sorting purposes
     const pnl = (i: CollectionItem) => {
       const c = +i.buy_price + +(i.grading_cost ?? 0);
       if (i.status === "sold") return +(i.sell_price ?? 0) - c;
@@ -1131,10 +1131,10 @@ export default function CollectPro() {
     const lines: string[] = [
       "=== PORTFOLIO SUMMARY ===",
       `Cards: ${s.items.length} total  |  ${active.length} active, ${grading.length} grading, ${sold.length} sold`,
-      `Total invested (buy + grading): ${fmt$(stats.totalCost)}`,
+      `סה"כ השקעה (קנייה + גריידינג): ${fmt$(stats.totalCost)}`,
       `Active market estimate: ${fmt$(stats.estimatedValue)}${pct(stats.estimatedValue, stats.totalCost - sold.reduce((s,i)=>s+cost(i),0))}`,
-      `Unrealised P&L: ${fmt$(stats.unrealisedPnL)}`,
-      `Realised profit: ${fmt$(stats.realisedProfit)} on ${sold.length} sales (ROI ${fmtPct(stats.roiPct)})`,
+      `רווח/הפסד לא ממומש: ${fmt$(stats.לא ממומשPnL)}`,
+      `רווח ממומש: ${fmt$(stats.realisedProfit)} on ${sold.length} sales (ROI ${fmtPct(stats.roiPct)})`,
     ];
 
     // Active cards — sorted by market value desc
@@ -1575,7 +1575,7 @@ export default function CollectPro() {
     sendChatMessage(s.chat.input.trim());
   }, [s.chat.input, sendChatMessage]);
 
-  // ── AI — Market scan ───────────────────────────────────────────────────────
+  // ── AI — סריקת שוק ───────────────────────────────────────────────────────
 
   const runScan = useCallback(async () => {
     const query = s.market.query.trim();
@@ -1676,7 +1676,7 @@ export default function CollectPro() {
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-950 gap-5">
         <div className="text-center">
           <div className="text-3xl font-extrabold text-white tracking-tight">CollectPro</div>
-          <div className="text-sm text-gray-500 mt-1">TCG Card Portfolio Manager</div>
+          <div className="text-sm text-gray-500 mt-1">מנהל תיק קלפים TCG</div>
         </div>
         <div className="w-10 h-10 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
         <div className="text-sm text-gray-600">Loading portfolio…</div>
@@ -1812,10 +1812,10 @@ export default function CollectPro() {
                 title={`Sync: ${connState}`}
               />
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">TCG Card Portfolio Manager</p>
+            <p className="text-xs text-gray-500 mt-0.5">מנהל תיק קלפים TCG</p>
           </div>
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-            <span>Franchise only</span>
+            <span>פרנצ'ייז בלבד</span>
             <div
               onClick={() => d({ t: "TOGGLE_FRANCHISE" })}
               className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${s.franchise ? "bg-blue-600" : "bg-gray-700"}`}
@@ -1828,11 +1828,11 @@ export default function CollectPro() {
         {/* Stats row */}
         <div className="flex flex-wrap gap-2 mt-3">
           {[
-            { label: "Total Invested", value: fmt$(stats.totalCost), color: "text-amber-400" },
-            { label: "Active Market Est. ⚠", value: fmt$(stats.estimatedValue), sub: "estimate only", color: "text-blue-400" },
-            { label: "Unrealised P&L", value: fmt$(stats.unrealisedPnL), color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
-            { label: "Realised Profit", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
-            { label: "ROI", value: fmtPct(stats.roiPct), sub: `${stats.soldCount} sales`, color: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "סה"כ השקעה", value: fmt$(stats.totalCost), color: "text-amber-400" },
+            { label: "הערכת שוק פעיל ⚠", value: fmt$(stats.estimatedValue), sub: "הערכה בלבד", color: "text-blue-400" },
+            { label: "רווח/הפסד לא ממומש", value: fmt$(stats.לא ממומשPnL), color: stats.לא ממומשPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "רווח ממומש", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "תשואה", value: fmtPct(stats.roiPct), sub: `${stats.soldCount} sales`, color: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
           ].map((st) => (
             <div key={st.label} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 flex-1 min-w-[110px]">
               <div className="text-xs text-gray-500 mb-0.5 leading-tight">{st.label}</div>
@@ -1846,9 +1846,9 @@ export default function CollectPro() {
               const text = [
                 "📊 CollectPro Portfolio Summary",
                 "─".repeat(32),
-                `Total Invested:    ${fmt$(stats.totalCost)}`,
+                `סה"כ השקעה:    ${fmt$(stats.totalCost)}`,
                 `Active Mkt Est.:   ${fmt$(stats.estimatedValue)} (estimate)`,
-                `Unrealized P&L:    ${stats.unrealisedPnL >= 0 ? "+" : ""}${fmt$(stats.unrealisedPnL)}`,
+                `Unrealized P&L:    ${stats.לא ממומשPnL >= 0 ? "+" : ""}${fmt$(stats.לא ממומשPnL)}`,
                 `Realized Profit:   ${stats.realisedProfit >= 0 ? "+" : ""}${fmt$(stats.realisedProfit)} (${fmtPct(stats.roiPct)} ROI)`,
                 `Sales:             ${stats.soldCount} transactions`,
                 `Portfolio Health:  ${health}`,
@@ -1857,13 +1857,13 @@ export default function CollectPro() {
                 `Generated: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`,
               ].join("\n");
               navigator.clipboard.writeText(text);
-              toast.success("Portfolio summary copied to clipboard");
+              toast.success("סיכום הפורטפוליו הועתק ללוח");
             }}
             className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-gray-500 hover:text-gray-300 hover:border-white/20 transition-colors text-xs flex flex-col items-center justify-center gap-1 min-w-[52px]"
-            title="Copy portfolio summary to clipboard"
+            title="העתק סיכום פורטפוליו ללוח"
           >
             <span className="text-base">⎘</span>
-            <span>Share</span>
+            <span>שיתוף</span>
           </button>
         </div>
       </div>
@@ -1875,8 +1875,8 @@ export default function CollectPro() {
           ...(s.isAdmin ? ["admin"] : []),
         ] as Tab[]).map((tab) => {
           const labels: Record<Tab, string> = {
-            brain: "🧠 Brain", inventory: "📦 Inventory", roi: "📈 ROI",
-            arena: "⚔️ Arena", market: "🌐 Market", partners: "🤝 Partners",
+            brain: "🧠 מוח", inventory: "📦 מלאי", roi: "📈 ROI",
+            arena: "⚔️ זירה", market: "🌐 Market", partners: "🤝 שותפים",
             grade: "🔬 Grading", admin: "🔐 Admin",
           };
           return (
@@ -1907,11 +1907,11 @@ export default function CollectPro() {
         {s.tab === "brain" && (
           <div className="space-y-3">
 
-            {/* ── Portfolio Snapshot ────────────────────────────────────────────── */}
+            {/* ── תמונת מצב הפורטפוליו ────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
                 { label: "Active", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} market` },
-                { label: "Grading", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} invested` },
+                { label: "גריידינג", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} invested` },
                 { label: "Sold", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} profit` },
                 { label: "Portfolio", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} invested` },
                 ...(thisMonth ? [{ label: "This Month", value: `${fmt$(thisMonth.profit)}`, cls: thisMonth.profit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${thisMonth.sold} sold · ${thisMonth.bought} bought` }] : []),
@@ -1938,14 +1938,14 @@ export default function CollectPro() {
                   badge: null,
                 },
                 {
-                  label: "🌐 Market Scan",
+                  label: "🌐 סריקת שוק",
                   action: () => d({ t: "SET_TAB", tab: "market" }),
                   badge: s.items.filter(i => i.status === "active" && i.market_price == null).length > 0
                     ? `${s.items.filter(i => i.status === "active" && i.market_price == null).length} unpriced`
                     : null,
                 },
                 {
-                  label: "⬇ Export CSV",
+                  label: "⬇ ייצוא CSV",
                   action: () => exportCSV(s.items, s.partners),
                   badge: null,
                 },
@@ -2117,8 +2117,8 @@ export default function CollectPro() {
                     { label: "Prices",  score: portfolioHealth.priceCoverage  },
                     { label: "P&L",     score: portfolioHealth.profitScore     },
                     { label: "Diverse", score: portfolioHealth.diverseScore    },
-                    { label: "Grading", score: portfolioHealth.gradingScore    },
-                    { label: "ROI",     score: portfolioHealth.roiScore        },
+                    { label: "גריידינג", score: portfolioHealth.gradingScore    },
+                    { label: "תשואה",     score: portfolioHealth.roiScore        },
                   ].map((f) => (
                     <div key={f.label} className="text-center">
                       <div className="h-1 bg-gray-800 rounded-full overflow-hidden mb-1">
@@ -2132,15 +2132,15 @@ export default function CollectPro() {
               </div>
             )}
 
-            {/* ── Portfolio snapshot ──────────────────────────────────────────── */}
+            {/* ── תמונת מצב הפורטפוליו ──────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">Portfolio Snapshot</div>
+              <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">תמונת מצב הפורטפוליו</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { label: "Active",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
-                  { label: "Grading",  value: stats.gradingCount.toString(),       sub: "cards",         color: "text-amber-400" },
-                  { label: "Invested", value: fmt$(stats.totalCost),               sub: "buy + grading", color: "text-gray-200" },
-                  { label: "Est. P&L", value: fmt$(stats.unrealisedPnL),           sub: "unrealised",    color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+                  { label: "גריידינג",  value: stats.gradingCount.toString(),       sub: "cards",         color: "text-amber-400" },
+                  { label: "Invested", value: fmt$(stats.totalCost),               sub: "קנייה + גריידינג", color: "text-gray-200" },
+                  { label: "הערכת רווח/הפסד", value: fmt$(stats.לא ממומשPnL),           sub: "לא ממומש",    color: stats.לא ממומשPnL >= 0 ? "text-emerald-400" : "text-red-400" },
                 ].map((st) => (
                   <div key={st.label} className="bg-gray-800/60 rounded-lg px-3 py-2">
                     <div className="text-xs text-gray-500">{st.label}</div>
@@ -2278,7 +2278,7 @@ export default function CollectPro() {
               <div className="bg-gray-900 border border-emerald-900/40 rounded-xl p-4">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
                   <span>🚀 Breakout Cards</span>
-                  <span className="text-xs font-normal normal-case text-gray-600">unrealised gain ≥100%</span>
+                  <span className="text-xs font-normal normal-case text-gray-600">לא ממומש gain ≥100%</span>
                 </div>
                 <div className="space-y-1.5">
                   {breakoutCards.map(({ item, cost, gain, gainPct }) => (
@@ -2759,7 +2759,7 @@ export default function CollectPro() {
                           <button
                             onClick={() => { d({ t: "SET_TAB", tab: actionTab }); d({ t: "MKT_QUERY", v: query }); }}
                             className="text-xs px-2 py-1 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors"
-                            title="Open Market Scan for this card"
+                            title="Open סריקת שוק for this card"
                           >Scan</button>
                         )}
                       </div>
@@ -2801,8 +2801,8 @@ export default function CollectPro() {
 
             {/* ── Chat ────────────────────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
-              <p className="text-xs text-gray-500 mb-3">Analysis based on your real portfolio data. Ask anything — including uncomfortable questions.</p>
+              <h2 className="font-bold mb-1">🧠 יועץ פורטפוליו חקירתי</h2>
+              <p className="text-xs text-gray-500 mb-3">ניתוח מבוסס על נתוני הפורטפוליו האמיתיים שלך. שאל כל שאלה — כולל שאלות לא נוחות.</p>
 
               {/* Suggested questions — shown only when chat is empty */}
               {s.chat.messages.length === 0 && !s.chat.busy && (
@@ -2987,7 +2987,7 @@ export default function CollectPro() {
                   {([
                     { key: "all",     label: "All",     count: s.items.length,                                   badge: null },
                     { key: "active",  label: "Active",  count: activeItems.length,                               badge: noPriceCount > 0 ? `${noPriceCount} no price` : null },
-                    { key: "grading", label: "Grading", count: s.items.filter(i => i.status === "grading").length, badge: null },
+                    { key: "grading", label: "גריידינג", count: s.items.filter(i => i.status === "grading").length, badge: null },
                     { key: "sold",    label: "Sold",    count: s.items.filter(i => i.status === "sold").length,   badge: null },
                   ] as const).map(({ key, label, count, badge }) => (
                     <button
@@ -3302,8 +3302,8 @@ export default function CollectPro() {
                         { label: "Status", field: "status" as const },
                         { label: "Age ↕", field: "__age__" as const },
                         { label: "Buy", field: "buy_price" as const },
-                        { label: "Grading", field: "grading_cost" as const },
-                        { label: "Market", field: "market_price" as const },
+                        { label: "גריידינג", field: "grading_cost" as const },
+                        { label: "שוק", field: "market_price" as const },
                         { label: "P&L", field: "__pnl__" as const },
                         { label: "Score ↕", field: "__score__" as const },
                         { label: "Sale", field: "sell_price" as const },
@@ -3620,9 +3620,9 @@ export default function CollectPro() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {([
-                { label: "Total Invested", value: fmt$(stats.totalCost), cls: "text-amber-400" },
+                { label: "סה"כ השקעה", value: fmt$(stats.totalCost), cls: "text-amber-400" },
                 { label: "Sale Revenue", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
-                { label: "Net Realised Profit", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
+                { label: "Net רווח ממומש", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
                 { label: "Realised ROI", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
                 { label: "Avg Hold Time", value: avgHoldDays != null ? `${avgHoldDays}d` : "—", cls: "text-purple-400" },
                 ...(salesVelocity ? [
@@ -4385,7 +4385,7 @@ export default function CollectPro() {
         {s.tab === "market" && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-bold">🌐 Market Scan — Forensic Truth</h2>
+              <h2 className="font-bold">🌐 סריקת שוק — Forensic Truth</h2>
               {s.items.filter(i => i.status === "active" && i.market_price == null).length > 0 && (
                 <button
                   onClick={() => {
@@ -4619,8 +4619,8 @@ export default function CollectPro() {
                   {/* Stats grid */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                     {([
-                      { label: "Total Invested",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
-                      { label: "Active Market Est.", value: fmt$(ps.estimatedValue),   cls: "text-blue-400" },
+                      { label: "סה"כ השקעה",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
+                      { label: "הערכת שוק פעיל", value: fmt$(ps.estimatedValue),   cls: "text-blue-400" },
                       { label: "Sale Revenue",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
                       { label: "Net Profit + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
                         cls: ps.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
