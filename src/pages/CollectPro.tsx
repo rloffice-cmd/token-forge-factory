@@ -619,7 +619,7 @@ export default function CollectPro() {
       .sort((a, b) => b.daysIn - a.daysIn);
   }, [s.items]);
 
-  // Per-franchise realized ROI (sold items only)
+  // Per-franchise ROI ממומש (sold items only)
   const franchiseROI = useMemo(() => {
     const map = new Map<string, { profit: number; cost: number; count: number }>();
     s.items
@@ -717,7 +717,7 @@ export default function CollectPro() {
     }).filter(b => b.count > 0);
   }, [s.items]);
 
-  // Condition ROI: realized ROI grouped by condition (raw sold cards only)
+  // Condition ROI: ROI ממומש grouped by condition (raw sold cards only)
   const conditionROI = useMemo(() => {
     const ORDER = ["M", "NM", "LP", "MP", "HP", "D"];
     const map = new Map<string, { profit: number; cost: number; count: number }>();
@@ -777,7 +777,7 @@ export default function CollectPro() {
       .slice(0, 8);
   }, [s.items]);
 
-  // Card set ROI: realized ROI grouped by card_set (sold items)
+  // Card set ROI: ROI ממומש grouped by card_set (sold items)
   const cardSetROI = useMemo(() => {
     const map = new Map<string, { profit: number; cost: number; count: number }>();
     s.items
@@ -925,7 +925,7 @@ export default function CollectPro() {
     return buckets.filter(b => b.count > 0);
   }, [s.items]);
 
-  // Hall of Fame: top 3 sold trades by realized ROI %
+  // Hall of Fame: top 3 sold trades by ROI ממומש %
   const hallOfFame = useMemo(() =>
     s.items
       .filter(i => i.status === "נמכר" && i.sell_price != null)
@@ -986,7 +986,7 @@ export default function CollectPro() {
       .slice(0, 5),
   [s.items]);
 
-  // ROI distribution: sold items bucketed by realized ROI range
+  // ROI distribution: sold items bucketed by ROI ממומש range
   const roiDistribution = useMemo(() => {
     const buckets = [
       { label: "< 0%",    min: -Infinity, max: 0,        count: 0 },
@@ -1004,7 +1004,7 @@ export default function CollectPro() {
     return buckets;
   }, [s.items]);
 
-  // PSA vs Raw ROI: compare realized ROI between PSA-graded and raw sold items
+  // PSA vs Raw ROI: compare ROI ממומש between PSA-graded and raw sold items
   const psaVsRaw = useMemo(() => {
     const calc = (items: CollectionItem[]) => {
       if (items.length === 0) return null;
@@ -2759,7 +2759,7 @@ export default function CollectPro() {
                           <button
                             onClick={() => { d({ t: "SET_TAB", tab: actionTab }); d({ t: "MKT_QUERY", v: query }); }}
                             className="text-xs px-2 py-1 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors"
-                            title="Open סריקת שוק for this card"
+                            title="פתח סריקת שוק לקלף זה"
                           >Scan</button>
                         )}
                       </div>
@@ -3072,7 +3072,7 @@ export default function CollectPro() {
                 <form onSubmit={saveItem} className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
-                      { label: "Name *", key: "name", type: "text" },
+                      { label: "שם *", key: "name", type: "text" },
                       { label: "Set", key: "card_set", type: "text" },
                       { label: "פרנצ'ייז", key: "פרנצ'ייז", type: "text" },
                     ].map(({ label, key, type }) => (
@@ -3142,7 +3142,7 @@ export default function CollectPro() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       { label: "Buy Price ($) *", key: "buy_price" },
-                      { label: "Grading Cost ($)", key: "grading_cost" },
+                      { label: "עלות גריידינג ($)", key: "grading_cost" },
                       { label: "Market Est. ($)", key: "market_price" },
                       { label: "ציון PSA", key: "psa_grade" },
                     ].map(({ label, key }) => (
@@ -3298,15 +3298,15 @@ export default function CollectPro() {
                         />
                       </th>
                       {[
-                        { label: "Item", field: "name" as const },
+                        { label: "פריט", field: "name" as const },
                         { label: "סטטוס", field: "סטטוס" as const },
                         { label: "Age ↕", field: "__age__" as const },
-                        { label: "Buy", field: "buy_price" as const },
+                        { label: "קנייה", field: "buy_price" as const },
                         { label: "גריידינג", field: "grading_cost" as const },
                         { label: "שוק", field: "market_price" as const },
                         { label: "רווח/הפסד", field: "__pnl__" as const },
                         { label: "Score ↕", field: "__score__" as const },
-                        { label: "Sale", field: "sell_price" as const },
+                        { label: "מכירה", field: "sell_price" as const },
                       ].map(({ label, field }) => (
                         <th
                           key={field}
@@ -3447,14 +3447,14 @@ export default function CollectPro() {
                               );
                             })()}
                           </td>
-                          {/* Sell score / realized ROI column */}
+                          {/* Sell score / ROI ממומש column */}
                           <td className="px-3 py-2.5 text-right">
                             {(() => {
                               if (item.status === "נמכר" && item.sell_price != null) {
                                 const roi = cost > 0 ? ((+(item.sell_price) - cost) / cost) * 100 : 0;
                                 return (
                                   <span className={`text-xs font-semibold ${roi >= 0 ? "text-emerald-500" : "text-red-400"}`}
-                                    title={`Realized ROI: ${roi.toFixed(1)}%`}>
+                                    title={`ROI ממומש: ${roi.toFixed(1)}%`}>
                                     {roi >= 0 ? "+" : ""}{roi.toFixed(0)}%
                                   </span>
                                 );
@@ -3520,7 +3520,7 @@ export default function CollectPro() {
                               <button
                                 onClick={() => addToArena(item.id)}
                                 className="text-xs px-2 py-1 bg-purple-900/60 text-purple-300 rounded hover:bg-purple-800 transition-colors"
-                                title="Arena"
+                                title="זירה"
                               >⚔</button>
                               <button
                                 onClick={() => d({ t: "SET_MODAL", id: item.id })}
@@ -4113,7 +4113,7 @@ export default function CollectPro() {
                 <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-3">הרכב עלויות</p>
                 <div className="mb-3">
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-gray-400">Buy cost <span className="text-gray-600">({costComposition.buyPct.toFixed(0)}%)</span></span>
+                    <span className="text-gray-400">עלות קנייה <span className="text-gray-600">({costComposition.buyPct.toFixed(0)}%)</span></span>
                     <span className="text-amber-400 font-semibold">{fmt$(costComposition.totalBuy)}</span>
                   </div>
                   <div className="h-4 bg-gray-800 rounded-full overflow-hidden flex">
@@ -4121,7 +4121,7 @@ export default function CollectPro() {
                     <div className="h-full bg-indigo-600 transition-all" style={{ width: `${costComposition.gradingPct}%` }} />
                   </div>
                   <div className="flex items-center justify-between text-xs mt-1">
-                    <span className="text-gray-400">Grading cost <span className="text-gray-600">({costComposition.gradingPct.toFixed(0)}%)</span></span>
+                    <span className="text-gray-400">עלות גריידינג <span className="text-gray-600">({costComposition.gradingPct.toFixed(0)}%)</span></span>
                     <span className="text-indigo-400 font-semibold">{fmt$(costComposition.totalGrading)}</span>
                   </div>
                 </div>
@@ -4558,7 +4558,7 @@ export default function CollectPro() {
               <h3 className="font-bold mb-3">➕ Add Partner</h3>
               <form onSubmit={addPartner} className="flex flex-wrap gap-2 items-end">
                 <div className="flex-1 min-w-[150px]">
-                  <label className="text-xs text-gray-400 block mb-1">Name *</label>
+                  <label className="text-xs text-gray-400 block mb-1">שם *</label>
                   <Input
                     dir="rtl"
                     className="bg-gray-800 border-gray-700"
@@ -4644,11 +4644,11 @@ export default function CollectPro() {
                     ))}
                   </div>
 
-                  {/* Realized ROI bar */}
+                  {/* ROI ממומש bar */}
                   {ps.soldCount > 0 && (
                     <div className="mb-3">
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600">Realized ROI</span>
+                        <span className="text-gray-600">ROI ממומש</span>
                         <span className={ps.roiPct >= 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>{fmtPct(ps.roiPct)}</span>
                       </div>
                       <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
