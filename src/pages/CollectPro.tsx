@@ -1133,7 +1133,7 @@ export default function CollectPro() {
       `Cards: ${s.items.length} total  |  ${active.length} active, ${grading.length} grading, ${sold.length} sold`,
       `סה"כ השקעה (קנייה + גריידינג): ${fmt$(stats.totalCost)}`,
       `Active market estimate: ${fmt$(stats.estimatedValue)}${pct(stats.estimatedValue, stats.totalCost - sold.reduce((s,i)=>s+cost(i),0))}`,
-      `רווח/הפסד לא ממומש: ${fmt$(stats.לא ממומשPnL)}`,
+      `רווח/הפסד לא ממומש: ${fmt$(stats.unrealisedPnL)}`,
       `רווח ממומש: ${fmt$(stats.realisedProfit)} on ${sold.length} sales (ROI ${fmtPct(stats.roiPct)})`,
     ];
 
@@ -1830,7 +1830,7 @@ export default function CollectPro() {
           {[
             { label: "סה"כ השקעה", value: fmt$(stats.totalCost), color: "text-amber-400" },
             { label: "הערכת שוק פעיל ⚠", value: fmt$(stats.estimatedValue), sub: "הערכה בלבד", color: "text-blue-400" },
-            { label: "רווח/הפסד לא ממומש", value: fmt$(stats.לא ממומשPnL), color: stats.לא ממומשPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "רווח/הפסד לא ממומש", value: fmt$(stats.unrealisedPnL), color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
             { label: "רווח ממומש", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
             { label: "תשואה", value: fmtPct(stats.roiPct), sub: `${stats.soldCount} sales`, color: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
           ].map((st) => (
@@ -1848,7 +1848,7 @@ export default function CollectPro() {
                 "─".repeat(32),
                 `סה"כ השקעה:    ${fmt$(stats.totalCost)}`,
                 `Active Mkt Est.:   ${fmt$(stats.estimatedValue)} (estimate)`,
-                `Unrealized P&L:    ${stats.לא ממומשPnL >= 0 ? "+" : ""}${fmt$(stats.לא ממומשPnL)}`,
+                `Unrealized P&L:    ${stats.unrealisedPnL >= 0 ? "+" : ""}${fmt$(stats.unrealisedPnL)}`,
                 `Realized Profit:   ${stats.realisedProfit >= 0 ? "+" : ""}${fmt$(stats.realisedProfit)} (${fmtPct(stats.roiPct)} ROI)`,
                 `Sales:             ${stats.soldCount} transactions`,
                 `Portfolio Health:  ${health}`,
@@ -2140,7 +2140,7 @@ export default function CollectPro() {
                   { label: "פעיל",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
                   { label: "גריידינג",  value: stats.gradingCount.toString(),       sub: "cards",         color: "text-amber-400" },
                   { label: "הושקע", value: fmt$(stats.totalCost),               sub: "קנייה + גריידינג", color: "text-gray-200" },
-                  { label: "הערכת רווח/הפסד", value: fmt$(stats.לא ממומשPnL),           sub: "לא ממומש",    color: stats.לא ממומשPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+                  { label: "הערכת רווח/הפסד", value: fmt$(stats.unrealisedPnL),           sub: "לא ממומש",    color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
                 ].map((st) => (
                   <div key={st.label} className="bg-gray-800/60 rounded-lg px-3 py-2">
                     <div className="text-xs text-gray-500">{st.label}</div>
