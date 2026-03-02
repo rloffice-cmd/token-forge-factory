@@ -44,7 +44,7 @@ export default function ManualOutreach() {
     const text = job.revised_text || job.draft_text || job.ai_draft || job.message_draft || "";
     navigator.clipboard.writeText(text);
     setCopiedId(job.id);
-    toast.success("Draft copied to clipboard");
+    toast.success("הטיוטה הועתקה ללוח");
     setTimeout(() => setCopiedId(null), 2000);
   };
 
@@ -56,7 +56,7 @@ export default function ManualOutreach() {
         provider_response: { manual_send: true, sent_at: new Date().toISOString() } as unknown as Record<string, never>
       })
       .eq("id", jobId);
-    toast.success("Marked as sent");
+    toast.success("סומן כנשלח");
     setJobs(prev => prev.filter(j => j.id !== jobId));
   };
 
@@ -70,24 +70,24 @@ export default function ManualOutreach() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Manual Outreach Queue</h1>
+            <h1 className="text-2xl font-bold text-foreground">תור פנייה ידנית</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {jobs.length} leads ready for manual copy-paste dispatch
+              {jobs.length} לידים מוכנים לשליחה ידנית
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={fetchJobs} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-            Refresh
+            רענן
           </Button>
         </div>
 
         {jobs.length === 0 && !loading && (
-          <Card><CardContent className="py-12 text-center text-muted-foreground">No pending outreach jobs.</CardContent></Card>
+          <Card><CardContent className="py-12 text-center text-muted-foreground">אין משימות פנייה ממתינות.</CardContent></Card>
         )}
 
         <div className="space-y-4">
           {jobs.map(job => {
-            const draft = job.revised_text || job.draft_text || job.ai_draft || job.message_draft || "No draft available";
+            const draft = job.revised_text || job.draft_text || job.ai_draft || job.message_draft || "אין טיוטה זמינה";
             const url = threadUrl(job);
             const lead = job.lead_payload || {};
             
@@ -97,12 +97,12 @@ export default function ManualOutreach() {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <CardTitle className="text-sm font-medium">
-                        {(lead.thread_title || lead.title || job.intent_topic || "Unknown Lead") as string}
+                        {(lead.thread_title || lead.title || job.intent_topic || "ליד לא ידוע") as string}
                       </CardTitle>
                       <div className="flex gap-2 flex-wrap">
                         <Badge variant="outline" className="text-xs">{job.source}</Badge>
                         <Badge variant={job.confidence >= 0.9 ? "default" : "secondary"} className="text-xs">
-                          {Math.round(job.confidence * 100)}% confidence
+                          {Math.round(job.confidence * 100)}% ביטחון
                         </Badge>
                         <Badge variant="outline" className="text-xs">{job.status}</Badge>
                       </div>
@@ -125,10 +125,10 @@ export default function ManualOutreach() {
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => copyDraft(job)} variant="outline">
                       {copiedId === job.id ? <CheckCircle className="h-4 w-4 mr-2 text-primary" /> : <Copy className="h-4 w-4 mr-2" />}
-                      {copiedId === job.id ? "Copied!" : "Copy Draft"}
+                      {copiedId === job.id ? "הועתק!" : "העתק טיוטה"}
                     </Button>
                     <Button size="sm" onClick={() => markSent(job.id)} variant="default">
-                      Mark as Sent
+                      סמן כנשלח
                     </Button>
                   </div>
                 </CardContent>
