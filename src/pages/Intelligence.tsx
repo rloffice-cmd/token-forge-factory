@@ -213,7 +213,7 @@ export default function Intelligence() {
               מנוע אינטליגנציה
             </h1>
             <p className="text-muted-foreground">
-              Demand-to-Deal Engine - גילוי וסגירת עסקאות אוטומטית
+              מנוע ביקוש-לעסקה - גילוי וסגירת עסקאות אוטומטית
             </p>
           </div>
           <div className="flex gap-2">
@@ -309,7 +309,7 @@ export default function Intelligence() {
           </Card>
         </div>
 
-        {/* Engine Controls */}
+        {/* בקרת מנוע */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -350,7 +350,7 @@ export default function Intelligence() {
                 <div className="flex items-center justify-between p-4 rounded-lg border">
                   <div>
                     <p className="font-medium">אספקה אוטומטית</p>
-                    <p className="text-sm text-muted-foreground">הנפקת API Keys/Reports</p>
+                    <p className="text-sm text-muted-foreground">הנפקת מפתחות API/דוחות</p>
                   </div>
                   <Switch
                     checked={isConfigEnabled('fulfillment_enabled')}
