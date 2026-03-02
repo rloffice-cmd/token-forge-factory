@@ -1,6 +1,6 @@
 /**
- * Autonomous Hunter Dashboard
- * Monster Mode toggle, activity log, dry run, and lead stats
+ * צייד אוטונומי Dashboard
+ * מצב מפלצת toggle, activity log, הרצה יבשה, and lead stats
  */
 
 import { useState } from 'react';
@@ -123,7 +123,7 @@ export default function HunterDashboard() {
     },
   });
 
-  // Toggle monster mode
+  // Toggle מצב מפלצת
   const toggleMonster = useMutation({
     mutationFn: async (enabled: boolean) => {
       const { error } = await supabase.functions.invoke('autonomous-hunter', {
@@ -162,7 +162,7 @@ export default function HunterDashboard() {
       if (error) throw error;
       toast({
         title: '🎯 Hunter Executed',
-        description: `Discovered: ${data?.discovered || 0} | Sent: ${data?.sent || 0} | Dry Run: ${data?.dry_run ? 'Yes' : 'No'}`,
+        description: `Discovered: ${data?.discovered || 0} | Sent: ${data?.sent || 0} | הרצה יבשה: ${data?.dry_run ? 'Yes' : 'No'}`,
       });
       queryClient.invalidateQueries({ queryKey: ['hunter-activity-log'] });
       queryClient.invalidateQueries({ queryKey: ['hunter-lead-stats'] });
@@ -187,14 +187,14 @@ export default function HunterDashboard() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
                 <Crosshair className="w-5 h-5 text-white" />
               </div>
-              Autonomous Hunter
+              צייד אוטונומי
             </h1>
             <p className="text-muted-foreground mt-1">Lead Discovery & Outreach Engine</p>
           </div>
           <div className="flex items-center gap-2">
             {settings?.monster_mode ? (
               <Badge className="bg-red-500/20 text-red-400 border-red-500/50 gap-1">
-                <Radio className="w-3 h-3 animate-pulse" /> MONSTER MODE
+                <Radio className="w-3 h-3 animate-pulse" /> מצב מפלצת
               </Badge>
             ) : (
               <Badge variant="outline" className="gap-1">
@@ -203,7 +203,7 @@ export default function HunterDashboard() {
             )}
             {settings?.dry_run_mode && (
               <Badge variant="outline" className="border-amber-500/50 text-amber-400 bg-amber-500/10 gap-1">
-                <Eye className="w-3 h-3" /> Dry Run
+                <Eye className="w-3 h-3" /> הרצה יבשה
               </Badge>
             )}
           </div>
@@ -213,7 +213,7 @@ export default function HunterDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border-border/40">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Total Leads</p>
+              <p className="text-xs text-muted-foreground uppercase">סה״כ לידים</p>
               <p className="text-2xl font-bold mt-1">{totalLeads}</p>
             </CardContent>
           </Card>
@@ -225,7 +225,7 @@ export default function HunterDashboard() {
           </Card>
           <Card className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-border/40">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">Queued</p>
+              <p className="text-xs text-muted-foreground uppercase">ממתין</p>
               <p className="text-2xl font-bold mt-1 text-amber-400">{discoveredCount}</p>
             </CardContent>
           </Card>
@@ -245,17 +245,17 @@ export default function HunterDashboard() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <Shield className="w-5 h-5 text-primary" />
-                Master Controls
+                בקרות ראשיות
               </CardTitle>
-              <CardDescription>Safety and execution settings</CardDescription>
+              <CardDescription>הגדרות בטיחות וביצוע</CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              {/* Monster Mode Toggle */}
+              {/* מצב מפלצת Toggle */}
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-semibold flex items-center gap-2">
                     <Zap className="w-4 h-4 text-red-400" />
-                    Monster Mode
+                    מצב מפלצת
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     Autonomous discovery + outreach
@@ -269,15 +269,15 @@ export default function HunterDashboard() {
 
               <Separator />
 
-              {/* Dry Run Toggle */}
+              {/* הרצה יבשה Toggle */}
               <div className="flex items-center justify-between">
                 <div>
                   <Label className="text-sm font-semibold flex items-center gap-2">
                     <Eye className="w-4 h-4 text-amber-400" />
-                    Dry Run Mode
+                    מצב הרצה יבשה
                   </Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Simulate without sending
+                    סימולציה ללא שליחה
                   </p>
                 </div>
                 <Switch
@@ -288,12 +288,12 @@ export default function HunterDashboard() {
 
               <Separator />
 
-              {/* Daily Limit */}
+              {/* מגבלה יומית */}
               <div className="flex items-center justify-between">
                 <div>
-                  <Label className="text-sm font-semibold">Daily Limit</Label>
+                  <Label className="text-sm font-semibold">מגבלה יומית</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Max sends per day
+                    מקסימום שליחות ביום
                   </p>
                 </div>
                 <Input
@@ -309,7 +309,7 @@ export default function HunterDashboard() {
 
               {/* Domain */}
               <div>
-                <Label className="text-sm font-semibold">Sending Domain</Label>
+                <Label className="text-sm font-semibold">דומיין שליחה</Label>
                 <p className="text-xs text-muted-foreground mt-0.5 font-mono" dir="ltr">
                   {settings?.domain || 'getsignalforge.com'}
                 </p>
@@ -330,7 +330,7 @@ export default function HunterDashboard() {
                   ) : (
                     <Play className="w-4 h-4" />
                   )}
-                  {settings?.dry_run_mode ? 'Run Dry Cycle' : 'Run Full Cycle'}
+                  {settings?.dry_run_mode ? 'הרץ מחזור יבש' : 'הרץ מחזור מלא'}
                 </Button>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
@@ -367,7 +367,7 @@ export default function HunterDashboard() {
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-cyan-400" />
-                Live Activity Log
+                יומן פעילות חי
                 <Badge variant="outline" className="ml-auto text-xs">
                   {activityLog.length} entries
                 </Badge>
@@ -377,7 +377,7 @@ export default function HunterDashboard() {
               <ScrollArea className="h-[500px]">
                 {activityLog.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-12">
-                    No activity yet. Run a cycle to see results here.
+                    אין פעילות עדיין. הרץ מחזור כדי לראות תוצאות.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -410,7 +410,7 @@ export default function HunterDashboard() {
                               )}
                               {entry.dry_run && (
                                 <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-400">
-                                  DRY RUN
+                                  הרצה יבשה
                                 </Badge>
                               )}
                             </div>
@@ -428,11 +428,11 @@ export default function HunterDashboard() {
           </Card>
         </div>
 
-        {/* Lead Status Breakdown */}
+        {/* פירוט סטטוס לידים */}
         {leadStats.length > 0 && (
           <Card className="bg-card/50 backdrop-blur-sm border-border/50">
             <CardHeader>
-              <CardTitle className="text-lg">Lead Status Breakdown</CardTitle>
+              <CardTitle className="text-lg">פירוט סטטוס לידים</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-4">
