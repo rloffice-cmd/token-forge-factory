@@ -62,7 +62,7 @@ export default function AdminApiKeys() {
       console.error('Error loading API keys:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load API keys',
+        description: 'טעינת מפתחות API נכשלה',
         variant: 'destructive',
       });
     } finally {
@@ -78,7 +78,7 @@ export default function AdminApiKeys() {
       .update({
         status: 'revoked',
         revoked_at: new Date().toISOString(),
-        revoked_reason: 'Admin revoked',
+        revoked_reason: 'בוטל ע"י מנהל',
       })
       .eq('id', revokeDialog.keyId);
 
@@ -91,7 +91,7 @@ export default function AdminApiKeys() {
     } else {
       toast({
         title: 'Revoked',
-        description: 'API key has been revoked',
+        description: 'מפתח ה-API בוטל',
       });
       setRevokeDialog({ open: false, keyId: null });
       loadData();
@@ -117,7 +117,7 @@ export default function AdminApiKeys() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Key className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">API Keys</h1>
+            <h1 className="text-3xl font-bold">מפתחות API</h1>
           </div>
           <Button variant="outline" onClick={loadData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -131,7 +131,7 @@ export default function AdminApiKeys() {
             <CardContent className="pt-6">
               <div className="text-center">
                 <p className="text-3xl font-bold text-primary">{apiKeys.length}</p>
-                <p className="text-sm text-muted-foreground">Total Keys</p>
+                <p className="text-sm text-muted-foreground">סה״כ מפתחות</p>
               </div>
             </CardContent>
           </Card>
@@ -156,8 +156,8 @@ export default function AdminApiKeys() {
         {/* Keys Table */}
         <Card>
           <CardHeader>
-            <CardTitle>All API Keys</CardTitle>
-            <CardDescription>Manage customer API keys</CardDescription>
+            <CardTitle>כל מפתחות ה-API</CardTitle>
+            <CardDescription>ניהול מפתחות API של לקוחות</CardDescription>
           </CardHeader>
           <CardContent>
             {apiKeys.length === 0 ? (
@@ -169,12 +169,12 @@ export default function AdminApiKeys() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Key</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Tier</TableHead>
+                    <TableHead>לקוח</TableHead>
+                    <TableHead>רמה</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Last Used</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>נוצר</TableHead>
+                    <TableHead>שימוש אחרון</TableHead>
+                    <TableHead>פעולות</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -235,7 +235,7 @@ export default function AdminApiKeys() {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Revoke API Key?</DialogTitle>
+              <DialogTitle>לבטל מפתח API?</DialogTitle>
               <DialogDescription>
                 This will immediately block all API requests using this key.
                 This action cannot be undone.

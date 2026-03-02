@@ -42,11 +42,11 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  telegram_bot: "Telegram Bot",
-  discord_bot: "Discord Bot",
-  monitor: "Monitor",
-  scraper: "Scraper",
-  automation: "Automation",
+  telegram_bot: "בוט טלגרם",
+  discord_bot: "בוט דיסקורד",
+  monitor: "מוניטור",
+  scraper: "סקרייפר",
+  automation: "אוטומציה",
 };
 
 export default function AgentMarketplace() {
@@ -77,7 +77,7 @@ export default function AgentMarketplace() {
   const handleOrder = async () => {
     if (!selectedAgent) return;
     if (!orderForm.email) {
-      toast.error("Please enter your email");
+      toast.error("אנא הזן את האימייל שלך");
       return;
     }
 
@@ -100,7 +100,7 @@ export default function AgentMarketplace() {
       if (error) throw error;
 
       // TODO: Create Coinbase checkout and redirect
-      toast.success("Order created! Redirecting to payment...", {
+      toast.success("ההזמנה נוצרה! מעביר לתשלום...", {
         description: `Order ID: ${order.id.slice(0, 8)}`,
       });
 
@@ -110,7 +110,7 @@ export default function AgentMarketplace() {
       queryClient.invalidateQueries({ queryKey: ["agent-catalog"] });
     } catch (error) {
       console.error("Order error:", error);
-      toast.error("Failed to create order");
+      toast.error("יצירת ההזמנה נכשלה");
     } finally {
       setIsOrdering(false);
     }

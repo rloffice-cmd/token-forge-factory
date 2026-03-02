@@ -55,7 +55,7 @@ export default function DigitalProducts() {
 
   const handlePurchase = async (product: DigitalProduct) => {
     if (!email || !email.includes("@")) {
-      toast.error("Please enter a valid email");
+      toast.error("אנא הזן כתובת אימייל תקינה");
       return;
     }
 
@@ -77,10 +77,10 @@ export default function DigitalProducts() {
       if (data?.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
-        throw new Error("No checkout URL received");
+        throw new Error("לא התקבלה כתובת תשלום");
       }
     } catch (err: any) {
-      toast.error(err.message || "Failed to create checkout");
+      toast.error(err.message || "יצירת הצ'קאאוט נכשלה");
     } finally {
       setIsLoading(false);
     }
@@ -170,7 +170,7 @@ export default function DigitalProducts() {
                   <div className="space-y-2">
                     <Input
                       type="email"
-                      placeholder="Your email for delivery"
+                      placeholder="האימייל שלך לקבלת המוצר"
                       value={selectedProduct?.id === product.id ? email : ""}
                       onChange={(e) => {
                         setSelectedProduct(product);
@@ -209,15 +209,15 @@ export default function DigitalProducts() {
           <div className="flex justify-center gap-8 text-sm text-muted-foreground">
             <div>
               <div className="text-2xl font-bold text-foreground">24h</div>
-              <div>Delivery time</div>
+              <div>זמן אספקה</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground">100%</div>
-              <div>Satisfaction</div>
+              <div>שביעות רצון</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-foreground">∞</div>
-              <div>Lifetime access</div>
+              <div>גישה לכל החיים</div>
             </div>
           </div>
         </div>

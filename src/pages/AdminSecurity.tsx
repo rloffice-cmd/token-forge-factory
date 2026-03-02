@@ -75,7 +75,7 @@ export default function AdminSecurity() {
     if (!newValue.trim()) {
       toast({
         title: 'Error',
-        description: 'Value is required',
+        description: 'ערך הינו שדה חובה',
         variant: 'destructive',
       });
       return;
@@ -161,7 +161,7 @@ export default function AdminSecurity() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Shield className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Security</h1>
+            <h1 className="text-3xl font-bold">אבטחה</h1>
           </div>
           <Button variant="outline" onClick={loadData} disabled={loading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
@@ -174,8 +174,8 @@ export default function AdminSecurity() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Denylist</CardTitle>
-                <CardDescription>Block wallets, IPs, or API keys</CardDescription>
+                <CardTitle>רשימת חסימה</CardTitle>
+                <CardDescription>חסימת ארנקים, IPs, או מפתחות API</CardDescription>
               </div>
               <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
                 <DialogTrigger asChild>
@@ -186,7 +186,7 @@ export default function AdminSecurity() {
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Add to Denylist</DialogTitle>
+                    <DialogTitle>הוסף לרשימת החסימה</DialogTitle>
                     <DialogDescription>
                       Block a wallet address, IP, or API key
                     </DialogDescription>
@@ -199,14 +199,14 @@ export default function AdminSecurity() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="wallet">Wallet Address</SelectItem>
-                          <SelectItem value="ip">IP Address</SelectItem>
-                          <SelectItem value="api_key">API Key ID</SelectItem>
+                          <SelectItem value="wallet">כתובת ארנק</SelectItem>
+                          <SelectItem value="ip">כתובת IP</SelectItem>
+                          <SelectItem value="api_key">מזהה מפתח API</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Value</label>
+                      <label className="text-sm font-medium">ערך</label>
                       <Input
                         value={newValue}
                         onChange={(e) => setNewValue(e.target.value)}
@@ -214,11 +214,11 @@ export default function AdminSecurity() {
                       />
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Reason (optional)</label>
+                      <label className="text-sm font-medium">סיבה (אופציונלי)</label>
                       <Input
                         value={newReason}
                         onChange={(e) => setNewReason(e.target.value)}
-                        placeholder="Why is this blocked?"
+                        placeholder="למה זה חסום?"
                       />
                     </div>
                   </div>
@@ -226,7 +226,7 @@ export default function AdminSecurity() {
                     <Button variant="outline" onClick={() => setDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={addToList}>Add to Denylist</Button>
+                    <Button onClick={addToList}>הוסף לרשימת החסימה</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -242,7 +242,7 @@ export default function AdminSecurity() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Type</TableHead>
-                    <TableHead>Value</TableHead>
+                    <TableHead>ערך</TableHead>
                     <TableHead>Reason</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Added</TableHead>
