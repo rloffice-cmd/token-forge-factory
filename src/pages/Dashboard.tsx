@@ -119,9 +119,9 @@ export default function Dashboard() {
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 flex items-center gap-3">
           <Radio className="w-5 h-5 text-emerald-400 animate-pulse" />
           <div className="flex-1">
-            <h3 className="font-semibold text-emerald-400">🚀 Partial Launch: Woodpecker Engine Active | Others Queued</h3>
+            <h3 className="font-semibold text-emerald-400">🚀 🚀 הפעלה חלקית: מנוע Woodpecker פעיל | שאר בתור</h3>
             <p className="text-sm text-muted-foreground">
-              Signal scanning active. Brain matching all leads. Outreach dispatching for Woodpecker only — other partners on standby.
+              סריקת סיגנלים פעילה. המוח מתאים כל לידים. שליחת outreach רק ל-Woodpecker — שאר השותפים בהמתנה. — other partners on standby.
             </p>
           </div>
           <Clock className="w-5 h-5 text-emerald-500/50" />
