@@ -1131,7 +1131,7 @@ export default function CollectPro() {
     const lines: string[] = [
       "=== PORTFOLIO SUMMARY ===",
       `Cards: ${s.items.length} total  |  ${active.length} active, ${grading.length} grading, ${sold.length} sold`,
-      `סה"כ השקעה (קנייה + גריידינג): ${fmt$(stats.totalCost)}`,
+      `סה״כ השקעה (קנייה + גריידינג): ${fmt$(stats.totalCost)}`,
       `Active market estimate: ${fmt$(stats.estimatedValue)}${pct(stats.estimatedValue, stats.totalCost - sold.reduce((s,i)=>s+cost(i),0))}`,
       `רווח/הפסד לא ממומש: ${fmt$(stats.unrealisedPnL)}`,
       `רווח ממומש: ${fmt$(stats.realisedProfit)} on ${sold.length} sales (ROI ${fmtPct(stats.roiPct)})`,
@@ -1828,7 +1828,7 @@ export default function CollectPro() {
         {/* Stats row */}
         <div className="flex flex-wrap gap-2 mt-3">
           {[
-            { label: "סה"כ השקעה", value: fmt$(stats.totalCost), color: "text-amber-400" },
+            { label: "סה״כ השקעה", value: fmt$(stats.totalCost), color: "text-amber-400" },
             { label: "הערכת שוק פעיל ⚠", value: fmt$(stats.estimatedValue), sub: "הערכה בלבד", color: "text-blue-400" },
             { label: "רווח/הפסד לא ממומש", value: fmt$(stats.unrealisedPnL), color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
             { label: "רווח ממומש", value: fmt$(stats.realisedProfit), color: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
@@ -1846,7 +1846,7 @@ export default function CollectPro() {
               const text = [
                 "📊 CollectPro Portfolio Summary",
                 "─".repeat(32),
-                `סה"כ השקעה:    ${fmt$(stats.totalCost)}`,
+                `סה״כ השקעה:    ${fmt$(stats.totalCost)}`,
                 `Active Mkt Est.:   ${fmt$(stats.estimatedValue)} (estimate)`,
                 `Unrealized P&L:    ${stats.unrealisedPnL >= 0 ? "+" : ""}${fmt$(stats.unrealisedPnL)}`,
                 `Realized Profit:   ${stats.realisedProfit >= 0 ? "+" : ""}${fmt$(stats.realisedProfit)} (${fmtPct(stats.roiPct)} ROI)`,
@@ -3620,7 +3620,7 @@ export default function CollectPro() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
               {([
-                { label: "סה"כ השקעה", value: fmt$(stats.totalCost), cls: "text-amber-400" },
+                { label: "סה״כ השקעה", value: fmt$(stats.totalCost), cls: "text-amber-400" },
                 { label: "הכנסות ממכירה", value: fmt$(stats.realisedRevenue), cls: "text-blue-400" },
                 { label: "Net רווח ממומש", value: fmt$(stats.realisedProfit), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400" },
                 { label: "ROI ממומש", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400" },
@@ -4619,7 +4619,7 @@ export default function CollectPro() {
                   {/* Stats grid */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
                     {([
-                      { label: "סה"כ השקעה",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
+                      { label: "סה״כ השקעה",     value: fmt$(ps.totalCost),        cls: "text-amber-400" },
                       { label: "הערכת שוק פעיל", value: fmt$(ps.estimatedValue),   cls: "text-blue-400" },
                       { label: "הכנסות ממכירה",       value: fmt$(ps.realisedRevenue),  cls: "text-emerald-400" },
                       { label: "רווח נקי + ROI",   value: `${fmt$(ps.realisedProfit)} (${fmtPct(ps.roiPct)})`,
