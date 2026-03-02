@@ -85,7 +85,7 @@ export default function Sources() {
       case 'search':
         return <Badge className="bg-purple-500"><Search className="w-3 h-3 mr-1" />חיפוש</Badge>;
       case 'webhook':
-        return <Badge className="bg-green-500"><Globe className="w-3 h-3 mr-1" />Webhook</Badge>;
+        return <Badge className="bg-green-500"><Globe className="w-3 h-3 mr-1" />ווב-הוק</Badge>;
       default:
         return <Badge variant="secondary">{type}</Badge>;
     }
@@ -163,7 +163,7 @@ export default function Sources() {
                 <div>
                   <p className="text-sm text-muted-foreground">בריאות ממוצעת</p>
                   <p className="text-2xl font-bold">{avgHealth}%</p>
-                  <p className="text-xs text-muted-foreground">Health Score</p>
+                  <p className="text-xs text-muted-foreground">ציון בריאות</p>
                 </div>
                 <div className="p-3 rounded-full bg-primary/10">
                   <Zap className="w-6 h-6 text-primary" />
@@ -195,7 +195,7 @@ export default function Sources() {
                   <p className="text-2xl font-bold">
                     {new Set(sources?.map(s => s.source_type) || []).size}
                   </p>
-                  <p className="text-xs text-muted-foreground">RSS, API, Search</p>
+                  <p className="text-xs text-muted-foreground">RSS, API, חיפוש</p>
                 </div>
                 <div className="p-3 rounded-full bg-purple-500/10">
                   <Globe className="w-6 h-6 text-purple-500" />

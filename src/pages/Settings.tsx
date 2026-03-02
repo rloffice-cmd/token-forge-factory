@@ -43,7 +43,7 @@ export default function Settings() {
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Piston API URL</Label>
+                <Label>כתובת Piston API</Label>
                 <p className="text-sm text-muted-foreground">
                   כתובת שרת ההרצה
                 </p>
@@ -175,7 +175,7 @@ export default function Settings() {
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>PartnerStack API Key</Label>
+                <Label>מפתח PartnerStack API</Label>
                 <p className="text-sm text-muted-foreground">
                   יוגדר כשנחבר רשת שותפים חיצונית
                 </p>
@@ -190,7 +190,7 @@ export default function Settings() {
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Postback Endpoint</Label>
+                <Label>נקודת Postback</Label>
                 <p className="text-sm text-muted-foreground">
                   כתובת לקבלת אירועי המרה
                 </p>
@@ -202,7 +202,7 @@ export default function Settings() {
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Postback Authentication</Label>
+                <Label>אימות Postback</Label>
                 <p className="text-sm text-muted-foreground">
                   אימות HMAC חתימה על בקשות נכנסות
                 </p>

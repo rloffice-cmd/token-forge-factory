@@ -247,14 +247,14 @@ export default function BrainDashboard() {
           <div className="flex items-center gap-3">
             <Brain className="h-8 w-8 text-primary" />
             <div>
-              <h1 className="text-2xl font-bold">Brain Dashboard</h1>
+              <h1 className="text-2xl font-bold">לוח מוח</h1>
               <p className="text-muted-foreground">לוח בקרה למנוע האוטונומי (דשבורד מוח)</p>
             </div>
           </div>
           
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Brain</span>
+              <span className="text-sm font-medium">מוח</span>
               <Switch
                 checked={settings?.brain_enabled || false}
                 onCheckedChange={(checked) => toggleMutation.mutate({ key: 'brain_enabled', value: checked })}

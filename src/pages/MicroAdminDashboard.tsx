@@ -169,8 +169,8 @@ export default function MicroAdminDashboard() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Micro Stack Admin</h1>
-              <p className="text-muted-foreground">ניהול מוצרי חיישנים ו-Auto-Upsell</p>
+              <h1 className="text-3xl font-bold text-foreground">ניהול מיקרו</h1>
+              <p className="text-muted-foreground">ניהול מוצרי חיישנים ו-אפסל אוטומטי</p>
             </div>
             <Badge variant="outline" className="text-lg px-4 py-2">
               <Shield className="h-5 w-5 ml-2 text-primary" />
@@ -196,7 +196,7 @@ export default function MicroAdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-3xl font-bold">{todayOffers.length}</div>
-                <p className="text-sm text-muted-foreground">Auto-Upsell</p>
+                <p className="text-sm text-muted-foreground">אפסל אוטומטי</p>
               </CardContent>
             </Card>
 
@@ -341,7 +341,7 @@ export default function MicroAdminDashboard() {
               <Card>
                 <CardHeader>
                   <CardTitle>הצעות Guardian</CardTitle>
-                  <CardDescription>Auto-Upsell ל-$499/חודש</CardDescription>
+                  <CardDescription>אפסל אוטומטי ל-$499/חודש</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <Table>

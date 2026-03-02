@@ -75,7 +75,7 @@ export default function MoneyMachine() {
         // Total jobs
         supabase.from('jobs').select('id', { count: 'exact', head: true }),
         // Settled jobs
-        supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('status', 'SETTLED'),
+        supabase.from('jobs').select('id', { count: 'exact', head: true }).eq('status', 'הושלם'),
         // Pending payouts
         supabase.from('cashout_requests').select('amount_usd').eq('status', 'pending'),
         // Last payout
@@ -83,7 +83,7 @@ export default function MoneyMachine() {
           .order('confirmed_at', { ascending: false }).limit(1).maybeSingle(),
         // Running jobs
         supabase.from('jobs').select('id')
-          .in('status', ['CREATED', 'GENERATED', 'TESTS_BUILT', 'SANDBOX_RUNNING']),
+          .in('status', ['נוצר', 'GENERATED', 'TESTS_BUILT', 'SANDBOX_RUNNING']),
       ]);
 
       const totalRevenue = (ledgerTotal.data || []).reduce((sum, r) => sum + Number(r.amount), 0);
@@ -131,7 +131,7 @@ export default function MoneyMachine() {
       const [stuckJobs, recentErrors] = await Promise.all([
         supabase.from('jobs')
           .select('id', { count: 'exact', head: true })
-          .in('status', ['CREATED', 'GENERATED', 'TESTS_BUILT', 'SANDBOX_RUNNING'])
+          .in('status', ['נוצר', 'GENERATED', 'TESTS_BUILT', 'SANDBOX_RUNNING'])
           .lt('created_at', oneDayAgo),
         supabase.from('audit_logs')
           .select('id', { count: 'exact', head: true })
@@ -387,7 +387,7 @@ export default function MoneyMachine() {
                     detail="pg_cron כל דקה"
                   />
                   <StatusRow 
-                    label="Daily Sweep" 
+                    label="ניקוי יומי" 
                     status="active" 
                     detail="07:00 UTC"
                   />
