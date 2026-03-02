@@ -13,23 +13,23 @@ const PARTNERS = [
 ];
 
 const TRUST_ITEMS = [
-  { icon: Globe, title: 'Global Signal Coverage', desc: '30+ digital ecosystems under continuous semantic analysis' },
-  { icon: Clock, title: 'Persistent Monitoring', desc: 'Round-the-clock intent scoring and demand classification' },
+  { icon: Globe, title: 'כיסוי סיגנל גלובלי', desc: '30+ digital ecosystems under continuous semantic analysis' },
+  { icon: Clock, title: 'מעקב מתמיד', desc: 'Round-the-clock intent scoring and demand classification' },
   { icon: Layers, title: 'Multi-Source Synthesis', desc: 'Reddit, HN, Discord, Twitter & professional communities' },
-  { icon: Shield, title: 'Enterprise Compliance', desc: 'GDPR-ready infrastructure with SOC 2 readiness' },
+  { icon: Shield, title: 'תאימות ארגונית', desc: 'GDPR-ready infrastructure with SOC 2 readiness' },
 ];
 
 const METRICS = [
-  { value: '30+', label: 'Signal Sources' },
-  { value: '24/7', label: 'Persistent Analysis' },
-  { value: '<50ms', label: 'Inference Latency' },
-  { value: '99.9%', label: 'Uptime SLA' },
+  { value: '30+', label: 'מקורות סיגנל' },
+  { value: '24/7', label: 'ניתוח מתמיד' },
+  { value: '<50ms', label: 'זמן עיבוד AI' },
+  { value: '99.9%', label: 'זמינות SLA' },
 ];
 
 const GROWTH_DRIVERS = [
   {
     icon: Brain,
-    title: 'Contextual Intent Detection',
+    title: 'זיהוי כוונה קונטקסטואלית',
     desc: 'Our proprietary scoring engine identifies transactional demand within professional communities — distinguishing genuine purchase intent from informational queries with 94% precision.',
   },
   {
@@ -39,7 +39,7 @@ const GROWTH_DRIVERS = [
   },
   {
     icon: Sparkles,
-    title: 'Qualified Conversion Paths',
+    title: 'נתיבי המרה מוסמכים',
     desc: 'We map verified pain points to premium SaaS solutions through semantic matching. Each lead is pre-qualified, ensuring your sales team receives only high-probability conversion opportunities.',
   },
 ];
@@ -92,7 +92,7 @@ export default function PartnerLanding() {
 
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 leading-tight">
             The Global Standard for
-            <span className="text-primary block">Autonomous Demand Signaling</span>
+            <span className="text-primary block">איתות ביקוש אוטונומי</span>
           </h1>
 
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10 leading-relaxed">
@@ -152,7 +152,7 @@ export default function PartnerLanding() {
       <section id="how-we-drive-growth" className="py-24 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--gradient-neon-cyan)' }} />
         <div className="max-w-5xl mx-auto px-6 relative z-10">
-          <h2 className="text-3xl font-bold text-center mb-4">How We Drive Growth</h2>
+          <h2 className="text-3xl font-bold text-center mb-4">איך אנחנו מניעים צמיחה</h2>
           <p className="text-center text-muted-foreground mb-16 max-w-2xl mx-auto">
             A three-pillar methodology engineered for predictable, high-quality lead generation at scale.
           </p>
@@ -177,7 +177,7 @@ export default function PartnerLanding() {
       {/* How it works */}
       <section id="how-it-works" className="py-24 border-t border-border/30">
         <div className="max-w-5xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-center mb-4">Technical Architecture</h2>
+          <h2 className="text-3xl font-bold text-center mb-4">ארכיטקטורה טכנית</h2>
           <p className="text-center text-muted-foreground mb-16 max-w-2xl mx-auto">
             From signal ingestion to revenue confirmation — a fully autonomous pipeline with zero manual overhead.
           </p>
@@ -187,19 +187,19 @@ export default function PartnerLanding() {
               {
                 step: '01',
                 icon: Radio,
-                title: 'Semantic Signal Ingestion',
+                title: 'קליטת סיגנל סמנטי',
                 desc: 'Our scoring engine continuously monitors 30+ digital ecosystems, applying linguistic DNA analysis and pain-point mapping to extract high-confidence demand signals.',
               },
               {
                 step: '02',
                 icon: BarChart3,
-                title: 'Precision Lead Synthesis',
+                title: 'סינתזת לידים מדויקת',
                 desc: 'Qualified signals are matched to partner product categories through multi-dimensional semantic analysis, tech stack detection, and behavioral intent profiling.',
               },
               {
                 step: '03',
                 icon: CheckCircle2,
-                title: 'Postback Revenue Confirmation',
+                title: 'אישור הכנסה Postback',
                 desc: 'Conversions are verified through real-time postback webhooks. Leads are credited, commissions recorded, and settlement cycles automated end-to-end.',
               },
             ].map((item, i) => (
@@ -220,7 +220,7 @@ export default function PartnerLanding() {
       <section className="py-24 border-t border-border/30 relative overflow-hidden">
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--gradient-neon-violet)' }} />
         <div className="max-w-5xl mx-auto px-6 relative z-10">
-          <h2 className="text-3xl font-bold text-center mb-4">For Partners</h2>
+          <h2 className="text-3xl font-bold text-center mb-4">לשותפים</h2>
           <p className="text-center text-muted-foreground mb-16 max-w-xl mx-auto">
             Vetted, high-quality technical leads from across the internet — pre-scored, pre-matched, and delivered in real-time. No noise. Only verified demand.
           </p>
@@ -247,9 +247,9 @@ export default function PartnerLanding() {
           </p>
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
             {[
-              { name: 'Semantic Intelligence', icon: '🧠', desc: 'NLP & Intent Scoring' },
-              { name: 'Cloud Infrastructure', icon: '☁️', desc: 'Enterprise Grade' },
-              { name: 'Security First', icon: '🔒', desc: 'GDPR Compliant' },
+              { name: 'אינטליגנציה סמנטית', icon: '🧠', desc: 'NLP & Intent Scoring' },
+              { name: 'תשתית ענן', icon: '☁️', desc: 'Enterprise Grade' },
+              { name: 'אבטחה ראשית', icon: '🔒', desc: 'GDPR Compliant' },
               { name: 'Real-Time Processing', icon: '⚡', desc: 'Sub-50ms Latency' },
             ].map((item, i) => (
               <div key={i} className="flex flex-col items-center">
@@ -267,7 +267,7 @@ export default function PartnerLanding() {
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'var(--gradient-neon-cyan)' }} />
         <div className="max-w-3xl mx-auto px-6 text-center relative z-10">
           <div className="glass-card p-12 glow-border">
-            <h2 className="text-3xl font-bold mb-4">Ready to Scale Your Pipeline?</h2>
+            <h2 className="text-3xl font-bold mb-4">מוכן לשדרג את הצינור שלך?</h2>
             <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
               We're selectively onboarding SaaS partners into our demand signaling network. Access pre-qualified leads, real-time conversion tracking, and transparent commission settlement.
             </p>
@@ -289,7 +289,7 @@ export default function PartnerLanding() {
             <span>© 2026 SignalForge. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-6">
-            <a href="mailto:hello@token-forge.ai" className="hover:text-foreground transition-colors">Contact</a>
+            <a href="mailto:hello@token-forge.ai" className="hover:text-foreground transition-colors">צור קשר</a>
             <a
               href="https://www.linkedin.com/search/results/all/?keywords=token%20forge%20ai"
               target="_blank"

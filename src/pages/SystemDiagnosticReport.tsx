@@ -14,14 +14,14 @@ const REPORT_DATE = '2026-02-12T15:59:00Z';
 
 // Ready for Launch Checklist
 const LAUNCH_CHECKLIST = [
-  { label: 'DNS Verified (getsignalforge.com)', status: true },
+  { label: 'DNS מאומת (getsignalforge.com)', status: true },
   { label: 'auto_closing_enabled = true', status: true },
   { label: 'fulfillment_enabled = true', status: true },
   { label: 'monster_mode = false (KEEP OFF)', status: true },
   { label: 'dry_run_mode = true', status: true },
-  { label: 'Trackable links in outreach', status: true },
-  { label: 'M2M postback webhook live', status: false },
-  { label: 'Revenue ledger audit trail', status: true },
+  { label: 'קישורים עם מעקב בפנייה', status: true },
+  { label: 'M2M postback webhook פעיל', status: false },
+  { label: 'מסלול ביקורת פנקס הכנסות', status: true },
   { label: 'Anti-fraud 90% CTR flagging', status: true },
 ];
 
@@ -481,14 +481,14 @@ export default function SystemDiagnosticReport() {
 
   // Ready for Launch Checklist
   const LAUNCH_CHECKLIST = [
-    { label: 'DNS Verified (getsignalforge.com)', status: true },
+    { label: 'DNS מאומת (getsignalforge.com)', status: true },
     { label: 'auto_closing_enabled = true', status: true },
     { label: 'fulfillment_enabled = true', status: true },
     { label: 'monster_mode = false (KEEP OFF)', status: true },
     { label: 'dry_run_mode = true', status: true },
-    { label: 'Trackable links in outreach', status: true },
-    { label: 'M2M postback webhook live', status: false },
-    { label: 'Revenue ledger audit trail', status: true },
+    { label: 'קישורים עם מעקב בפנייה', status: true },
+    { label: 'M2M postback webhook פעיל', status: false },
+    { label: 'מסלול ביקורת פנקס הכנסות', status: true },
     { label: 'Anti-fraud 90% CTR flagging', status: true },
   ];
 
@@ -507,7 +507,7 @@ export default function SystemDiagnosticReport() {
               <p className="text-sm text-muted-foreground mt-1">
                 {allChecklistPassed 
                   ? 'All revenue flags enabled. Monster Mode ON-DECK — enable when DNS verified.'
-                  : 'Complete items before enabling Monster Mode'}
+                  : 'השלם פריטים לפני הפעלת מצב מפלצת'}
               </p>
             </div>
           </div>
@@ -516,7 +516,7 @@ export default function SystemDiagnosticReport() {
         {/* Checklist Card */}
         <Card className="glass-card border-border">
           <CardHeader>
-            <CardTitle className="text-base">Pre-Launch Requirements</CardTitle>
+            <CardTitle className="text-base">דרישות טרום-השקה</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">

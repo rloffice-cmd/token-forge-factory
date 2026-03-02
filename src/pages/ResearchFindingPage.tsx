@@ -48,12 +48,12 @@ interface ResearchFinding {
 
 function verdictConfig(verdict: string): { label: string; color: string; glow: string; Icon: typeof ShieldCheck } {
   switch (verdict) {
-    case 'VERIFIED':
-      return { label: 'VERIFIED', color: 'text-[hsl(160_84%_39%)]', glow: '0 0 16px hsl(160 84% 39% / 0.6)', Icon: ShieldCheck };
-    case 'REJECTED':
-      return { label: 'REJECTED', color: 'text-[hsl(0_72%_51%)]', glow: '0 0 16px hsl(0 72% 51% / 0.6)', Icon: XCircle };
-    case 'MONITORING':
-      return { label: 'MONITORING', color: 'text-[hsl(270_80%_60%)]', glow: '0 0 16px hsl(270 80% 60% / 0.6)', Icon: Eye };
+    case 'מאומת':
+      return { label: 'מאומת', color: 'text-[hsl(160_84%_39%)]', glow: '0 0 16px hsl(160 84% 39% / 0.6)', Icon: ShieldCheck };
+    case 'נדחה':
+      return { label: 'נדחה', color: 'text-[hsl(0_72%_51%)]', glow: '0 0 16px hsl(0 72% 51% / 0.6)', Icon: XCircle };
+    case 'במעקב':
+      return { label: 'במעקב', color: 'text-[hsl(270_80%_60%)]', glow: '0 0 16px hsl(270 80% 60% / 0.6)', Icon: Eye };
     default:
       return { label: verdict, color: 'text-[hsl(199_89%_48%)]', glow: '0 0 16px hsl(199 89% 48% / 0.6)', Icon: Activity };
   }
@@ -102,7 +102,7 @@ function ConfidenceGauge({ value }: { value: number }) {
           <span className="text-xs text-muted-foreground font-mono">/100</span>
         </div>
       </div>
-      <span className="text-xs text-muted-foreground font-mono tracking-widest">CONFIDENCE SCORE</span>
+      <span className="text-xs text-muted-foreground font-mono tracking-widest">ציון ביטחון</span>
     </div>
   );
 }
@@ -263,11 +263,11 @@ export default function ResearchFindingPage() {
     script.type = 'application/ld+json';
     script.text = JSON.stringify({
       '@context': 'https://schema.org',
-      '@type': 'Article',
+      '@type': 'מאמר',
       headline: finding.title,
       description: finding.summary,
       datePublished: finding.created_at,
-      publisher: { '@type': 'Organization', name: 'SignalForge' },
+      publisher: { '@type': 'ארגון', name: 'SignalForge' },
     });
     script.id = 'research-ld-json';
     document.querySelector('#research-ld-json')?.remove();
@@ -280,8 +280,8 @@ export default function ResearchFindingPage() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center text-center px-6">
         <AlertTriangle className="w-16 h-16 text-destructive mb-6" />
-        <h1 className="text-3xl font-bold mb-4">Finding Not Found</h1>
-        <p className="text-muted-foreground mb-8">This forensic report doesn't exist or has been removed.</p>
+        <h1 className="text-3xl font-bold mb-4">ממצא לא נמצא</h1>
+        <p className="text-muted-foreground mb-8">דוח משפטי זה לא קיים או הוסר.</p>
         <Link to="/" className="text-primary hover:underline">← Return to SignalForge</Link>
       </div>
     );
@@ -418,7 +418,7 @@ export default function ResearchFindingPage() {
         <section className="rounded-xl border border-border/30 bg-card/30 p-8">
           <div className="flex items-center gap-3 mb-4">
             <Radio className="w-5 h-5 text-primary" />
-            <h2 className="text-lg font-bold">About SignalForge</h2>
+            <h2 className="text-lg font-bold">אודות SignalForge</h2>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
             SignalForge is an autonomous demand intelligence engine that monitors 30+ digital ecosystems in real-time,
