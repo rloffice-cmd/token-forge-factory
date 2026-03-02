@@ -231,7 +231,7 @@ export default function HunterDashboard() {
           </Card>
           <Card className="bg-gradient-to-br from-violet-500/10 to-purple-500/10 border-border/40">
             <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground uppercase">שליחות היום</p>
+              <p className="text-xs text-muted-foreground uppercase">Already have an account? כניסה</p>
               <p className="text-2xl font-bold mt-1">
                 {settings?.sends_today || 0}/{settings?.daily_limit || 50}
               </p>

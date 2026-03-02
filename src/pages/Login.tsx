@@ -52,14 +52,14 @@ export default function Login() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             type="email"
-            placeholder="Email"
+            placeholder="אימייל"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
           />
           <Input
             type="password"
-            placeholder="Password"
+            placeholder="סיסמה"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -67,7 +67,7 @@ export default function Login() {
           />
           <Button type="submit" className="w-full gap-2" disabled={loading}>
             <LogIn className="w-4 h-4" />
-            {loading ? 'Processing...' : isSignup ? 'Create Account' : 'Sign In'}
+            {loading ? 'מעבד...' : isSignup ? 'יצירת חשבון' : 'כניסה'}
           </Button>
         </form>
 
@@ -75,7 +75,7 @@ export default function Login() {
           onClick={() => setIsSignup(!isSignup)}
           className="w-full text-center text-sm text-muted-foreground hover:text-foreground mt-4 transition-colors"
         >
-          {isSignup ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+          {isSignup ? 'יש לך חשבון? כנס' : 'אין לך חשבון? הירשם'}
         </button>
       </div>
     </div>
