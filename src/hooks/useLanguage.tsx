@@ -20,7 +20,7 @@ const LanguageContext = createContext<LanguageContextType | null>(null);
 const translations: Record<Language, Record<string, string>> = {
   en: {
     // Hero
-    'hero.badge': 'Autonomous Security Layer',
+    'hero.badge': 'שכבת אבטחה אוטונומית',
     'hero.headline1': 'Discover Issues',
     'hero.headline2': 'Before They Cost You Money',
     'hero.subtitle': 'Smart APIs that detect risky wallets, broken webhooks, and payment discrepancies — for pennies per check',
@@ -37,10 +37,10 @@ const translations: Record<Language, Record<string, string>> = {
     'apikey.unlimited': '∞',
     
     // Stats
-    'stats.calls': 'API Calls',
-    'stats.uptime': 'Uptime',
-    'stats.response': 'Response',
-    'stats.support': 'Support',
+    'stats.calls': 'קריאות API',
+    'stats.uptime': 'זמינות',
+    'stats.response': 'תגובה',
+    'stats.support': 'תמיכה',
     
     // Products
     'products.badge': 'Micro APIs',
@@ -71,12 +71,12 @@ const translations: Record<Language, Record<string, string>> = {
     'usecase3.desc': 'Check if the money received matches what you expected',
     
     // Testimonials
-    'testimonials.badge': 'Verified Reviews',
+    'testimonials.badge': 'ביקורות מאומתות',
     'testimonials.title': 'What They Say About Us',
     'testimonials.subtitle': 'Real reviews from Web3 and DeFi teams',
     
     // Guardian Upsell
-    'guardian.badge': 'Guardian Tier',
+    'guardian.badge': 'רמת שומר',
     'guardian.title1': 'Finding recurring issues?',
     'guardian.title2': 'Guardian fixes them.',
     'guardian.desc': 'When sensors detect problematic patterns, Guardian takes action — blocks risky wallets, fixes webhooks, and balances payments. Automatically.',
@@ -89,7 +89,7 @@ const translations: Record<Language, Record<string, string>> = {
     'guardian.alert3.desc': 'Loss prevented this month',
     
     // API Section
-    'api.badge': 'Developer Friendly',
+    'api.badge': 'ידידותי למפתחים',
     'api.title': 'Simple API, Instant Results',
     'api.subtitle': 'One line of code. Response in milliseconds.',
     'api.docs': 'View Full Documentation',
@@ -103,7 +103,7 @@ const translations: Record<Language, Record<string, string>> = {
     'footer.docs': 'API Docs',
     'footer.pricing': 'Pricing',
     'footer.micro': 'Micro APIs',
-    'footer.admin': 'Admin',
+    'footer.admin': 'ניהול',
     
     // Errors
     'error.email': 'Enter your email to get free access',
@@ -113,7 +113,7 @@ const translations: Record<Language, Record<string, string>> = {
   },
   he: {
     // Hero
-    'hero.badge': 'Autonomous Security Layer',
+    'hero.badge': 'שכבת אבטחה אוטונומית',
     'hero.headline1': 'גלה בעיות',
     'hero.headline2': 'לפני שהן עולות לך כסף',
     'hero.subtitle': 'API-ים חכמים שמזהים ארנקים מסוכנים, Webhooks תקולים, ופערים בתשלומים — בסנטים בודדים לבדיקה',
@@ -130,10 +130,10 @@ const translations: Record<Language, Record<string, string>> = {
     'apikey.unlimited': '∞',
     
     // Stats
-    'stats.calls': 'API Calls',
-    'stats.uptime': 'Uptime',
-    'stats.response': 'Response',
-    'stats.support': 'Support',
+    'stats.calls': 'קריאות API',
+    'stats.uptime': 'זמינות',
+    'stats.response': 'תגובה',
+    'stats.support': 'תמיכה',
     
     // Products
     'products.badge': 'Micro APIs',
@@ -164,12 +164,12 @@ const translations: Record<Language, Record<string, string>> = {
     'usecase3.desc': 'בדוק אם הכסף שהגיע תואם למה שציפית',
     
     // Testimonials
-    'testimonials.badge': 'Verified Reviews',
+    'testimonials.badge': 'ביקורות מאומתות',
     'testimonials.title': 'מה אומרים עלינו',
     'testimonials.subtitle': 'ביקורות אמיתיות מצוותי Web3 ו-DeFi',
     
     // Guardian Upsell
-    'guardian.badge': 'Guardian Tier',
+    'guardian.badge': 'רמת שומר',
     'guardian.title1': 'מוצא בעיות חוזרות?',
     'guardian.title2': 'Guardian מתקן אותן.',
     'guardian.desc': 'כשהסנסורים מזהים דפוסים בעייתיים, Guardian נכנס לפעולה — חוסם ארנקים מסוכנים, מתקן Webhooks, ומאזן תשלומים. אוטומטית.',
@@ -182,7 +182,7 @@ const translations: Record<Language, Record<string, string>> = {
     'guardian.alert3.desc': 'הפסד שנמנע החודש',
     
     // API Section
-    'api.badge': 'Developer Friendly',
+    'api.badge': 'ידידותי למפתחים',
     'api.title': 'API פשוט, תוצאות מיידיות',
     'api.subtitle': 'קו אחד של קוד. תשובה תוך מילישניות.',
     'api.docs': 'צפה בתיעוד המלא',
@@ -196,7 +196,7 @@ const translations: Record<Language, Record<string, string>> = {
     'footer.docs': 'תיעוד API',
     'footer.pricing': 'תמחור',
     'footer.micro': 'Micro APIs',
-    'footer.admin': 'Admin',
+    'footer.admin': 'ניהול',
     
     // Errors
     'error.email': 'הזן אימייל כדי לקבל גישה חינם',
