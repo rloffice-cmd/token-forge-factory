@@ -107,7 +107,7 @@ export default function Purchase() {
         // Redirect to Coinbase Commerce
         window.location.href = data.hosted_url;
       } else {
-        throw new Error('No hosted URL returned');
+        throw new Error('לא התקבלה כתובת URL');
       }
     } catch (error) {
       console.error('Purchase error:', error);

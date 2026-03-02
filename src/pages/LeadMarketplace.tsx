@@ -46,7 +46,7 @@ export default function PerformanceBoard() {
       setAuthenticated(true);
       localStorage.setItem("broker_access", "true");
     } else {
-      toast({ title: "Invalid Code", description: "Access denied.", variant: "destructive" });
+      toast({ title: "קוד שגוי", description: "Access denied.", variant: "destructive" });
     }
   };
 
@@ -83,12 +83,12 @@ export default function PerformanceBoard() {
         <Card className="w-full max-w-md border-primary/20">
           <CardHeader className="text-center">
             <Lock className="w-12 h-12 mx-auto text-primary mb-4" />
-            <CardTitle className="text-2xl">Performance Board</CardTitle>
-            <CardDescription>Enter broker access code to view partner performance.</CardDescription>
+            <CardTitle className="text-2xl">לוח ביצועים</CardTitle>
+            <CardDescription>הזן קוד גישה לצפייה בביצועי השותפים.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input type="password" placeholder="Access Code" value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAuth()} />
-            <Button className="w-full" onClick={handleAuth}>Unlock Board</Button>
+            <Input type="password" placeholder="קוד גישה" value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAuth()} />
+            <Button className="w-full" onClick={handleAuth}>פתח לוח</Button>
           </CardContent>
         </Card>
       </div>
@@ -101,10 +101,10 @@ export default function PerformanceBoard() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <BarChart3 className="w-7 h-7 text-primary" />
-            <h1 className="text-xl font-bold">Performance Board</h1>
+            <h1 className="text-xl font-bold">לוח ביצועים</h1>
             <Badge variant="secondary">V4.2</Badge>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem("broker_access"); setAuthenticated(false); }}>Logout</Button>
+          <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem("broker_access"); setAuthenticated(false); }}>התנתק</Button>
         </div>
       </header>
 
@@ -134,21 +134,21 @@ export default function PerformanceBoard() {
         {/* Partner Performance Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Partner Performance (EV Routing)</CardTitle>
+            <CardTitle>ביצועי שותפים (ניתוב EV)</CardTitle>
             <CardDescription>Greedy routing optimizes for highest Expected Value per lead.</CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="text-center py-10 text-muted-foreground">Loading...</div>
+              <div className="text-center py-10 text-muted-foreground">טוען...</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-left py-3 px-2">Partner</th>
-                      <th className="text-right py-3 px-2">Commission</th>
-                      <th className="text-right py-3 px-2">Dispatches</th>
-                      <th className="text-right py-3 px-2">Conversions</th>
+                      <th className="text-left py-3 px-2">שותף</th>
+                      <th className="text-right py-3 px-2">עמלה</th>
+                      <th className="text-right py-3 px-2">שליחות</th>
+                      <th className="text-right py-3 px-2">המרות</th>
                       <th className="text-right py-3 px-2">CTR</th>
                       <th className="text-right py-3 px-2">Status</th>
                     </tr>
@@ -160,7 +160,7 @@ export default function PerformanceBoard() {
                         <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
                           <td className="py-3 px-2 font-medium flex items-center gap-2">
                             {p.name}
-                            {p.niche_winner && <Badge className="bg-yellow-500 text-yellow-950 text-xs">Winner</Badge>}
+                            {p.niche_winner && <Badge className="bg-yellow-500 text-yellow-950 text-xs">מנצח</Badge>}
                           </td>
                           <td className="text-right py-3 px-2 font-mono">${p.commission_value_usd}</td>
                           <td className="text-right py-3 px-2 font-mono">{p.total_dispatches}</td>
@@ -168,7 +168,7 @@ export default function PerformanceBoard() {
                           <td className="text-right py-3 px-2 font-mono">{ctr}%</td>
                           <td className="text-right py-3 px-2">
                             {p.is_active ? (
-                              <Badge variant="default" className="text-xs">Active</Badge>
+                              <Badge variant="default" className="text-xs">פעיל</Badge>
                             ) : p.testing_phase ? (
                               <Badge variant="secondary" className="text-xs">Testing ({p.testing_leads_sent}/20)</Badge>
                             ) : (

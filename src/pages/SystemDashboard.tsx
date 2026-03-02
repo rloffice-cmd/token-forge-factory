@@ -118,7 +118,7 @@ export default function SystemDashboard() {
 
       if (error) throw error;
       if (!data.success) {
-        throw new Error(data.message || 'Failed to send');
+        throw new Error(data.message || 'השליחה נכשלה');
       }
       return data;
     },

@@ -157,7 +157,7 @@ export default function ApiDocs() {
             </Button>
             <div className="flex items-center gap-2">
               <Code2 className="w-6 h-6 text-primary" />
-              <h1 className="text-xl font-bold">API Documentation</h1>
+              <h1 className="text-xl font-bold">תיעוד API</h1>
             </div>
           </div>
           <Badge variant="outline">v1.0</Badge>
@@ -205,7 +205,7 @@ export default function ApiDocs() {
               <CardContent className="pt-4 flex items-center gap-3">
                 <CreditCard className="w-8 h-8 text-primary" />
                 <div>
-                  <p className="font-semibold">Pay-per-use</p>
+                  <p className="font-semibold">תשלום לפי שימוש</p>
                   <p className="text-sm text-muted-foreground">תשלום לפי שימוש</p>
                 </div>
               </CardContent>
@@ -382,27 +382,27 @@ export default function ApiDocs() {
                 <tbody>
                   <tr className="border-t border-border">
                     <td className="p-2 font-mono">400</td>
-                    <td className="p-2">Bad Request</td>
+                    <td className="p-2">בקשה שגויה</td>
                     <td className="p-2">פרמטרים חסרים או לא תקינים</td>
                   </tr>
                   <tr className="border-t border-border">
                     <td className="p-2 font-mono">401</td>
-                    <td className="p-2">Unauthorized</td>
+                    <td className="p-2">לא מורשה</td>
                     <td className="p-2">API Key חסר או לא תקין</td>
                   </tr>
                   <tr className="border-t border-border">
                     <td className="p-2 font-mono">402</td>
-                    <td className="p-2">Payment Required</td>
+                    <td className="p-2">נדרש תשלום</td>
                     <td className="p-2">אין מספיק קרדיטים</td>
                   </tr>
                   <tr className="border-t border-border">
                     <td className="p-2 font-mono">429</td>
-                    <td className="p-2">Too Many Requests</td>
+                    <td className="p-2">יותר מדי בקשות</td>
                     <td className="p-2">חריגה ממכסת הבקשות</td>
                   </tr>
                   <tr className="border-t border-border">
                     <td className="p-2 font-mono">500</td>
-                    <td className="p-2">Internal Error</td>
+                    <td className="p-2">שגיאה פנימית</td>
                     <td className="p-2">שגיאת שרת פנימית</td>
                   </tr>
                 </tbody>

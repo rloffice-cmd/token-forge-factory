@@ -36,7 +36,7 @@ import { toast } from 'sonner';
 const PRODUCTS = [
   {
     id: 'wallet-risk',
-    name: 'Wallet Risk Ping',
+    name: 'בדיקת סיכון ארנק',
     nameHe: 'בדיקת סיכון ארנק',
     price: 0.02,
     priceDisplay: '$0.02',
@@ -59,7 +59,7 @@ const PRODUCTS = [
   },
   {
     id: 'webhook-check',
-    name: 'Webhook Health Check',
+    name: 'בדיקת תקינות Webhook',
     nameHe: 'בדיקת תקינות Webhook',
     price: 0.25,
     priceDisplay: '$0.25',
@@ -72,7 +72,7 @@ const PRODUCTS = [
       'בדיקת זמינות (UP/DOWN)',
       'מדידת Response Time',
       'בדיקת SSL/TLS',
-      'Status Code Analysis',
+      'ניתוח קוד סטטוס',
     ],
     apiExample: `curl -X POST /v1/webhook-check \\
   -d '{"url": "https://your-endpoint.com/webhook"}'
@@ -82,7 +82,7 @@ const PRODUCTS = [
   },
   {
     id: 'payment-drift',
-    name: 'Payment Drift Detector',
+    name: 'גלאי סטייה תשלום',
     nameHe: 'גלאי פער בתשלומים',
     price: 2.00,
     priceDisplay: '$2.00',
@@ -437,8 +437,8 @@ export default function MicroLanding() {
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-right p-4 font-medium">תכונה</th>
-                      <th className="text-center p-4 font-medium">Sensors</th>
-                      <th className="text-center p-4 font-medium text-primary">Guardian</th>
+                      <th className="text-center p-4 font-medium">חיישנים</th>
+                      <th className="text-center p-4 font-medium text-primary">שומר</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -526,7 +526,7 @@ export default function MicroLanding() {
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                 <Activity className="w-4 h-4 text-primary-foreground" />
               </div>
-              <span className="font-bold">Micro Sensors</span>
+              <span className="font-bold">מיקרו חיישנים</span>
             </div>
             <div className="flex gap-8 text-sm text-muted-foreground">
               <Link to="/api-docs" className="hover:text-foreground transition-colors">

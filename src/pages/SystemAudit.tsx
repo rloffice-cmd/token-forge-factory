@@ -111,7 +111,7 @@ export default function SystemAudit() {
         });
       }
     } catch (e) {
-      setTestError(e instanceof Error ? e.message : 'Unknown error');
+      setTestError(e instanceof Error ? e.message : 'שגיאה לא ידועה');
     } finally {
       setTestLoading(false);
     }
@@ -128,7 +128,7 @@ export default function SystemAudit() {
       if (res.error) throw new Error(res.error.message);
       setData(res.data as AuditData);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Audit failed');
+      setError(e instanceof Error ? e.message : 'הביקורת נכשלה');
     } finally {
       setLoading(false);
     }
@@ -150,7 +150,7 @@ export default function SystemAudit() {
           </div>
           <Button onClick={runAudit} disabled={loading} size="lg" className="gap-2">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Scanning...' : 'Run Audit'}
+            {loading ? 'סורק...' : 'Run Audit'}
           </Button>
         </div>
 
@@ -177,7 +177,7 @@ export default function SystemAudit() {
             </p>
             <Button onClick={runTestEmail} disabled={testLoading} variant="outline" className="gap-2">
               <Zap className={`w-4 h-4 ${testLoading ? 'animate-spin' : ''}`} />
-              {testLoading ? 'Sending...' : 'Send Test Email'}
+              {testLoading ? 'שולח...' : 'Send Test Email'}
             </Button>
 
             {testError && (
@@ -200,7 +200,7 @@ export default function SystemAudit() {
                   </p>
                 </div>
                 <div className="p-3 rounded-lg bg-card/50 border border-border/30">
-                  <p className="text-xs font-semibold mb-1 text-muted-foreground">Raw Resend Response</p>
+                  <p className="text-xs font-semibold mb-1 text-muted-foreground">תגובת Resend גולמית</p>
                   <pre className="text-xs whitespace-pre-wrap font-mono max-h-48 overflow-auto">
                     {JSON.stringify(testResult.resend_response, null, 2)}
                   </pre>
@@ -241,7 +241,7 @@ export default function SystemAudit() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-semibold mb-1">Readiness Score</h2>
+                    <h2 className="text-xl font-semibold mb-1">ציון מוכנות</h2>
                     <p className="text-sm text-muted-foreground">
                       Last scan: {new Date(data.timestamp).toLocaleString('he-IL')}
                     </p>
@@ -292,7 +292,7 @@ export default function SystemAudit() {
                         <span className="text-sm font-mono">{name}</span>
                       </div>
                       <Badge variant={set ? 'default' : 'destructive'} className="text-xs">
-                        {set ? '••••••' : 'MISSING'}
+                        {set ? '••••••' : 'חסר'}
                       </Badge>
                     </div>
                   ))}
@@ -338,7 +338,7 @@ export default function SystemAudit() {
                     );
                   })}
                   {data.partners.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No active partners</p>
+                    <p className="text-sm text-muted-foreground text-center py-4">אין שותפים פעילים</p>
                   )}
                 </CardContent>
               </Card>
@@ -354,9 +354,9 @@ export default function SystemAudit() {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
                     {[
-                      { label: 'Clicks (30d)', value: data.activity.clicks_30d, icon: Zap },
-                      { label: 'Outreach (7d)', value: data.activity.outreach_7d, icon: Brain },
-                      { label: 'Payments', value: data.activity.confirmed_payments, icon: DollarSign },
+                      { label: 'קליקים (30 יום)', value: data.activity.clicks_30d, icon: Zap },
+                      { label: 'פנייה (7 יום)', value: data.activity.outreach_7d, icon: Brain },
+                      { label: 'תשלומים', value: data.activity.confirmed_payments, icon: DollarSign },
                     ].map((stat) => (
                       <div key={stat.label} className="text-center p-3 rounded-lg bg-card/50 border border-border/30">
                         <stat.icon className="w-5 h-5 mx-auto text-primary mb-1" />

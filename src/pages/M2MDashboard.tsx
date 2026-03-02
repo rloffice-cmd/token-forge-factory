@@ -194,7 +194,7 @@ export default function M2MDashboard() {
     fill: CATEGORY_COLORS[name] || CATEGORY_COLORS['Other'],
   }));
 
-  // V3.0 — Estimated Potential Revenue per niche
+  // V3.0 — Estimated הכנסה פוטנציאלית per niche
   const NICHE_AVG_BOUNTY: Record<string, number> = {
     'Email Marketing': 20,
     'Security': 15,
@@ -304,9 +304,9 @@ export default function M2MDashboard() {
         {/* KPI Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard
-            title="Potential Revenue"
+            title="הכנסה פוטנציאלית"
             value={`$${potentialRevenue.toFixed(2)}`}
-            subtitle="From dispatched signals"
+            subtitle="מסיגנלים שנשלחו"
             icon={<Target className="w-5 h-5" />}
             trend="pending"
             gradientFrom="from-amber-500/20"
@@ -314,9 +314,9 @@ export default function M2MDashboard() {
             iconColor="text-amber-400"
           />
           <MetricCard
-            title="Confirmed Income"
+            title="הכנסה מאושרת"
             value={`$${confirmedRevenue.toFixed(2)}`}
-            subtitle="Postback verified"
+            subtitle="Postback אומת"
             icon={<DollarSign className="w-5 h-5" />}
             trend={confirmedRevenue > 0 ? 'up' : 'neutral'}
             gradientFrom="from-emerald-500/20"
@@ -324,7 +324,7 @@ export default function M2MDashboard() {
             iconColor="text-emerald-400"
           />
           <MetricCard
-            title="Signal Efficiency"
+            title="יעילות סיגנל"
             value={`${signalEfficiency.toFixed(1)}%`}
             subtitle={`${totalConversions}/${totalDispatches} converted`}
             icon={<TrendingUp className="w-5 h-5" />}
@@ -334,9 +334,9 @@ export default function M2MDashboard() {
             iconColor="text-cyan-400"
           />
           <MetricCard
-            title="Total Revenue"
+            title="הכנסה כוללת"
             value={`$${totalRevenue.toFixed(2)}`}
-            subtitle="Lifetime partner earnings"
+            subtitle="רווחי שותפים לכל החיים"
             icon={<Shield className="w-5 h-5" />}
             trend={totalRevenue > 0 ? 'up' : 'neutral'}
             gradientFrom="from-violet-500/20"

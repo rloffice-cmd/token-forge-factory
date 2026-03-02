@@ -90,7 +90,7 @@ export default function ApiAccess() {
 
     } catch (err) {
       console.error('Error loading data:', err);
-      setError('Failed to load data');
+      setError('טעינת הנתונים נכשלה');
     } finally {
       setLoading(false);
     }
@@ -114,7 +114,7 @@ export default function ApiAccess() {
       navigator.clipboard.writeText(delivery.plaintext_key);
       toast({
         title: 'Copied!',
-        description: 'API key copied to clipboard',
+        description: 'מפתח ה-API הועתק ללוח',
       });
     }
   };
@@ -153,7 +153,7 @@ export default function ApiAccess() {
       <div className="max-w-4xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Key className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">Signal API Access</h1>
+          <h1 className="text-3xl font-bold">גישה ל-Signal API</h1>
         </div>
 
         {/* Credit Balance Card */}
@@ -193,12 +193,12 @@ export default function ApiAccess() {
           <Card>
             <CardContent className="py-12 text-center">
               <Key className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No API Key Yet</h3>
+              <h3 className="text-lg font-semibold mb-2">אין עדיין מפתח API</h3>
               <p className="text-muted-foreground mb-4">
                 Purchase credits to receive your API key automatically.
               </p>
               <Button asChild>
-                <a href="/purchase">Purchase Credits</a>
+                <a href="/purchase">רכוש קרדיטים</a>
               </Button>
             </CardContent>
           </Card>
@@ -218,7 +218,7 @@ export default function ApiAccess() {
                 <Alert className="bg-yellow-50 border-yellow-200">
                   <AlertTriangle className="h-4 w-4 text-yellow-600" />
                   <AlertDescription className="text-yellow-800">
-                    <strong>One-time reveal available!</strong> Your API key can be revealed once. 
+                    <strong>חשיפה חד-פעמית זמינה!</strong> Your API key can be revealed once. 
                     After viewing, save it securely - it cannot be shown again.
                     <br />
                     <span className="text-sm">
@@ -278,7 +278,7 @@ export default function ApiAccess() {
         {/* Documentation */}
         <Card>
           <CardHeader>
-            <CardTitle>Quick Start</CardTitle>
+            <CardTitle>התחלה מהירה</CardTitle>
             <CardDescription>How to use the Signal API</CardDescription>
           </CardHeader>
           <CardContent>
@@ -362,7 +362,7 @@ export default function ApiAccess() {
         {/* Rate Limits */}
         <Card>
           <CardHeader>
-            <CardTitle>Rate Limits</CardTitle>
+            <CardTitle>מגבלות קצב</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4 text-center">

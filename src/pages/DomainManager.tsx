@@ -81,7 +81,7 @@ export default function DomainManager() {
       if (recRes.error) throw new Error(recRes.error.message);
       setDomain(recRes.data as DomainState);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch domain');
+      setError(e instanceof Error ? e.message : 'אחזור הדומיין נכשל');
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ export default function DomainManager() {
       setDomain(prev => prev ? { ...prev, status: result.status, records: result.records } : prev);
 
       if (result.status === 'verified' || result.status === 'active') {
-        toast({ title: '✅ Domain Verified!', description: 'Triggering test email...' });
+        toast({ title: '✅ Domain Verified!', description: 'שולח אימייל בדיקה...' });
         triggerTestEmail();
       } else {
         toast({
@@ -107,7 +107,7 @@ export default function DomainManager() {
         });
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Verification failed');
+      setError(e instanceof Error ? e.message : 'האימות נכשל');
     } finally {
       setVerifying(false);
     }
@@ -134,7 +134,7 @@ export default function DomainManager() {
         setTestResult({ success: true, data: res.data });
       }
     } catch (e) {
-      setTestResult({ success: false, error: e instanceof Error ? e.message : 'Test failed' });
+      setTestResult({ success: false, error: e instanceof Error ? e.message : 'הבדיקה נכשלה' });
     } finally {
       setTestLoading(false);
     }
@@ -266,14 +266,14 @@ export default function DomainManager() {
                     {/* Record details */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <p className="text-xs font-semibold text-muted-foreground mb-1">Type</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">סוג</p>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline">{rec.type}</Badge>
                           <StatusDot status={rec.status} />
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-muted-foreground mb-1">Name</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">שם</p>
                         <div className="flex items-center gap-1">
                           <code className="text-xs bg-muted px-2 py-1 rounded font-mono break-all">
                             {rec.name}
@@ -289,7 +289,7 @@ export default function DomainManager() {
                         </div>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-muted-foreground mb-1">Value</p>
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">ערך</p>
                         <div className="flex items-center gap-1">
                           <code className="text-xs bg-muted px-2 py-1 rounded font-mono break-all max-w-[300px]">
                             {rec.value}
