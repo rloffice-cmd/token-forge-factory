@@ -69,7 +69,7 @@ function ArenaAICompare({ itemA, itemB }: { itemA: CollectionItem; itemB: Collec
             : "bg-gradient-to-r from-blue-700 to-purple-700 text-white hover:from-blue-600 hover:to-purple-600 shadow-lg"
         }`}
       >
-        {busy ? "⏹ Cancel AI Compare" : "🤖 AI Deep Compare (web search)"}
+        {busy ? "⏹ Cancel השוואת AI" : "🤖 AI Deep Compare (web search)"}
       </button>
 
       {busy && !result && (
@@ -186,8 +186,8 @@ export function ArenaView({
   const SlotPlaceholder = ({ slot }: { slot: "a" | "b" }) => (
     <div className="arena-slot-empty flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-700 text-gray-600 gap-2 p-4" style={{ minHeight: 220 }}>
       <span className="text-3xl">⚔</span>
-      <span className="text-sm">{slot === "a" ? "Slot A" : "Slot B"}</span>
-      <span className="text-xs">Pick a card below</span>
+      <span className="text-sm">{slot === "a" ? "משבצת א׳" : "משבצת ב׳"}</span>
+      <span className="text-xs">בחרו קלף מלמטה</span>
     </div>
   );
 
@@ -226,8 +226,8 @@ export function ArenaView({
             <thead>
               <tr className="border-b border-white/10">
                 <th className="text-left px-3 py-2.5 text-xs text-gray-500 font-medium">Metric</th>
-                <th className="text-right px-3 py-2.5 text-xs text-blue-400 font-medium">Slot A{itemA ? ` — ${itemA.name.slice(0, 18)}` : ""}</th>
-                <th className="text-right px-3 py-2.5 text-xs text-purple-400 font-medium">Slot B{itemB ? ` — ${itemB.name.slice(0, 18)}` : ""}</th>
+                <th className="text-right px-3 py-2.5 text-xs text-blue-400 font-medium">משבצת א׳{itemA ? ` — ${itemA.name.slice(0, 18)}` : ""}</th>
+                <th className="text-right px-3 py-2.5 text-xs text-purple-400 font-medium">משבצת ב׳{itemB ? ` — ${itemB.name.slice(0, 18)}` : ""}</th>
               </tr>
             </thead>
             <tbody>
@@ -310,10 +310,10 @@ export function ArenaView({
                 const lines = [
                   `Arena Comparison — ${new Date().toLocaleDateString()}`,
                   ``,
-                  `Slot A: ${itemA.name} (${itemA.condition}${itemA.psa_grade ? ` · PSA ${itemA.psa_grade}` : ""})`,
+                  `משבצת א׳: ${itemA.name} (${itemA.condition}${itemA.psa_grade ? ` · PSA ${itemA.psa_grade}` : ""})`,
                   `  Cost: $${itemCost(itemA)}  Market: ${itemA.market_price != null ? "$" + itemA.market_price : "N/A"}`,
                   ``,
-                  `Slot B: ${itemB.name} (${itemB.condition}${itemB.psa_grade ? ` · PSA ${itemB.psa_grade}` : ""})`,
+                  `משבצת ב׳: ${itemB.name} (${itemB.condition}${itemB.psa_grade ? ` · PSA ${itemB.psa_grade}` : ""})`,
                   `  Cost: $${itemCost(itemB)}  Market: ${itemB.market_price != null ? "$" + itemB.market_price : "N/A"}`,
                 ].join("\n");
                 navigator.clipboard.writeText(lines).catch(() => {});
@@ -372,8 +372,8 @@ export function ArenaTab({
 
   return (
     <div>
-      <h2 className="font-bold mb-1">⚔️ Card Arena</h2>
-      <p className="text-xs text-gray-500 mb-4">Compare two cards side by side. Pick cards from the grid below or use the ⚔ button in inventory.</p>
+      <h2 className="font-bold mb-1">⚔️ זירת קלפים</h2>
+      <p className="text-xs text-gray-500 mb-4">השוו שני קלפים זה לצד זה. בחרו קלפים מהרשימה למטה או השתמשו בכפתור ⚔ במלאי.</p>
 
       <ArenaView
         items={items}
@@ -386,7 +386,7 @@ export function ArenaTab({
       {items.length > 0 && (
         <div className="mt-6">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">PICK CARDS FOR ARENA</div>
+            <div className="text-xs text-gray-500 font-semibold uppercase tracking-wide">בחרו קלפים לזירה</div>
             <span className="text-xs text-gray-600">{filtered.length} cards</span>
           </div>
 
