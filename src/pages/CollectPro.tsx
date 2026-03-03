@@ -64,7 +64,7 @@ import { StatusBadge } from "@/components/collectpro/StatusBadge";
 
 export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
-  // Separate abort controllers — cancelling chat must not kill an in-progress market scan
+  // Separate abort controllers — cancelling chat must not kill an in-progress סריקת שוק
   const chatAbort  = useRef<AbortController | null>(null);
   const scanAbort  = useRef<AbortController | null>(null);
   const chatEndRef    = useRef<HTMLDivElement>(null);
@@ -1575,7 +1575,7 @@ export default function CollectPro() {
     sendChatMessage(s.chat.input.trim());
   }, [s.chat.input, sendChatMessage]);
 
-  // ── AI — Market scan ───────────────────────────────────────────────────────
+  // ── AI — סריקת שוק ───────────────────────────────────────────────────────
 
   const runScan = useCallback(async () => {
     const query = s.market.query.trim();
@@ -1815,7 +1815,7 @@ export default function CollectPro() {
             <p className="text-xs text-gray-500 mt-0.5">מנהל תיק קלפי אספנות</p>
           </div>
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-            <span>Franchise only</span>
+            <span>זיכיון בלבד</span>
             <div
               onClick={() => d({ t: "TOGGLE_FRANCHISE" })}
               className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${s.franchise ? "bg-blue-600" : "bg-gray-700"}`}
@@ -1875,9 +1875,9 @@ export default function CollectPro() {
           ...(s.isAdmin ? ["admin"] : []),
         ] as Tab[]).map((tab) => {
           const labels: Record<Tab, string> = {
-            brain: "🧠 Brain", inventory: "📦 Inventory", roi: "📈 ROI",
-            arena: "⚔️ Arena", market: "🌐 Market", partners: "🤝 Partners",
-            grade: "🔬 Grading", admin: "🔐 Admin",
+            brain: "🧠 מוח", inventory: "📦 מלאי", roi: "📈 תשואה",
+            arena: "⚔️ זירה", market: "🌐 שוק", partners: "🤝 שותפים",
+            grade: "🔬 דירוג", admin: "🔐 ניהול",
           };
           return (
             <button
@@ -1907,7 +1907,7 @@ export default function CollectPro() {
         {s.tab === "brain" && (
           <div className="space-y-3">
 
-            {/* ── Portfolio Snapshot ────────────────────────────────────────────── */}
+            {/* ── תמונת מצב תיק ────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
                 { label: "Active", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} market` },
@@ -1938,7 +1938,7 @@ export default function CollectPro() {
                   badge: null,
                 },
                 {
-                  label: "🌐 Market Scan",
+                  label: "🌐 סריקת שוק",
                   action: () => d({ t: "SET_TAB", tab: "market" }),
                   badge: s.items.filter(i => i.status === "active" && i.market_price == null).length > 0
                     ? `${s.items.filter(i => i.status === "active" && i.market_price == null).length} unpriced`
@@ -2132,9 +2132,9 @@ export default function CollectPro() {
               </div>
             )}
 
-            {/* ── Portfolio snapshot ──────────────────────────────────────────── */}
+            {/* ── תמונת מצב תיק ──────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-              <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">Portfolio Snapshot</div>
+              <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">תמונת מצב תיק</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   { label: "Active",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
@@ -2759,7 +2759,7 @@ export default function CollectPro() {
                           <button
                             onClick={() => { d({ t: "SET_TAB", tab: actionTab }); d({ t: "MKT_QUERY", v: query }); }}
                             className="text-xs px-2 py-1 rounded bg-blue-900/60 text-blue-300 hover:bg-blue-800 transition-colors"
-                            title="Open Market Scan for this card"
+                            title="Open סריקת שוק for this card"
                           >Scan</button>
                         )}
                       </div>
@@ -2801,7 +2801,7 @@ export default function CollectPro() {
 
             {/* ── Chat ────────────────────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-              <h2 className="font-bold mb-1">🧠 Forensic Portfolio Advisor</h2>
+              <h2 className="font-bold mb-1">🧠 יועץ פורנזי לתיק</h2>
               <p className="text-xs text-gray-500 mb-3">Analysis based on your real portfolio data. Ask anything — including uncomfortable questions.</p>
 
               {/* Suggested questions — shown only when chat is empty */}
@@ -4385,7 +4385,7 @@ export default function CollectPro() {
         {s.tab === "market" && (
           <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="font-bold">🌐 Market Scan — Forensic Truth</h2>
+              <h2 className="font-bold">🌐 סריקת שוק — Forensic Truth</h2>
               {s.items.filter(i => i.status === "active" && i.market_price == null).length > 0 && (
                 <button
                   onClick={() => {
