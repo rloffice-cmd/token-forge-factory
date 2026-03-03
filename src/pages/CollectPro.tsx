@@ -3,7 +3,7 @@
  * מנהל תיק קלפי אספנות with Arena, Cards View, Quick Scan, and Mobile Nav.
  */
 
-ייבוא React, {
+import React, {
   useReducer,
   useEffect,
   useState,
@@ -11,27 +11,27 @@
   useRef,
   useCallback,
 } from "react";
-ייבוא "@/lib/collectpro/collectpro.css";
-ייבוא { supabase } from "@/integrations/supabase/client";
-ייבוא { toast } from "sonner";
+import "@/lib/collectpro/collectpro.css";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-ייבוא {
+import {
   AlertDialog,
   AlertDialogAction,
-  AlertDialogביטול,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-ייבוא { Button } from "@/components/ui/button";
-ייבוא { Input } from "@/components/ui/input";
-ייבוא { Textarea } from "@/components/ui/textarea";
-ייבוא { Badge } from "@/components/ui/badge";
-ייבוא { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, ComposedChart, Line, ReferenceLine } from "recharts";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Legend, ComposedChart, Line, ReferenceLine } from "recharts";
 
-ייבוא type {
+import type {
   CollectionItem,
   Partner,
   ChatMessage,
@@ -40,31 +40,31 @@
   ItemStatus,
   Tab,
 } from "@/lib/collectpro/types";
-ייבוא { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
-ייבוא { callAI } from "@/lib/collectpro/ai";
-ייבוא type { CardScanResult } from "@/lib/collectpro/ai";
-ייבוא { useCollectProRealtime } from "@/lib/collectpro/realtime";
-ייבוא { compressImage, uploadCardImage } from "@/lib/collectpro/image";
-ייבוא { ייצואCSV, ייצואEbayCSV, ייצואCardmarketCSV } from "@/lib/collectpro/ייצוא";
+import { computeStats, fmt$, fmtPct } from "@/lib/collectpro/stats";
+import { callAI } from "@/lib/collectpro/ai";
+import type { CardScanResult } from "@/lib/collectpro/ai";
+import { useCollectProRealtime } from "@/lib/collectpro/realtime";
+import { compressImage, uploadCardImage } from "@/lib/collectpro/image";
+import { exportCSV, exportEbayCSV, exportCardmarketCSV } from "@/lib/collectpro/export";
 
-ייבוא { INIT, reducer, today, emptyForm, PAGE } from "@/lib/collectpro/state";
-ייבוא type { State } from "@/lib/collectpro/state";
-ייבוא { itemCost, extractFirstPrice, findMatchingItems } from "@/lib/collectpro/helpers";
+import { INIT, reducer, today, emptyForm, PAGE } from "@/lib/collectpro/state";
+import type { State } from "@/lib/collectpro/state";
+import { itemCost, extractFirstPrice, findMatchingItems } from "@/lib/collectpro/helpers";
 
-ייבוא CameraScanner from "@/components/collectpro/CameraScanner";
-ייבוא GradingStudio from "@/components/collectpro/GradingStudio";
-ייבוא CollectibleCard from "@/components/collectpro/CollectibleCard";
-ייבוא CardDetailModal from "@/components/collectpro/CardDetailModal";
-ייבוא { ArenaTab } from "@/components/collectpro/Arena";
-ייבוא { SellDialog, BatchOperationModal, BatchPriceRefreshModal, ייבואCSVModal } from "@/components/collectpro/Modals";
-ייבוא type { ItemInsertRow } from "@/lib/collectpro/ייבואcsv";
-ייבוא AdminPanel from "@/components/collectpro/AdminPanel";
-ייבוא { BatchBar, BottomNav } from "@/components/collectpro/Navigation";
-ייבוא { StatusBadge } from "@/components/collectpro/StatusBadge";
+import CameraScanner from "@/components/collectpro/CameraScanner";
+import GradingStudio from "@/components/collectpro/GradingStudio";
+import CollectibleCard from "@/components/collectpro/CollectibleCard";
+import CardDetailModal from "@/components/collectpro/CardDetailModal";
+import { ArenaTab } from "@/components/collectpro/Arena";
+import { SellDialog, BatchOperationModal, BatchPriceRefreshModal, ImportCSVModal } from "@/components/collectpro/Modals";
+import type { ItemInsertRow } from "@/lib/collectpro/importcsv";
+import AdminPanel from "@/components/collectpro/AdminPanel";
+import { BatchBar, BottomNav } from "@/components/collectpro/Navigation";
+import { StatusBadge } from "@/components/collectpro/StatusBadge";
 
-ייצוא default function CollectPro() {
+export default function CollectPro() {
   const [s, d] = useReducer(reducer, INIT);
-  // Separate abort controllers — ביטולling chat must not kill an in-progress market scan
+  // Separate abort controllers — cancelling chat must not kill an in-progress market scan
   const chatAbort  = useRef<AbortController | null>(null);
   const scanAbort  = useRef<AbortController | null>(null);
   const chatEndRef    = useRef<HTMLDivElement>(null);
@@ -81,7 +81,7 @@
   const [statusFilter,        setStatusFilter]        = useState<"all" | ItemStatus>("all");
   const [franchiseFilterInv,  setFranchiseFilterInv]  = useState<string | null>(null);
   const [scanHistory,         setScanHistory]         = useState<Array<{ query: string; mode: string; result: string; ts: number }>>([]);
-  const [showייבואCSV,       setShowייבואCSV]       = useState(false);
+  const [showImportCSV,       setShowImportCSV]       = useState(false);
   const [inlineEditId,        setInlineEditId]        = useState<string | null>(null);
   const [inlineEditVal,       setInlineEditVal]       = useState("");
   const [watchlistFilter,     setWatchlistFilter]     = useState(false);
@@ -145,7 +145,7 @@
     })();
   }, []);
 
-  // ── Realtime sync (reconnect + מחק fix) ────────────────────────────────
+  // ── Realtime sync (reconnect + DELETE fix) ────────────────────────────────
 
   const refetch = useCallback(async () => {
     const [{ data: items }, { data: partners }] = await Promise.all([
@@ -1218,7 +1218,7 @@
 
   // ── Item CRUD ──────────────────────────────────────────────────────────────
 
-  const שמורItem = useCallback(
+  const saveItem = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
       const f = s.inv.form;
@@ -1341,25 +1341,25 @@
         psa_grade: "",
       },
     });
-    toast.success(`Duplicated "${item.name}" — edit and שמור to add`);
+    toast.success(`Duplicated "${item.name}" — edit and save to add`);
   }, []);
 
-  const confirmמחק = useCallback(async () => {
-    if (!s.מחקTarget) return;
-    const target = s.items.find((i) => i.id === s.מחקTarget);
+  const confirmDelete = useCallback(async () => {
+    if (!s.deleteTarget) return;
+    const target = s.items.find((i) => i.id === s.deleteTarget);
     if (!target) { d({ t: "DEL_TARGET", id: null }); return; }
 
-    const { error } = await supabase.from("coll_items").מחק().eq("id", s.מחקTarget);
+    const { error } = await supabase.from("coll_items").delete().eq("id", s.deleteTarget);
     if (error) { toast.error(`Error: ${error.message}`); d({ t: "DEL_TARGET", id: null }); return; }
 
     d({ t: "UNDO_SET", u: { item: target, at: Date.now() } });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => d({ t: "UNDO_SET", u: null }), 30_000);
     d({ t: "DEL_TARGET", id: null });
-    toast("Item מחקd — you have 30s to undo");
-  }, [s.מחקTarget, s.items]);
+    toast("Item deleted — you have 30s to undo");
+  }, [s.deleteTarget, s.items]);
 
-  const undoמחק = useCallback(async (item: CollectionItem) => {
+  const undoDelete = useCallback(async (item: CollectionItem) => {
     const { error } = await supabase.from("coll_items").insert(item);
     if (error) { toast.error(`Restore error: ${error.message}`); return; }
     d({ t: "UNDO_SET", u: null });
@@ -1473,18 +1473,18 @@
     toast.success(`Market price updated for ${s.inv.selected.length} items`);
   }, [s.inv.selected]);
 
-  const [batchמחקTarget, setBatchמחקTarget] = useState(false);
+  const [batchDeleteTarget, setBatchDeleteTarget] = useState(false);
 
-  const batchמחק = useCallback(() => {
-    setBatchמחקTarget(true);
+  const batchDelete = useCallback(() => {
+    setBatchDeleteTarget(true);
   }, []);
 
-  const executeBatchמחק = useCallback(async () => {
-    const { error } = await supabase.from("coll_items").מחק().in("id", s.inv.selected);
+  const executeBatchDelete = useCallback(async () => {
+    const { error } = await supabase.from("coll_items").delete().in("id", s.inv.selected);
     if (error) { toast.error(error.message); return; }
     d({ t: "INV_SEL_CLEAR" });
-    toast.success(`${s.inv.selected.length} items מחקd`);
-    setBatchמחקTarget(false);
+    toast.success(`${s.inv.selected.length} items deleted`);
+    setBatchDeleteTarget(false);
   }, [s.inv.selected]);
 
   const batchPartnerReassign = useCallback(() => {
@@ -1514,15 +1514,15 @@
     }
   }, []);
 
-  const executeייבואCSV = useCallback(async (rows: ItemInsertRow[]) => {
+  const executeImportCSV = useCallback(async (rows: ItemInsertRow[]) => {
     if (rows.length === 0) return;
     const { error } = await supabase.from("coll_items").insert(rows);
-    if (error) { toast.error(`ייבוא error: ${error.message}`); throw error; }
+    if (error) { toast.error(`Import error: ${error.message}`); throw error; }
     await refetch();
-    toast.success(`${rows.length} item${rows.length !== 1 ? "s" : ""} ייבואed`);
+    toast.success(`${rows.length} item${rows.length !== 1 ? "s" : ""} imported`);
   }, [refetch]);
 
-  const שמורInlinePrice = useCallback(async (itemId: string, rawVal: string) => {
+  const saveInlinePrice = useCallback(async (itemId: string, rawVal: string) => {
     setInlineEditId(null);
     const price = parseFloat(rawVal);
     if (isNaN(price) || price < 0) return;
@@ -1558,7 +1558,7 @@
         ? [{ role: "user", content: `=== Portfolio ===\n${portfolioCtx}\n\n=== Question ===\n${text}` }]
         : [...history, userMsg];
 
-    chatAbort.current?.abort(); // ביטול any previous chat request
+    chatAbort.current?.abort(); // cancel any previous chat request
     chatAbort.current = new AbortController();
     try {
       const reply = await callAI(messages, "brain", { signal: chatAbort.current.signal });
@@ -1582,7 +1582,7 @@
     if (!query || s.market.busy) return;
     d({ t: "MKT_RESULT", v: "" });
     d({ t: "MKT_BUSY", v: true });
-    scanAbort.current?.abort(); // ביטול any previous scan
+    scanAbort.current?.abort(); // cancel any previous scan
     scanAbort.current = new AbortController();
     try {
       const result = await callAI(
@@ -1602,7 +1602,7 @@
     }
   }, [s.market.query, s.market.busy, s.market.mode]);
 
-  const ביטולAI = useCallback(() => {
+  const cancelAI = useCallback(() => {
     chatAbort.current?.abort();
     scanAbort.current?.abort();
     d({ t: "CHAT_BUSY", v: false });
@@ -1659,7 +1659,7 @@
       toast.error(error.message);
       throw error;
     }
-    toast.success("Notes שמורd");
+    toast.success("Notes saved");
   }, [s.items]);
 
   // ── Modal item ─────────────────────────────────────────────────────────────
@@ -1713,19 +1713,19 @@
         />
       )}
 
-      {/* ── Batch מחק confirmation ────────────────────────────────────────── */}
-      <AlertDialog open={batchמחקTarget} onOpenChange={(open) => !open && setBatchמחקTarget(false)}>
+      {/* ── Batch delete confirmation ────────────────────────────────────────── */}
+      <AlertDialog open={batchDeleteTarget} onOpenChange={(open) => !open && setBatchDeleteTarget(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>מחק {s.inv.selected.length} items?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {s.inv.selected.length} items?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. All selected items will be permanently מחקd.
+              This action cannot be undone. All selected items will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogביטול>ביטול</AlertDialogביטול>
-            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={executeBatchמחק}>
-              מחק All
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={executeBatchDelete}>
+              Delete All
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1764,19 +1764,19 @@
         />
       )}
 
-      {/* ── מחק confirmation ──────────────────────────────────────────────── */}
-      <AlertDialog open={!!s.מחקTarget} onOpenChange={() => d({ t: "DEL_TARGET", id: null })}>
+      {/* ── Delete confirmation ──────────────────────────────────────────────── */}
+      <AlertDialog open={!!s.deleteTarget} onOpenChange={() => d({ t: "DEL_TARGET", id: null })}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Permanent מחק</AlertDialogTitle>
+            <AlertDialogTitle>Permanent Delete</AlertDialogTitle>
             <AlertDialogDescription>
-              This item will be permanently מחקd. You have 30 seconds to restore it after deletion.
+              This item will be permanently deleted. You have 30 seconds to restore it after deletion.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogביטול>ביטול</AlertDialogביטול>
-            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={confirmמחק}>
-              מחק
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-700 hover:bg-red-800" onClick={confirmDelete}>
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1785,8 +1785,8 @@
       {/* ── Undo bar ─────────────────────────────────────────────────────────── */}
       {s.undo && (
         <div className="fixed bottom-20 md:bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-gray-800 border border-gray-600 rounded-xl px-5 py-3 shadow-2xl text-sm">
-          <span>"{s.undo.item.name}" מחקd</span>
-          <Button size="sm" onClick={() => undoמחק(s.undo!.item)}>Undo</Button>
+          <span>"{s.undo.item.name}" deleted</span>
+          <Button size="sm" onClick={() => undoDelete(s.undo!.item)}>Undo</Button>
           <button
             className="text-gray-400 hover:text-white"
             onClick={() => {
@@ -1815,7 +1815,7 @@
             <p className="text-xs text-gray-500 mt-0.5">מנהל תיק קלפי אספנות</p>
           </div>
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer select-none">
-            <span>זיכיון בלבד</span>
+            <span>Franchise only</span>
             <div
               onClick={() => d({ t: "TOGGLE_FRANCHISE" })}
               className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${s.franchise ? "bg-blue-600" : "bg-gray-700"}`}
@@ -1863,7 +1863,7 @@
             title="Copy portfolio summary to clipboard"
           >
             <span className="text-base">⎘</span>
-            <span>שיתוף</span>
+            <span>Share</span>
           </button>
         </div>
       </div>
@@ -1945,8 +1945,8 @@
                     : null,
                 },
                 {
-                  label: "⬇ ייצוא CSV",
-                  action: () => ייצואCSV(s.items, s.partners),
+                  label: "⬇ Export CSV",
+                  action: () => exportCSV(s.items, s.partners),
                   badge: null,
                 },
               ].map(({ label, action, badge }) => (
@@ -2057,7 +2057,7 @@
 
             {/* ── Next Action Banner ────────────────────────────────────────────── */}
             {(() => {
-              // Determine single most ייבואant action for the user right now
+              // Determine single most important action for the user right now
               const highAction = actionItems[0];
               if (!highAction && sellScores.length === 0 && s.items.filter(i => i.status === "active" && i.market_price == null).length === 0) return null;
               let msg = "";
@@ -2863,7 +2863,7 @@
                   className="bg-gray-800 border-gray-700"
                 />
                 {s.chat.busy
-                  ? <Button variant="destructive" onClick={ביטולAI}>ביטול</Button>
+                  ? <Button variant="destructive" onClick={cancelAI}>ביטול</Button>
                   : <Button onClick={sendChat} disabled={!s.chat.input.trim()}>שלח</Button>
                 }
               </div>
@@ -2956,10 +2956,10 @@
                 + Add
               </Button>
               <div className="flex gap-1">
-                <Button variant="outline" size="sm" onClick={() => ייצואCSV(sortedItems, s.partners)}>CSV</Button>
-                <Button variant="outline" size="sm" onClick={() => ייצואEbayCSV(sortedItems)}>eBay</Button>
-                <Button variant="outline" size="sm" onClick={() => ייצואCardmarketCSV(sortedItems)}>CM</Button>
-                <Button variant="outline" size="sm" onClick={() => setShowייבואCSV(true)} title="ייבוא CSV">📥</Button>
+                <Button variant="outline" size="sm" onClick={() => exportCSV(sortedItems, s.partners)}>CSV</Button>
+                <Button variant="outline" size="sm" onClick={() => exportEbayCSV(sortedItems)}>eBay</Button>
+                <Button variant="outline" size="sm" onClick={() => exportCardmarketCSV(sortedItems)}>CM</Button>
+                <Button variant="outline" size="sm" onClick={() => setShowImportCSV(true)} title="Import CSV">📥</Button>
               </div>
               <div className="group relative">
                 <button className="w-6 h-6 rounded-full bg-gray-800 text-gray-500 hover:text-white text-xs font-bold flex items-center justify-center transition-colors" title="Keyboard shortcuts">?</button>
@@ -3069,7 +3069,7 @@
                     📸 Camera Scan
                   </button>
                 </div>
-                <form onSubmit={שמורItem} className="space-y-3">
+                <form onSubmit={saveItem} className="space-y-3">
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
                       { label: "Name *", key: "name", type: "text" },
@@ -3229,7 +3229,7 @@
                   <div className="flex gap-2 pt-1">
                     <Button type="submit">{s.inv.editId ? "Update" : "Add"}</Button>
                     <Button type="button" variant="outline" onClick={() => d({ t: "INV_FORM_SHOW", show: false })}>
-                      ביטול
+                      Cancel
                     </Button>
                   </div>
                 </form>
@@ -3247,7 +3247,7 @@
                     selected={s.inv.selected.includes(item.id)}
                     onSelect={(id) => d({ t: "INV_SEL_TOGGLE", id })}
                     onEdit={startEdit}
-                    onמחק={(id) => d({ t: "DEL_TARGET", id })}
+                    onDelete={(id) => d({ t: "DEL_TARGET", id })}
                     onMarkSold={markSold}
                     onArena={addToArena}
                     onOpenModal={(id) => d({ t: "SET_MODAL", id })}
@@ -3396,7 +3396,7 @@
                                 value={inlineEditVal}
                                 onChange={e => setInlineEditVal(e.target.value)}
                                 onKeyDown={e => {
-                                  if (e.key === "Enter") שמורInlinePrice(item.id, inlineEditVal);
+                                  if (e.key === "Enter") saveInlinePrice(item.id, inlineEditVal);
                                   if (e.key === "Escape") setInlineEditId(null);
                                 }}
                                 className="w-20 bg-gray-800 border border-blue-600 rounded px-2 py-0.5 text-xs text-blue-300 focus:outline-none"
@@ -4305,9 +4305,9 @@
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500 font-normal">{s.items.filter(i => i.status === "sold").length} sales</span>
                   <button
-                    onClick={() => ייצואCSV(s.items.filter(i => i.status === "sold"), s.partners, "sold-transactions.csv")}
+                    onClick={() => exportCSV(s.items.filter(i => i.status === "sold"), s.partners, "sold-transactions.csv")}
                     className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
-                    title="ייצוא sold transactions to CSV"
+                    title="Export sold transactions to CSV"
                   >⬇ CSV</button>
                 </div>
               </div>
@@ -4407,7 +4407,7 @@
             </div>
             <p className="text-xs text-gray-500 mb-4">
               AI with web search. Searches eBay, TCGPlayer, PSA Registry and cites sources.
-              Results are automatically שמורd to the knowledge base.
+              Results are automatically saved to the knowledge base.
             </p>
 
             <div className="flex gap-2 mb-3">
@@ -4467,7 +4467,7 @@
 
             <div className="flex gap-2">
               {s.market.busy
-                ? <Button variant="destructive" onClick={ביטולAI}>ביטול Scan</Button>
+                ? <Button variant="destructive" onClick={cancelAI}>Cancel Scan</Button>
                 : <Button onClick={runScan} disabled={!s.market.query.trim()}>🔍 Run Scan</Button>
               }
             </div>
@@ -4605,13 +4605,13 @@
                     </div>
                     <div className="flex gap-1.5">
                       <Button size="sm" variant="outline"
-                        onClick={() => ייצואCSV(partnerItems, s.partners, `${partner.name}.csv`)}
+                        onClick={() => exportCSV(partnerItems, s.partners, `${partner.name}.csv`)}
                         title="Standard CSV">⬇ CSV</Button>
                       <Button size="sm" variant="outline"
-                        onClick={() => ייצואEbayCSV(partnerItems, `${partner.name}-ebay.csv`)}
+                        onClick={() => exportEbayCSV(partnerItems, `${partner.name}-ebay.csv`)}
                         title="eBay Bulk Upload CSV">eBay</Button>
                       <Button size="sm" variant="outline"
-                        onClick={() => ייצואCardmarketCSV(partnerItems, `${partner.name}-cm.csv`)}
+                        onClick={() => exportCardmarketCSV(partnerItems, `${partner.name}-cm.csv`)}
                         title="Cardmarket CSV">CM</Button>
                     </div>
                   </div>
@@ -4691,7 +4691,7 @@
                     <button
                       onClick={() => setExpandedPartners(prev => {
                         const next = new Set(prev);
-                        isExpanded ? next.מחק(partner.id) : next.add(partner.id);
+                        isExpanded ? next.delete(partner.id) : next.add(partner.id);
                         return next;
                       })}
                       className="w-full text-center py-2 mt-1 text-xs text-gray-500 hover:text-gray-300 border-t border-gray-800 transition-colors"
@@ -4794,8 +4794,8 @@
             setBatchPriceRefreshItems(s.items.filter((i) => s.inv.selected.includes(i.id)))
           }
           onPartnerReassign={batchPartnerReassign}
-          onייצוא={() => ייצואCSV(s.items.filter((i) => s.inv.selected.includes(i.id)), s.partners)}
-          onמחק={batchמחק}
+          onExport={() => exportCSV(s.items.filter((i) => s.inv.selected.includes(i.id)), s.partners)}
+          onDelete={batchDelete}
           onClear={() => d({ t: "INV_SEL_CLEAR" })}
         />
       )}
@@ -4808,13 +4808,13 @@
         />
       )}
 
-      {/* ── CSV ייבוא modal ──────────────────────────────────────────────────── */}
-      {showייבואCSV && (
-        <ייבואCSVModal
+      {/* ── CSV Import modal ──────────────────────────────────────────────────── */}
+      {showImportCSV && (
+        <ImportCSVModal
           partners={s.partners}
           defaultPartnerId={s.partners[0]?.id ?? ""}
-          onייבוא={executeייבואCSV}
-          onClose={() => setShowייבואCSV(false)}
+          onImport={executeImportCSV}
+          onClose={() => setShowImportCSV(false)}
         />
       )}
 
