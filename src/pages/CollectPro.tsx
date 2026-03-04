@@ -1928,7 +1928,7 @@ export default function CollectPro() {
             <div className="flex flex-wrap gap-2">
               {[
                 {
-                  label: "📦 Inventory",
+                            label: "📦 מלאי",
                   action: () => d({ t: "SET_TAB", tab: "inventory" }),
                   badge: s.items.filter(i => i.status === "active").length.toString(),
                 },
@@ -1945,7 +1945,7 @@ export default function CollectPro() {
                     : null,
                 },
                 {
-                  label: "⬇ Export CSV",
+                  label: "⬇ ייצוא CSV",
                   action: () => exportCSV(s.items, s.partners),
                   badge: null,
                 },
@@ -2376,7 +2376,7 @@ export default function CollectPro() {
             {gradingPipeline.length > 0 && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
                 <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center justify-between">
-                  <span>⚗ Grading Pipeline</span>
+                  <span>⚗ תהליך דירוג</span>
                   <span className="text-gray-600 font-normal normal-case">{gradingPipeline.length} card{gradingPipeline.length !== 1 ? "s" : ""} in queue</span>
                 </div>
                 <div className="space-y-2">
@@ -2802,7 +2802,7 @@ export default function CollectPro() {
             {/* ── Chat ────────────────────────────────────────────────────────── */}
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
               <h2 className="font-bold mb-1">🧠 יועץ פורנזי לתיק</h2>
-              <p className="text-xs text-gray-500 mb-3">Analysis based on your real portfolio data. Ask anything — including uncomfortable questions.</p>
+              <p className="text-xs text-gray-500 mb-3">ניתוח מבוסס על נתוני הפורטפוליו שלך. שאל הכל — כולל שאלות לא נוחות. Ask anything — including uncomfortable questions.</p>
 
               {/* Suggested questions — shown only when chat is empty */}
               {s.chat.messages.length === 0 && !s.chat.busy && (
