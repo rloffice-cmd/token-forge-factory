@@ -62,7 +62,7 @@ export default function CameraScanner({ onResult, onClose }: Props) {
       );
       controlsRef.current = controls;
       setPhase("scanning");
-      setStatusMsg("מחפש ברקוד... או לחץ "צלם" לזיהוי AI");
+      setStatusMsg("מחפש ברקוד... או לחץ 'צלם' לזיהוי AI");
     } catch {
       setPhase("error");
       setStatusMsg("אין גישה למצלמה");
