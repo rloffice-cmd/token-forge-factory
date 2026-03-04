@@ -1910,11 +1910,11 @@ export default function CollectPro() {
             {/* ── תמונת מצב תיק ────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
-                { label: "פעיל", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} market` },
-                { label: "בדירוג", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} invested` },
-                { label: "נמכר", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} profit` },
-                { label: "Portfolio", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} invested` },
-                ...(thisMonth ? [{ label: "This Month", value: `${fmt$(thisMonth.profit)}`, cls: thisMonth.profit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${thisMonth.sold} sold · ${thisMonth.bought} bought` }] : []),
+                { label: "פעיל", value: stats.activeCount.toString(), cls: "text-blue-400", sub: `${fmt$(stats.estimatedValue)} שוק` },
+                { label: "בדירוג", value: stats.gradingCount.toString(), cls: "text-amber-400", sub: `${fmt$(stats.totalCost - stats.realisedRevenue + stats.realisedRevenue === 0 ? 0 : 0)} השקעה` },
+                { label: "נמכר", value: stats.soldCount.toString(), cls: stats.realisedProfit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.realisedProfit)} רווח` },
+                { label: "פורטפוליו", value: fmtPct(stats.roiPct), cls: stats.roiPct >= 0 ? "text-emerald-400" : "text-red-400", sub: `${fmt$(stats.totalCost)} השקעה` },
+                ...(thisMonth ? [{ label: "החודש", value: `${fmt$(thisMonth.profit)}`, cls: thisMonth.profit >= 0 ? "text-emerald-400" : "text-red-400", sub: `${thisMonth.sold} נמכר · ${thisMonth.bought} נרכש` }] : []),
               ].map(({ label, value, cls, sub }) => (
                 <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2.5">
                   <div className="text-xs text-gray-500 mb-0.5">{label}</div>
@@ -2137,10 +2137,10 @@ export default function CollectPro() {
               <div className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wide">תמונת מצב תיק</div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "פעיל",   value: stats.activeCount.toString(),        sub: "cards",         color: "text-blue-400" },
-                  { label: "בדירוג",  value: stats.gradingCount.toString(),       sub: "cards",         color: "text-amber-400" },
-                  { label: "Invested", value: fmt$(stats.totalCost),               sub: "buy + grading", color: "text-gray-200" },
-                  { label: "Est. P&L", value: fmt$(stats.unrealisedPnL),           sub: "unrealised",    color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
+                  { label: "פעיל",   value: stats.activeCount.toString(),        sub: "כרטיסים",         color: "text-blue-400" },
+                  { label: "בדירוג",  value: stats.gradingCount.toString(),       sub: "כרטיסים",         color: "text-amber-400" },
+                  { label: "השקעה", value: fmt$(stats.totalCost),               sub: "קנייה + דירוג", color: "text-gray-200" },
+                  { label: "רווח/הפסד", value: fmt$(stats.unrealisedPnL),           sub: "לא ממומש",    color: stats.unrealisedPnL >= 0 ? "text-emerald-400" : "text-red-400" },
                 ].map((st) => (
                   <div key={st.label} className="bg-gray-800/60 rounded-lg px-3 py-2">
                     <div className="text-xs text-gray-500">{st.label}</div>
