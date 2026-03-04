@@ -8,7 +8,7 @@ export function StatusBadge({ status }: { status: ItemStatus }) {
     grading: "bg-yellow-900 text-yellow-300",
     sold: "bg-blue-900 text-blue-300",
   };
-  const label: Record<ItemStatus, string> = { active: "Active", grading: "Grading", sold: "Sold" };
+  const label: Record<ItemStatus, string> = { active: "פעיל", grading: "בדירוג", sold: "נמכר" };
   return (
     <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${map[status]}`}>
       {label[status]}

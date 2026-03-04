@@ -62,7 +62,7 @@ export default function CollectibleCard({
       {/* Arena slot badge */}
       {arenaSlot && (
         <div className={`absolute top-2 left-2 z-20 px-2 py-0.5 rounded-full text-xs font-bold ${arenaSlot === "a" ? "bg-blue-600 text-white" : "bg-purple-600 text-white"}`}>
-          {arenaSlot === "a" ? "Slot A" : "Slot B"}
+          {arenaSlot === "a" ? "תא A" : "תא B"}
         </div>
       )}
 
@@ -128,7 +128,7 @@ export default function CollectibleCard({
 
         <div className="flex justify-between text-xs text-gray-400 mt-auto pt-1">
           <div>
-            <div>Cost: {fmt$(cost)}</div>
+            <div>עלות: {fmt$(cost)}</div>
             {item.status !== "sold" && (() => {
               const ageDays = Math.round((Date.now() - new Date(item.buy_date).getTime()) / 86400000);
               const cls = ageDays <= 30 ? "text-gray-600" : ageDays <= 90 ? "text-amber-600" : "text-red-600";
@@ -149,7 +149,7 @@ export default function CollectibleCard({
           ) : item.market_price != null ? (
             <span className="text-blue-400">~{fmt$(item.market_price)}</span>
           ) : item.status === "active" ? (
-            <span className="text-amber-700 text-xs" title="No market price set">⚠ no price</span>
+            <span className="text-amber-700 text-xs" title="אין מחיר שוק">⚠ אין מחיר</span>
           ) : null}
         </div>
       </div>
@@ -164,42 +164,42 @@ export default function CollectibleCard({
             <button
               onClick={() => onMarkSold(item)}
               className="flex-1 text-xs py-1 rounded bg-emerald-900/60 text-emerald-300 hover:bg-emerald-800 transition-colors"
-              title="Mark sold"
+              title="סמן כנמכר"
             >✓</button>
           )}
           {onEdit && (
             <button
               onClick={() => onEdit(item)}
               className="flex-1 text-xs py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
-              title="Edit"
+              title="עריכה"
             >✏</button>
           )}
           {onDelete && (
             <button
               onClick={() => onDelete(item.id)}
               className="flex-1 text-xs py-1 rounded bg-red-900/60 text-red-300 hover:bg-red-800 transition-colors"
-              title="Delete"
+              title="מחיקה"
             >✕</button>
           )}
           {onArena && (
             <button
               onClick={() => onArena(item.id)}
               className="flex-1 text-xs py-1 rounded bg-purple-900/60 text-purple-300 hover:bg-purple-800 transition-colors"
-              title="Arena"
+              title="זירה"
             >⚔</button>
           )}
           {onOpenModal && (
             <button
               onClick={() => onOpenModal(item.id)}
               className="flex-1 text-xs py-1 rounded bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
-              title="Detail"
+              title="פרטים"
             >🔍</button>
           )}
           {onGrade && (
             <button
               onClick={() => onGrade(item)}
               className="flex-1 text-xs py-1 rounded bg-indigo-900/60 text-indigo-300 hover:bg-indigo-800 transition-colors"
-              title="Pre-grade"
+              title="דירוג מוקדם"
             >🔬</button>
           )}
         </div>

@@ -62,7 +62,7 @@ export default function CameraScanner({ onResult, onClose }: Props) {
       );
       controlsRef.current = controls;
       setPhase("scanning");
-      setStatusMsg("מחפש ברקוד... או לחץ Snap לזיהוי AI");
+      setStatusMsg("מחפש ברקוד... או לחץ "צלם" לזיהוי AI");
     } catch {
       setPhase("error");
       setStatusMsg("אין גישה למצלמה");
@@ -297,12 +297,12 @@ export default function CameraScanner({ onResult, onClose }: Props) {
           onClick={snapAndIdentify}
           className="mt-4 px-8 py-3 rounded-2xl bg-gradient-to-r from-yellow-500 to-orange-500 text-black font-bold text-base shadow-lg active:scale-95 transition-transform"
         >
-          📸 Snap & AI
+          📸 צלם וזהה AI
         </button>
       )}
 
       <p className="text-gray-600 text-xs mt-3 text-center px-6">
-        כוון את המצלמה לברקוד עבור זיהוי אוטומטי, או לחץ Snap לזיהוי AI
+        כוון את המצלמה לברקוד עבור זיהוי אוטומטי, או לחץ "צלם" לזיהוי AI
       </p>
     </div>
   );

@@ -26,7 +26,7 @@ export default function CardDetailModal({
   const roiPct = profit != null && cost > 0 ? (profit / cost) * 100 : null;
   const cfg = franchiseCfg(item.franchise);
 
-  // Fetch real price history; fall back to synthetic data
+  // Fetch real היסטוריית מחיר; fall back to synthetic data
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [historyReal, setHistoryReal] = useState(false);
 
@@ -168,7 +168,7 @@ export default function CardDetailModal({
               <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-300">{item.condition}</span>
             </div>
             {partner && (
-              <div className="text-xs text-gray-500 mt-2">Partner: {partner.name}</div>
+              <div className="text-xs text-gray-500 mt-2">שותף: {partner.name}</div>
             )}
           </div>
         </div>
@@ -181,7 +181,7 @@ export default function CardDetailModal({
               <div className={`text-xl font-extrabold ${profit != null && profit >= 0 ? "text-emerald-300" : "text-red-300"}`}>{fmt$(item.sell_price)}</div>
             </div>
             <div className="text-right">
-              <div className="text-xs text-gray-400 mb-0.5">Net Profit</div>
+              <div className="text-xs text-gray-400 mb-0.5">רווח נקי</div>
               <div className={`text-lg font-bold ${profit != null && profit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                 {profit != null ? `${profit >= 0 ? "+" : ""}${fmt$(profit)}` : "—"}
               </div>
@@ -193,18 +193,18 @@ export default function CardDetailModal({
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-2 mb-4 text-sm">
           {[
-            { label: "Buy Price",     value: fmt$(item.buy_price),          cls: "text-white" },
-            { label: "Buy Date",      value: item.buy_date,                  cls: "text-gray-300" },
-            { label: "Grading Cost",  value: fmt$(item.grading_cost ?? 0),   cls: "text-amber-400" },
-            { label: "Total Cost",    value: fmt$(cost),                     cls: "text-amber-300 font-bold" },
+            { label: "מחיר קנייה",     value: fmt$(item.buy_price),          cls: "text-white" },
+            { label: "תאריך קנייה",      value: item.buy_date,                  cls: "text-gray-300" },
+            { label: "עלות דירוג",  value: fmt$(item.grading_cost ?? 0),   cls: "text-amber-400" },
+            { label: "עלות כוללת",    value: fmt$(cost),                     cls: "text-amber-300 font-bold" },
             ...(item.status !== "sold" ? [
               {
-                label: "Market Estimate",
+                label: "הערכת שוק",
                 value: item.market_price != null ? fmt$(item.market_price) : "N/A",
                 cls: "text-blue-400",
               },
               {
-                label: "Est. Profit",
+                label: "רווח משוער",
                 value: profit != null ? `${profit >= 0 ? "+" : ""}${fmt$(profit)}` : "—",
                 cls: profit != null ? (profit >= 0 ? "text-emerald-400" : "text-red-400") : "text-gray-500",
               },
@@ -232,7 +232,7 @@ export default function CardDetailModal({
                 value={notesVal}
                 onChange={e => setNotesVal(e.target.value)}
                 className="w-full bg-transparent text-xs text-gray-300 resize-none focus:outline-none"
-                placeholder="Add notes…"
+                placeholder="הוסף הערות…"
               />
               <div className="flex gap-2 mt-1.5 justify-end">
                 <button
@@ -240,7 +240,7 @@ export default function CardDetailModal({
                   disabled={savingNotes}
                   className="text-xs px-2.5 py-1 rounded bg-blue-700 text-white hover:bg-blue-600 disabled:opacity-50 transition-colors"
                 >
-                  {savingNotes ? "Saving…" : "Save"}
+                  {savingNotes ? "שומר…" : "שמור"}
                 </button>
                 <button
                   onClick={() => { setEditingNotes(false); setNotesVal(item.notes ?? ""); }}
@@ -254,20 +254,20 @@ export default function CardDetailModal({
             <div
               className={`text-xs text-gray-400 bg-gray-800/40 border border-gray-700/50 rounded-lg px-3 py-2 whitespace-pre-wrap ${onUpdateNotes ? "cursor-pointer hover:border-gray-600 transition-colors" : ""}`}
               onClick={() => onUpdateNotes && setEditingNotes(true)}
-              title={onUpdateNotes ? "Click to edit notes" : undefined}
+              title={onUpdateNotes ? "לחץ לעריכת הערות" : undefined}
             >
               <div className="flex items-center justify-between mb-0.5">
-                <span className="text-gray-500 font-semibold">Notes</span>
+                <span className="text-gray-500 font-semibold">הערות</span>
                 {onUpdateNotes && <span className="text-gray-700 text-xs">✏ edit</span>}
               </div>
-              {item.notes ? item.notes : <span className="text-gray-700 italic">No notes — click to add</span>}
+              {item.notes ? item.notes : <span className="text-gray-700 italic">אין הערות — לחץ להוספה</span>}
             </div>
           )}
         </div>
 
         {item.market_price == null && (
           <div className="text-xs text-amber-600 bg-amber-900/30 border border-amber-900/50 rounded-lg px-3 py-2 mb-4">
-            No confirmed market price. Profit / ROI figures are estimates only.
+            אין מחיר שוק מאושר. נתוני רווח / ROI הם אומדנים בלבד.
           </div>
         )}
 
@@ -283,13 +283,13 @@ export default function CardDetailModal({
                   : "bg-blue-900/60 border border-blue-800/50 text-blue-300 hover:bg-blue-800/60 active:scale-98"
               }`}
             >
-              {refreshing ? "🔍 Searching eBay + TCGPlayer…" : "🔍 Refresh market price (AI web search)"}
+              {refreshing ? "🔍 מחפש ב-eBay + TCGPlayer…" : "🔍 רענן מחיר שוק (חיפוש AI)"}
             </button>
 
             {refreshedPrice != null && !refreshing && (
               <div className="flex items-center justify-between text-xs px-3 py-1.5 bg-emerald-900/30 border border-emerald-800/40 rounded-lg">
                 <span className="text-emerald-400 font-semibold">Updated → {fmt$(refreshedPrice)}</span>
-                <span className="text-gray-500">price history updated ✓</span>
+                <span className="text-gray-500">היסטוריית מחיר updated ✓</span>
               </div>
             )}
 
@@ -305,7 +305,7 @@ export default function CardDetailModal({
                 type="number"
                 min="0"
                 step="0.01"
-                placeholder="📝 Record manual price ($)"
+                placeholder="📝 הזן מחיר ידני ($)"
                 className="flex-1 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
                 value={manualPrice}
                 onChange={(e) => setManualPrice(e.target.value)}
@@ -316,7 +316,7 @@ export default function CardDetailModal({
                 disabled={!manualPrice || recordingManual}
                 className="px-3 py-1.5 rounded-lg text-xs bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-40 transition-colors whitespace-nowrap"
               >
-                {recordingManual ? "…" : "Record"}
+                {recordingManual ? "…" : "שמור מחיר"}
               </button>
             </div>
           </div>
@@ -325,7 +325,7 @@ export default function CardDetailModal({
         {/* Price evolution chart */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 font-semibold">Price Evolution</span>
+            <span className="text-xs text-gray-400 font-semibold">היסטוריית מחירים</span>
             {historyReal
               ? <span className="text-xs text-green-500 font-mono">● LIVE DATA</span>
               : <span className="text-xs text-yellow-600 font-mono">⚠ SYNTHETIC</span>
@@ -362,7 +362,7 @@ export default function CardDetailModal({
             onClick={() => { onArena(item.id); onClose(); }}
             variant="outline"
           >
-            Send to Arena ⚔
+            שלח לזירה ⚔
           </Button>
         )}
       </div>

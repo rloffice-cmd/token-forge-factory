@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRes, useCallback } from "react";
 import { toast } from "sonner";
 import type { CollectionItem, ItemStatus, Partner } from "@/lib/collectpro/types";
 import { itemCost } from "@/lib/collectpro/helpers";
@@ -150,7 +150,7 @@ export function SellDialog({
           </div>
           <div className="flex gap-2">
             <Button type="submit" disabled={busy || suggesting || !price} className="flex-1">
-              {busy ? "Saving…" : "Confirm Sale ✓"}
+              {busy ? "Saving…" : "אשר מכירה ✓"}
             </Button>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           </div>
@@ -206,7 +206,7 @@ export function BatchOperationModal({
     }
   };
 
-  const titles = { status: "Update Status", price: "Update Market Price", partner: "Reassign Partner" };
+  const titles = { status: "Update Status", price: "Update Market Price", partner: "שינוי שותף" };
 
   return (
     <div
@@ -515,7 +515,7 @@ export function ImportCSVModal({
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between shrink-0">
           <div>
-            <h3 className="font-bold text-white">📥 Import CSV</h3>
+            <h3 className="font-bold text-white">📥 ייבוא CSV</h3>
             <p className="text-xs text-gray-500 mt-0.5">Import from a CollectPro-exported CSV file</p>
           </div>
           {!busy && (
