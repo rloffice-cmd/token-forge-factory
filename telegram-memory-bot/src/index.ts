@@ -18,7 +18,7 @@ import {
 // === Validation ===
 
 function validateEnv(): void {
-  const required = ['BOT_TOKEN', 'DATABASE_URL', 'GEMINI_API_KEY', 'OWNER_CHAT_ID'];
+  const required = ['BOT_TOKEN', 'GEMINI_API_KEY', 'OWNER_CHAT_ID'];
   const missing = required.filter(key => !process.env[key]);
   if (missing.length > 0) {
     throw new Error(`Missing env vars: ${missing.join(', ')}`);

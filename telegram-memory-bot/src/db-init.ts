@@ -1,12 +1,11 @@
 import 'dotenv/config';
-import { initDb, createTables, getPool } from './db';
+import { initDb, createTables } from './db';
 
 async function main() {
   console.log('🔧 Initializing database...');
   initDb();
   await createTables();
   console.log('✅ Database initialized successfully!');
-  await getPool().end();
 }
 
 main().catch(error => {
