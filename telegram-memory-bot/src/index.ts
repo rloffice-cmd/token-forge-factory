@@ -43,6 +43,7 @@ async function main(): Promise<void> {
   // === Security: Only respond to owner ===
   bot.use(async (ctx, next) => {
     const chatId = ctx.chat?.id;
+    console.log(`📩 Message from chat ID: ${chatId} (owner: ${ownerChatId})`);
     if (chatId !== ownerChatId) {
       console.log(`⛔ Unauthorized access attempt from chat ID: ${chatId}`);
       if (ctx.message) {
