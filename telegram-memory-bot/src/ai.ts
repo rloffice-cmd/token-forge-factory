@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import { ExtractedMetadata, Memory } from './types';
 import { sanitizeForPrompt, validateImportance, validatePriority } from './utils';
 
@@ -241,8 +241,6 @@ ${safeQuestion}
 
 // === Detect Intent ===
 
-export type MessageIntent = 'store' | 'question' | 'task_add' | 'task_list' | 'task_complete' | 'stats' | 'help';
-
 // === Deep Message Analysis ===
 
 export interface AnalyzedAction {
@@ -364,7 +362,9 @@ function validateAnalysis(raw: any): MessageAnalysis {
   };
 }
 
-export async function detectIntent(text: string): Promise<MessageIntent> {
+export type MessageIntent = 'store' | 'question' | 'task_add' | 'task_list' | 'task_complete' | 'task_bulk' | 'stats' | 'help';
+
+export function detectIntent(text: string): MessageIntent {
   const lower = text.trim();
 
   if (/^[/]/.test(lower)) return 'help';
@@ -372,11 +372,91 @@ export async function detectIntent(text: string): Promise<MessageIntent> {
   if (/^(סיימתי|בוצע|done|✅|עשיתי|השלמתי|גמרתי)\s/i.test(lower)) return 'task_complete';
   if (/^(סטטיסטיק|סטטוס|סיכום|stats)/i.test(lower)) return 'stats';
 
+  // Detect instruction to create tasks from recent context
+  if (/^(תכניס|הכנס|תוסיף|הוסף|צור|תיצור|תעשה).*(משימות|משימה|tasks|טאסק)/i.test(lower)) return 'task_bulk';
+
   if (/^(מה|מי|איפה|מתי|למה|כמה|איך|האם|אילו|עבור מה|what|who|where|when|why|how|which)\s/i.test(lower)) return 'question';
   if (/\?$/.test(lower)) return 'question';
   if (/\?؟$/.test(lower)) return 'question';
 
   if (/^(תזכיר|צריך ל|חייב ל|לא לשכוח|משימה:|todo:|remind|אני רוצה ל|הערה:|יש ל)/i.test(lower)) return 'task_add';
 
+  // Detect numbered/bulleted lists as bulk tasks
+  if (looksLikeTaskList(lower)) return 'task_bulk';
+
   return 'store';
+}
+
+/** Detect if text looks like a numbered/bulleted list of tasks */
+function looksLikeTaskList(text: string): boolean {
+  const lines = text.split('\n').filter(l => l.trim().length > 0);
+  if (lines.length < 2) return false;
+  const numberedLines = lines.filter(l => /^\s*[\d]+[.)]\s/.test(l) || /^\s*[-•*]\s/.test(l));
+  return numberedLines.length >= 2 && numberedLines.length >= lines.length * 0.5;
+}
+
+// === Bulk Task Extraction ===
+
+export interface BulkTaskItem {
+  title: string;
+  priority: string;
+}
+
+export async function extractBulkTasks(text: string): Promise<BulkTaskItem[]> {
+  const safeText = sanitizeForPrompt(text);
+  const prompt = `חלץ את כל המשימות/פריטים מהטקסט הבא. כל פריט צריך להיות משימה נפרדת.
+
+<user_message>
+${safeText}
+</user_message>
+
+החזר JSON array בלבד (בלי markdown):
+[
+  { "title": "כותרת המשימה", "priority": "low/medium/high/urgent" }
+]
+
+חשוב:
+- כל פריט ברשימה הוא משימה נפרדת
+- תן כותרת קצרה וברורה לכל משימה
+- אם אין עדיפות ברורה, השתמש ב-medium
+- החזר רק JSON תקין`;
+
+  try {
+    const response = await callAI(prompt, true);
+    const parsed = JSON.parse(cleanJsonResponse(response));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+      .map((t: any) => ({
+        title: t.title.trim(),
+        priority: validatePriority(t.priority || 'medium'),
+      }));
+  } catch (error) {
+    console.error('Bulk task extraction failed:', error);
+    return [];
+  }
+}
+
+// === Image Text Extraction (Gemini Vision) ===
+
+export async function extractTextFromImage(imageBuffer: Buffer, mimeType: string): Promise<string> {
+  const imagePart: Part = {
+    inlineData: {
+      data: imageBuffer.toString('base64'),
+      mimeType,
+    },
+  };
+
+  const prompt = `חלץ את כל הטקסט מהתמונה הזאת. אם יש טקסט בעברית, שמור על הכיוון.
+אם זו תמונה של רשימה, שיחה, הודעה, מסמך - חלץ את כל התוכן.
+אם אין טקסט בתמונה, תאר בקצרה מה רואים בתמונה.
+ענה בעברית.`;
+
+  try {
+    const result = await flashModel.generateContent([prompt, imagePart]);
+    return result.response.text().trim();
+  } catch (error) {
+    console.error('Image extraction failed:', error);
+    throw new Error('לא הצלחתי לקרוא את התמונה');
+  }
 }

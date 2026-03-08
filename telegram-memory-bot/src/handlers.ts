@@ -639,6 +639,167 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
   }
 }
 
+// === Bulk Task Creation ===
+
+export async function handleBulkTasks(ctx: Context, text: string): Promise<void> {
+  // If text is an instruction like "תכניס את כל המשימות", look at recent memories
+  const isInstruction = /^(תכניס|הכנס|תוסיף|הוסף|צור|תיצור|תעשה)/i.test(text.trim());
+  let sourceText = text;
+
+  if (isInstruction) {
+    const recent = db.getRecentMemories(1);
+    if (recent.length > 0) {
+      sourceText = recent[0].content;
+    } else {
+      await ctx.reply('❌ לא מצאתי הודעה קודמת לחלץ ממנה משימות.');
+      return;
+    }
+  }
+
+  const thinking = await ctx.reply('📋 מחלץ משימות מהרשימה...');
+
+  try {
+    const tasks = await ai.extractBulkTasks(sourceText);
+
+    if (tasks.length === 0) {
+      await ctx.api.editMessageText(chatId(ctx), thinking.message_id, '❌ לא הצלחתי לזהות משימות בטקסט.');
+      return;
+    }
+
+    const created: { task: Task; idx: number }[] = [];
+    for (const item of tasks) {
+      const task = db.insertTask({
+        title: item.title,
+        priority: item.priority,
+      });
+      created.push({ task, idx: created.length });
+    }
+
+    // Also store the original text as memory
+    if (!isInstruction) {
+      db.insertMemory({
+        content: sourceText,
+        category: 'עבודה',
+        topic: 'רשימת משימות',
+        tags: ['משימות'],
+        source: 'direct',
+        importance: 'high',
+      });
+    }
+
+    let response = `✅ נוצרו ${created.length} משימות!\n\n`;
+    const keyboard = new InlineKeyboard();
+
+    created.forEach(({ task }, idx) => {
+      response += `📋 ${task.title}\n   🆔 #${task.id}\n\n`;
+      keyboard.text(`✅ #${task.id}`, `task_done:${task.id}`);
+      if ((idx + 1) % 3 === 0) keyboard.row();
+    });
+
+    await ctx.api.editMessageText(chatId(ctx), thinking.message_id, response, {
+      reply_markup: keyboard,
+    });
+  } catch (error) {
+    console.error('Bulk task error:', error);
+    await ctx.api.editMessageText(chatId(ctx), thinking.message_id, '❌ שגיאה ביצירת משימות. נסה שוב.');
+  }
+}
+
+// === Image Processing ===
+
+export async function handleImageMessage(ctx: Context): Promise<void> {
+  const thinking = await ctx.reply('🔍 קורא את התמונה...');
+
+  try {
+    // Get the largest photo (last in array)
+    const photos = ctx.message?.photo;
+    if (!photos || photos.length === 0) {
+      await ctx.api.editMessageText(chatId(ctx), thinking.message_id, '❌ לא הצלחתי לקבל את התמונה.');
+      return;
+    }
+
+    const photo = photos[photos.length - 1];
+    const file = await ctx.api.getFile(photo.file_id);
+
+    if (!file.file_path) {
+      await ctx.api.editMessageText(chatId(ctx), thinking.message_id, '❌ לא הצלחתי להוריד את התמונה.');
+      return;
+    }
+
+    // Download the file
+    const url = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`;
+    const response = await fetch(url);
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    const ext = file.file_path.split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    // Extract text from image using Gemini Vision
+    const extractedText = await ai.extractTextFromImage(buffer, mimeType);
+
+    const caption = ctx.message?.caption;
+    const fullText = caption ? `${caption}\n\n---\nטקסט מהתמונה:\n${extractedText}` : extractedText;
+
+    // Check if the extracted text looks like a task list
+    const intent = ai.detectIntent(extractedText);
+
+    if (intent === 'task_bulk') {
+      // It's a list of tasks in the image
+      await ctx.api.editMessageText(chatId(ctx), thinking.message_id, `📷 זיהיתי טקסט מהתמונה:\n\n${extractedText}\n\n📋 מחלץ משימות...`);
+
+      const tasks = await ai.extractBulkTasks(extractedText);
+      if (tasks.length > 0) {
+        const keyboard = new InlineKeyboard();
+        let taskMsg = `✅ נוצרו ${tasks.length} משימות מהתמונה!\n\n`;
+
+        for (let i = 0; i < tasks.length; i++) {
+          const task = db.insertTask({ title: tasks[i].title, priority: tasks[i].priority });
+          taskMsg += `📋 ${task.title}\n   🆔 #${task.id}\n\n`;
+          keyboard.text(`✅ #${task.id}`, `task_done:${task.id}`);
+          if ((i + 1) % 3 === 0) keyboard.row();
+        }
+
+        db.insertMemory({
+          content: fullText,
+          category: 'עבודה',
+          topic: 'משימות מתמונה',
+          tags: ['משימות', 'תמונה'],
+          source: 'direct',
+          importance: 'high',
+        });
+
+        await ctx.reply(taskMsg, { reply_markup: keyboard });
+        return;
+      }
+    }
+
+    // Store as memory
+    const memory = db.insertMemory({
+      content: fullText,
+      category: 'כללי',
+      topic: 'תמונה',
+      tags: ['תמונה'],
+      source: 'direct',
+      importance: 'medium',
+    });
+
+    // Check if extracted text has task intent
+    if (intent === 'task_add') {
+      await handleStoreMemory(ctx, extractedText);
+      return;
+    }
+
+    const preview = extractedText.length > 200 ? extractedText.substring(0, 200) + '...' : extractedText;
+    await ctx.api.editMessageText(
+      chatId(ctx), thinking.message_id,
+      `📷 טקסט שחולץ מהתמונה:\n\n${preview}\n\n✅ נשמר בזיכרון 🆔 #${memory.id}`
+    );
+  } catch (error) {
+    console.error('Image processing error:', error);
+    await ctx.api.editMessageText(chatId(ctx), thinking.message_id, '❌ שגיאה בקריאת התמונה. נסה שוב.');
+  }
+}
+
 // === Action to Task ===
 
 async function createTaskFromAction(action: ai.AnalyzedAction): Promise<Task> {

@@ -8,6 +8,7 @@ import {
   handleTaskAdd,
   handleTaskList,
   handleTaskComplete,
+  handleBulkTasks,
   handleStats,
   handleForwardedMessage,
   handleHelp,
@@ -15,6 +16,7 @@ import {
   handleDelete,
   handleCallbackQuery,
   handleAnalyzeMessage,
+  handleImageMessage,
 } from './handlers';
 import { startScheduler, stopScheduler } from './scheduler';
 
@@ -122,6 +124,9 @@ async function main(): Promise<void> {
       case 'task_add':
         await handleTaskAdd(ctx, text);
         break;
+      case 'task_bulk':
+        await handleBulkTasks(ctx, text);
+        break;
       case 'task_list':
         await handleTaskList(ctx);
         break;
@@ -146,17 +151,12 @@ async function main(): Promise<void> {
     }
   });
 
-  // === Handle photos with captions ===
+  // === Handle photos - extract text with Gemini Vision ===
   bot.on('message:photo', async (ctx) => {
-    const caption = ctx.message.caption;
-    if (caption) {
-      if (ctx.message.forward_origin) {
-        await handleForwardedMessage(ctx);
-      } else {
-        await handleStoreMemory(ctx, `[תמונה] ${caption}`);
-      }
+    if (ctx.message.forward_origin) {
+      await handleForwardedMessage(ctx);
     } else {
-      await ctx.reply('📷 קיבלתי תמונה, אבל בלי טקסט לא אוכל לשמור אותה. הוסף תיאור.');
+      await handleImageMessage(ctx);
     }
   });
 
