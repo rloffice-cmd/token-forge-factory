@@ -66,9 +66,18 @@ export async function extractMetadata(text: string): Promise<ExtractedMetadata> 
     "title": "כותרת המשימה",
     "description": "תיאור מפורט",
     "priority": "low/medium/high/urgent",
-    "due_date": "YYYY-MM-DD אם צוין תאריך, אחרת null"
+    "due_date": "YYYY-MM-DD אם צוין תאריך, אחרת null",
+    "reminder_at": "YYYY-MM-DDTHH:MM:SS אם צוין זמן תזכורת, אחרת null",
+    "reminder_interval_hours": "מספר שעות בין תזכורות חוזרות. ברירת מחדל 24 אם יש תזכורת. null אם לא צוין"
   }
 }
+
+התאריך של היום: ${new Date().toISOString().split('T')[0]}
+אם המשתמש אומר "יום רביעי ב-12:00" חשב את התאריך הנכון הקרוב.
+אם אומר "מחר" - חשב תאריך מחר.
+אם אומר "עוד שעה" - חשב שעה מעכשיו.
+אם אומר "תזכיר לי כל יום" - הגדר reminder_interval_hours ל-24.
+אם לא צוין מרווח תזכורות אבל יש תזכורת - הגדר ברירת מחדל 24 שעות.
 
 חשוב: החזר רק JSON תקין, בלי שום טקסט נוסף.`;
 

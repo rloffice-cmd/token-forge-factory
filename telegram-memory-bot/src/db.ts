@@ -52,6 +52,9 @@ export async function createTables(): Promise<void> {
       priority TEXT NOT NULL DEFAULT 'medium',
       due_date TEXT,
       reminder_at TEXT,
+      reminder_interval_hours REAL,
+      last_reminded_at TEXT,
+      snooze_until TEXT,
       category TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
@@ -60,7 +63,22 @@ export async function createTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
     CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+    CREATE INDEX IF NOT EXISTS idx_tasks_reminder_at ON tasks(reminder_at);
   `);
+
+  // Migration: add new columns to existing tables
+  try {
+    getDb().exec(`ALTER TABLE tasks ADD COLUMN reminder_interval_hours REAL`);
+  } catch { /* column already exists */ }
+  try {
+    getDb().exec(`ALTER TABLE tasks ADD COLUMN last_reminded_at TEXT`);
+  } catch { /* column already exists */ }
+  try {
+    getDb().exec(`ALTER TABLE tasks ADD COLUMN snooze_until TEXT`);
+  } catch { /* column already exists */ }
+  try {
+    getDb().exec(`CREATE INDEX IF NOT EXISTS idx_tasks_reminder_at ON tasks(reminder_at)`);
+  } catch { /* index already exists */ }
   console.log('✅ Database tables created successfully');
 }
 
@@ -80,6 +98,9 @@ function rowToTask(row: any): Task {
     ...row,
     due_date: row.due_date ? new Date(row.due_date) : null,
     reminder_at: row.reminder_at ? new Date(row.reminder_at) : null,
+    reminder_interval_hours: row.reminder_interval_hours ?? null,
+    last_reminded_at: row.last_reminded_at ? new Date(row.last_reminded_at) : null,
+    snooze_until: row.snooze_until ? new Date(row.snooze_until) : null,
     created_at: new Date(row.created_at),
     updated_at: new Date(row.updated_at),
   };
@@ -160,11 +181,17 @@ export async function deleteMemory(id: number): Promise<boolean> {
 
 export async function insertTask(data: TaskInsert): Promise<Task> {
   const stmt = getDb().prepare(
-    `INSERT INTO tasks (title, description, priority, due_date, category)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (title, description, priority, due_date, reminder_at, reminder_interval_hours, category)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   const result = stmt.run(
-    data.title, data.description || null, data.priority || 'medium', data.due_date || null, data.category || null
+    data.title,
+    data.description || null,
+    data.priority || 'medium',
+    data.due_date || null,
+    data.reminder_at || null,
+    data.reminder_interval_hours ?? null,
+    data.category || null
   );
   const row = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(result.lastInsertRowid);
   return rowToTask(row);
@@ -207,6 +234,56 @@ export async function getDueTasks(): Promise<Task[]> {
      ORDER BY due_date ASC`
   ).all();
   return rows.map(rowToTask);
+}
+
+// === Reminder Operations ===
+
+export async function getTasksDueForReminder(): Promise<Task[]> {
+  const now = new Date().toISOString();
+  const rows = getDb().prepare(
+    `SELECT * FROM tasks
+     WHERE status IN ('pending', 'in_progress')
+       AND reminder_at IS NOT NULL
+       AND reminder_at <= ?
+       AND (snooze_until IS NULL OR snooze_until <= ?)
+     ORDER BY reminder_at ASC`
+  ).all(now, now);
+  return rows.map(rowToTask);
+}
+
+export async function markTaskReminded(id: number): Promise<void> {
+  const now = new Date().toISOString();
+  // Get the task to check for recurring reminder
+  const task = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
+  if (!task) return;
+
+  if (task.reminder_interval_hours) {
+    // Set next reminder based on interval
+    const nextReminder = new Date(Date.now() + task.reminder_interval_hours * 3600000).toISOString();
+    getDb().prepare(
+      `UPDATE tasks SET last_reminded_at = ?, reminder_at = ?, updated_at = ? WHERE id = ?`
+    ).run(now, nextReminder, now, id);
+  } else {
+    // One-time reminder: clear reminder_at after sending
+    getDb().prepare(
+      `UPDATE tasks SET last_reminded_at = ?, reminder_at = NULL, updated_at = ? WHERE id = ?`
+    ).run(now, now, id);
+  }
+}
+
+export async function snoozeTask(id: number, hours: number): Promise<Task | null> {
+  const snoozeUntil = new Date(Date.now() + hours * 3600000).toISOString();
+  const now = new Date().toISOString();
+  getDb().prepare(
+    `UPDATE tasks SET snooze_until = ?, updated_at = ? WHERE id = ?`
+  ).run(snoozeUntil, now, id);
+  const row = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
+  return row ? rowToTask(row) : null;
+}
+
+export async function getTaskById(id: number): Promise<Task | null> {
+  const row = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
+  return row ? rowToTask(row) : null;
 }
 
 // === Bulk Operations ===

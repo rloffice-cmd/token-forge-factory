@@ -33,6 +33,9 @@ export interface Task {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   due_date: Date | null;
   reminder_at: Date | null;
+  reminder_interval_hours: number | null;
+  last_reminded_at: Date | null;
+  snooze_until: Date | null;
   category: string | null;
   created_at: Date;
   updated_at: Date;
@@ -43,6 +46,8 @@ export interface TaskInsert {
   description?: string;
   priority?: string;
   due_date?: string;
+  reminder_at?: string;
+  reminder_interval_hours?: number;
   category?: string;
 }
 
@@ -59,6 +64,8 @@ export interface ExtractedMetadata {
     description: string;
     priority: string;
     due_date?: string;
+    reminder_at?: string;
+    reminder_interval_hours?: number;
   };
   summary: string;
 }

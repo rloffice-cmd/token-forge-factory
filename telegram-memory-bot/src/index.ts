@@ -13,7 +13,9 @@ import {
   handleHelp,
   handleRecent,
   handleDelete,
+  handleCallbackQuery,
 } from './handlers';
+import { startScheduler, stopScheduler } from './scheduler';
 
 // === Validation ===
 
@@ -90,6 +92,9 @@ async function main(): Promise<void> {
   bot.command('delete', async (ctx) => {
     await handleDelete(ctx, ctx.message?.text || '');
   });
+
+  // === Handle inline button callbacks ===
+  bot.on('callback_query:data', handleCallbackQuery);
 
   // === Handle all text messages ===
   bot.on('message:text', async (ctx) => {
@@ -173,9 +178,13 @@ async function main(): Promise<void> {
     console.error('Bot error:', err);
   });
 
+  // === Start reminder scheduler ===
+  startScheduler(bot, ownerChatId);
+
   // === Graceful shutdown ===
   const shutdown = () => {
     console.log('🛑 Shutting down gracefully...');
+    stopScheduler();
     bot.stop();
     process.exit(0);
   };
