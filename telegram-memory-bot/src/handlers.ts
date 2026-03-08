@@ -46,6 +46,33 @@ function chatId(ctx: Context): number {
   return id;
 }
 
+// Telegram has a 4096 character limit per message
+const TELEGRAM_MAX_LENGTH = 4096;
+
+async function safeSend(ctx: Context, text: string, options?: any): Promise<void> {
+  if (text.length <= TELEGRAM_MAX_LENGTH) {
+    await ctx.reply(text, options);
+    return;
+  }
+  // Split into chunks at newline boundaries
+  let remaining = text;
+  while (remaining.length > 0) {
+    let chunk: string;
+    if (remaining.length <= TELEGRAM_MAX_LENGTH) {
+      chunk = remaining;
+      remaining = '';
+    } else {
+      const cutAt = remaining.lastIndexOf('\n', TELEGRAM_MAX_LENGTH);
+      const splitAt = cutAt > TELEGRAM_MAX_LENGTH * 0.5 ? cutAt : TELEGRAM_MAX_LENGTH;
+      chunk = remaining.substring(0, splitAt);
+      remaining = remaining.substring(splitAt).trimStart();
+    }
+    // Only attach reply_markup to the last chunk
+    const isLast = remaining.length === 0;
+    await ctx.reply(chunk, isLast ? options : undefined);
+  }
+}
+
 // === Memory Storage ===
 
 export async function handleStoreMemory(ctx: Context, text: string, source: MemorySource = 'direct'): Promise<void> {
@@ -228,7 +255,7 @@ export async function handleTaskList(ctx: Context): Promise<void> {
       if ((idx + 1) % 3 === 0) keyboard.row();
     });
 
-    await ctx.reply(response, { reply_markup: keyboard });
+    await safeSend(ctx, response, { reply_markup: keyboard });
   } catch (error) {
     console.error('Task list error:', error);
     await ctx.reply('❌ שגיאה בטעינת משימות.');
@@ -425,6 +452,7 @@ export async function handleAnalyzeMessage(ctx: Context, text: string): Promise<
 // === Help ===
 
 export async function handleHelp(ctx: Context): Promise<void> {
+  try {
   const help = `🧠 המוח השני - מדריך שימוש
 
 שמירת מידע:
@@ -464,6 +492,10 @@ export async function handleHelp(ctx: Context): Promise<void> {
 /delete - מחיקת זיכרון`;
 
   await ctx.reply(help);
+  } catch (error) {
+    console.error('Help error:', error);
+    await ctx.reply('❌ שגיאה בטעינת מדריך.');
+  }
 }
 
 // === Recent Memories ===
@@ -487,7 +519,7 @@ export async function handleRecent(ctx: Context): Promise<void> {
       response += `🏷️ ${m.tags.join(', ') || '-'} | 🆔 #${m.id}\n\n`;
     });
 
-    await ctx.reply(response);
+    await safeSend(ctx, response);
   } catch (error) {
     console.error('Recent error:', error);
     await ctx.reply('❌ שגיאה בטעינת זכרונות אחרונים.');
@@ -612,12 +644,15 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
 async function createTaskFromAction(action: ai.AnalyzedAction): Promise<Task> {
   let reminderAt = action.reminder_at;
   if (!reminderAt && action.date) {
-    const timeStr = action.time || '09:00';
+    // Normalize time: strip seconds if already present (e.g. "09:00:00" -> "09:00")
+    const timeStr = (action.time || '09:00').replace(/:\d{2}$/, '');
     const dateTime = new Date(`${action.date}T${timeStr}:00`);
-    if (action.time) {
-      dateTime.setMinutes(dateTime.getMinutes() - 30);
+    if (!isNaN(dateTime.getTime())) {
+      if (action.time) {
+        dateTime.setMinutes(dateTime.getMinutes() - 30);
+      }
+      reminderAt = dateTime.toISOString();
     }
-    reminderAt = dateTime.toISOString();
   }
 
   return db.insertTask({

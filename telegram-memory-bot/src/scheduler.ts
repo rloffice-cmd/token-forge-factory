@@ -4,13 +4,18 @@ import { Task } from './types';
 import { formatPriorityEmoji, formatInterval } from './utils';
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let isChecking = false;
 
 export function startScheduler(bot: Bot, chatId: number): void {
   intervalHandle = setInterval(async () => {
+    if (isChecking) return; // prevent overlapping runs
+    isChecking = true;
     try {
       await checkReminders(bot, chatId);
     } catch (err) {
       console.error('Scheduler error:', err);
+    } finally {
+      isChecking = false;
     }
   }, 30_000);
 
