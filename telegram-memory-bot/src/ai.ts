@@ -374,7 +374,7 @@ export async function detectIntent(text: string): Promise<MessageIntent> {
 
   if (/^(מה|מי|איפה|מתי|למה|כמה|איך|האם|אילו|עבור מה|what|who|where|when|why|how|which)\s/i.test(lower)) return 'question';
   if (/\?$/.test(lower)) return 'question';
-  if (/\?؟$/.test(lower)) return 'question';
+  if (/؟$/.test(lower)) return 'question';
 
   if (/^(תזכיר|צריך ל|חייב ל|לא לשכוח|משימה:|todo:|remind|אני רוצה ל|הערה:|יש ל)/i.test(lower)) return 'task_add';
 

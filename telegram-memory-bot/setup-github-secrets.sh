@@ -8,9 +8,13 @@ REPO="rloffice-cmd/token-forge-factory"
 echo "🔐 Setting up GitHub secrets for Telegram Memory Bot..."
 
 # Set secrets
-gh secret set TELEGRAM_BOT_TOKEN --repo "$REPO" --body "8631836496:AAF5BR-QByhkKuJNr9ZV092jzdLQ0LycMU4"
-gh secret set TELEGRAM_OWNER_CHAT_ID --repo "$REPO" --body "534615990"
-gh secret set GEMINI_API_KEY --repo "$REPO" --body "AIzaSyA_TSJIZwstJgsO6tZWRsB8LN4OQEdMSAE"
+: "${TELEGRAM_BOT_TOKEN:?Set TELEGRAM_BOT_TOKEN in your environment before running this script}"
+: "${TELEGRAM_OWNER_CHAT_ID:?Set TELEGRAM_OWNER_CHAT_ID in your environment before running this script}"
+: "${GEMINI_API_KEY:?Set GEMINI_API_KEY in your environment before running this script}"
+
+gh secret set TELEGRAM_BOT_TOKEN --repo "$REPO" --body "$TELEGRAM_BOT_TOKEN"
+gh secret set TELEGRAM_OWNER_CHAT_ID --repo "$REPO" --body "$TELEGRAM_OWNER_CHAT_ID"
+gh secret set GEMINI_API_KEY --repo "$REPO" --body "$GEMINI_API_KEY"
 
 echo "✅ Secrets set!"
 echo ""

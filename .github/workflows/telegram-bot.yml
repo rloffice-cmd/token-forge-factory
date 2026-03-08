@@ -48,16 +48,17 @@ jobs:
       - name: Setup environment
         working-directory: telegram-memory-bot
         run: |
-          echo "BOT_TOKEN=$(echo 'ODYzMTgzNjQ5NjpBQUY1QlItUUJ5aGtLdUpOcjlaVjA5Mmp6ZExRMEx5Y01VNA==' | base64 -d)" > .env
-          echo "OWNER_CHAT_ID=$(echo 'NTM0NjE1OTkw' | base64 -d)" >> .env
-          echo "GEMINI_API_KEY=$(echo 'QUl6YVN5QV9UU0pJWndzdEpnc082dFpXUnNCOExONE9RRWRNU0FF' | base64 -d)" >> .env
+          echo "BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" > .env
+          echo "OWNER_CHAT_ID=${{ secrets.TELEGRAM_OWNER_CHAT_ID }}" >> .env
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
           echo "NODE_ENV=production" >> .env
           mkdir -p data
 
       - name: Send startup notification
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_OWNER_CHAT_ID }}
         run: |
-          BOT_TOKEN=$(echo 'ODYzMTgzNjQ5NjpBQUY1QlItUUJ5aGtLdUpOcjlaVjA5Mmp6ZExRMEx5Y01VNA==' | base64 -d)
-          CHAT_ID=$(echo 'NTM0NjE1OTkw' | base64 -d)
           ISRAEL_HOUR=$(TZ='Asia/Jerusalem' date +%H)
           if [ "$ISRAEL_HOUR" -ge 5 ] && [ "$ISRAEL_HOUR" -le 8 ]; then
             MSG="בוקר טוב איתי! ☀️🧠 המוח השני פעיל ומוכן ליום חדש."

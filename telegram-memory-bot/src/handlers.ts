@@ -645,7 +645,8 @@ async function createTaskFromAction(action: ai.AnalyzedAction): Promise<Task> {
   let reminderAt = action.reminder_at;
   if (!reminderAt && action.date) {
     // Normalize time: strip seconds if already present (e.g. "09:00:00" -> "09:00")
-    const timeStr = (action.time || '09:00').replace(/:\d{2}$/, '');
+    const rawTime = action.time || '09:00';
+    const timeStr = /^\d{1,2}:\d{2}:\d{2}$/.test(rawTime) ? rawTime.replace(/:\d{2}$/, '') : rawTime;
     const dateTime = new Date(`${action.date}T${timeStr}:00`);
     if (!isNaN(dateTime.getTime())) {
       if (action.time) {
