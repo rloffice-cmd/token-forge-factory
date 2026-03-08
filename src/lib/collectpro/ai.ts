@@ -18,26 +18,28 @@ export interface GradingImage {
 }
 
 export interface GradingIssue {
-  category: "corner" | "edge" | "surface" | "centering" | "print" | "authenticity" | "other";
+  category:
+    | "corner" | "edge" | "surface" | "centering" | "print" | "authenticity"
+    | "seal" | "tamper" | "moisture" | "structural" | "wrapper" | "other";
   severity: "minor" | "moderate" | "major";
   location: string;
   description: string;
 }
 
 export interface GradingSubgrades {
-  centering: number;
-  corners: number;
-  edges: number;
-  surfaces: number;
+  centering: number;   // For sealed: seal_integrity score
+  corners: number;     // For box: box_corners score
+  edges: number;       // For sealed: seal_perimeter score
+  surfaces: number;    // Overall surface / wrapper condition
 }
 
 export interface GradingResult {
-  grade: number;               // 1.0 – 10.0 PSA scale
-  grade_label: string;         // "Gem Mint", "Mint", "Near Mint", etc.
+  grade: number;               // 1.0 – 10.0 (PSA / Pack Fresh / Case Grade scale)
+  grade_label: string;         // "Gem Mint", "Pack Fresh", "Near Pack Fresh", etc.
   subgrades: GradingSubgrades;
   centering: {
-    left_right: number;        // percentage left border vs right
-    top_bottom: number;        // percentage top border vs bottom
+    left_right: number;        // Card: % left border; Sealed: seal alignment
+    top_bottom: number;        // Card: % top border; Sealed: seal alignment
     score: number;
   };
   authenticity: "genuine" | "suspect" | "counterfeit";
