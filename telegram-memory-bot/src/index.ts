@@ -14,6 +14,7 @@ import {
   handleRecent,
   handleDelete,
   handleCallbackQuery,
+  handleAnalyzeMessage,
 } from './handlers';
 import { startScheduler, stopScheduler } from './scheduler';
 
@@ -139,7 +140,12 @@ async function main(): Promise<void> {
         break;
       case 'store':
       default:
-        await handleStoreMemory(ctx, text);
+        // Long messages that look like emails/letters get deep analysis
+        if (text.length > 200 && looksLikeMessage(text)) {
+          await handleAnalyzeMessage(ctx, text);
+        } else {
+          await handleStoreMemory(ctx, text);
+        }
         break;
     }
   });
@@ -197,6 +203,23 @@ async function main(): Promise<void> {
   await bot.start({
     onStart: () => console.log('✅ Bot polling started successfully'),
   });
+}
+
+// Detect if text looks like a forwarded email/message/letter
+function looksLikeMessage(text: string): boolean {
+  const indicators = [
+    /שלום\s+(רב|לכולם|לכם)/i,        // Greeting
+    /בברכה[,.]?\s*$/m,                  // Sign-off
+    /^(מאת|from|sent|subject|נושא):/im, // Email headers
+    /היי|הי |שלום /i,                   // Casual greeting
+    /להורים|לתלמידים|לצוות/i,          // Group address
+    /בתודה[,.]|תודה רבה/i,             // Thanks sign-off
+    /\n{2,}.*חתימה|בברכה|בהוקרה/im,    // Signature
+    /https?:\/\/\S+/,                    // Contains link
+    /\d{1,2}[:/]\d{2}/,                 // Contains time
+  ];
+  const matches = indicators.filter(r => r.test(text)).length;
+  return matches >= 2; // At least 2 indicators
 }
 
 main().catch((error) => {

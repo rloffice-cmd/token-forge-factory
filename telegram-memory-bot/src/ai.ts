@@ -200,6 +200,95 @@ export async function extractSearchKeywords(question: string): Promise<string[]>
 
 export type MessageIntent = 'store' | 'question' | 'task_add' | 'task_list' | 'task_complete' | 'stats' | 'help';
 
+// === Deep Message Analysis ===
+
+export interface AnalyzedAction {
+  type: 'task' | 'reminder' | 'event' | 'link';
+  title: string;
+  description: string;
+  date?: string;       // YYYY-MM-DD
+  time?: string;       // HH:MM
+  reminder_at?: string; // ISO datetime
+  priority: string;
+  link?: string;
+}
+
+export interface MessageAnalysis {
+  summary: string;
+  sender: string;
+  category: string;
+  topic: string;
+  tags: string[];
+  importance: string;
+  actions: AnalyzedAction[];
+  key_info: string[];
+}
+
+export async function analyzeMessage(text: string): Promise<MessageAnalysis> {
+  const prompt = `אתה מנתח הודעות מקצועי. המשתמש העביר לך הודעה (מייל, וואטסאפ, SMS, הודעה מערוץ וכו').
+נתח את ההודעה לעומק וחלץ ממנה את כל המידע החשוב.
+
+ההודעה:
+"""
+${text}
+"""
+
+התאריך של היום: ${new Date().toISOString().split('T')[0]}
+השעה הנוכחית: ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+
+החזר JSON בלבד (בלי markdown, בלי backticks):
+{
+  "summary": "תקציר קצר וברור של ההודעה ב-2-3 משפטים",
+  "sender": "שם השולח אם ניתן לזהות, אחרת 'לא ידוע'",
+  "category": "קטגוריה (לימודים, עבודה, בריאות, כספים, משפחה, חברתי, רשמי, אישי וכו')",
+  "topic": "נושא ספציפי",
+  "tags": ["תגיות רלוונטיות"],
+  "importance": "low/medium/high/critical",
+  "actions": [
+    {
+      "type": "task/reminder/event/link",
+      "title": "כותרת הפעולה (קצר וברור)",
+      "description": "תיאור מפורט",
+      "date": "YYYY-MM-DD אם רלוונטי",
+      "time": "HH:MM אם רלוונטי",
+      "reminder_at": "YYYY-MM-DDTHH:MM:SS - מתי להזכיר (חשב מתאריך היום)",
+      "priority": "low/medium/high/urgent",
+      "link": "קישור אם יש"
+    }
+  ],
+  "key_info": ["נקודות מפתח חשובות מההודעה שכדאי לזכור"]
+}
+
+חשוב מאוד:
+- חפש בהודעה כל דבר שדורש פעולה: פגישות, שיעורים, תשלומים, תאריכי יעד, מועדים
+- אם יש קישור (zoom, meet, link) - חלץ אותו
+- אם כתוב "מחר" חשב את התאריך הנכון
+- אם כתוב שעה - הגדר תזכורת 30 דקות לפני
+- חלץ את שם השולח מחתימה, פנייה, או הקשר
+- אם אין פעולות נדרשות - החזר מערך actions ריק
+- החזר רק JSON תקין`;
+
+  try {
+    const response = await callAI(prompt); // Pro model for deep analysis
+    const cleaned = response.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+    return JSON.parse(cleaned) as MessageAnalysis;
+  } catch (error) {
+    console.error('Message analysis failed:', error);
+    // Fallback - just extract basic metadata
+    const metadata = await extractMetadata(text);
+    return {
+      summary: metadata.summary,
+      sender: 'לא ידוע',
+      category: metadata.category,
+      topic: metadata.topic,
+      tags: metadata.tags,
+      importance: metadata.importance,
+      actions: [],
+      key_info: [metadata.summary],
+    };
+  }
+}
+
 export async function detectIntent(text: string): Promise<MessageIntent> {
   const lower = text.trim();
 

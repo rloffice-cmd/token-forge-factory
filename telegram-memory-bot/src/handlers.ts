@@ -1,7 +1,10 @@
 import { Context, InlineKeyboard } from 'grammy';
 import * as db from './db';
 import * as ai from './ai';
-import { Memory, MemorySource } from './types';
+import { Memory, MemorySource, Task } from './types';
+
+// In-memory cache for pending analysis actions (cleared on restart)
+const pendingActions = new Map<string, ai.AnalyzedAction>();
 
 // === Memory Storage ===
 
@@ -264,18 +267,168 @@ export async function handleForwardedMessage(ctx: Context): Promise<void> {
   }
 
   let source: MemorySource = 'forwarded';
-
-  // Try to detect source
   const forwardFrom = ctx.message?.forward_origin;
   if (forwardFrom) {
-    // Check if it's from a known channel/contact type
     const forwardText = JSON.stringify(forwardFrom).toLowerCase();
     if (forwardText.includes('whatsapp')) source = 'whatsapp';
     else if (forwardText.includes('mail') || forwardText.includes('email')) source = 'email';
   }
 
-  const enrichedText = text;
-  await handleStoreMemory(ctx, enrichedText, source);
+  // Short messages - just store normally
+  if (text.length < 100) {
+    await handleStoreMemory(ctx, text, source);
+    return;
+  }
+
+  // Long messages - deep analysis
+  const thinking = await ctx.reply('🔍 מנתח את ההודעה לעומק...');
+
+  try {
+    const analysis = await ai.analyzeMessage(text);
+
+    // Store the full message as memory
+    const memory = await db.insertMemory({
+      content: text,
+      category: analysis.category,
+      topic: analysis.topic,
+      tags: analysis.tags,
+      source,
+      importance: analysis.importance,
+    });
+
+    // Build the analysis response
+    let response = `📨 *הודעה נותחה ונשמרה*\n\n`;
+    response += `👤 שולח: ${analysis.sender}\n`;
+    response += `📁 ${analysis.category} → ${analysis.topic}\n`;
+    response += `📊 חשיבות: ${formatImportance(analysis.importance)}\n`;
+    response += `🆔 #${memory.id}\n\n`;
+
+    response += `📝 *תקציר:*\n${analysis.summary}\n`;
+
+    // Key information
+    if (analysis.key_info.length > 0) {
+      response += `\n💡 *נקודות מפתח:*\n`;
+      analysis.key_info.forEach(info => {
+        response += `• ${info}\n`;
+      });
+    }
+
+    // Detected actions
+    if (analysis.actions.length > 0) {
+      response += `\n🎯 *פעולות שזוהו:*\n`;
+      const keyboard = new InlineKeyboard();
+
+      analysis.actions.forEach((action, i) => {
+        const typeEmoji = action.type === 'event' ? '📅' : action.type === 'reminder' ? '🔔' : action.type === 'link' ? '🔗' : '📋';
+        response += `\n${typeEmoji} *${action.title}*\n`;
+        if (action.description && action.description !== action.title) {
+          response += `   ${action.description}\n`;
+        }
+        if (action.date) response += `   📅 ${action.date}`;
+        if (action.time) response += ` ⏰ ${action.time}`;
+        if (action.date || action.time) response += '\n';
+        if (action.link) response += `   🔗 ${action.link}\n`;
+        response += `   ⚡ ${formatPriority(action.priority)}\n`;
+
+        // Store action for callback and add button
+        const actionKey = `action_${memory.id}_${i}`;
+        pendingActions.set(actionKey, action);
+
+        const btnLabel = action.type === 'event' ? `📅 צור תזכורת: ${action.title.substring(0, 20)}` :
+                         action.type === 'link' ? `🔗 שמור: ${action.title.substring(0, 20)}` :
+                         `📋 צור משימה: ${action.title.substring(0, 20)}`;
+        keyboard.text(btnLabel, `create_action:${actionKey}`).row();
+      });
+
+      keyboard.text('✅ צור הכל', `create_all:${memory.id}_${analysis.actions.length}`).row();
+
+      await ctx.api.editMessageText(ctx.chat!.id, thinking.message_id, response, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
+    } else {
+      await ctx.api.editMessageText(ctx.chat!.id, thinking.message_id, response + '\n✅ לא זוהו פעולות נדרשות.', {
+        parse_mode: 'Markdown',
+      });
+    }
+  } catch (error) {
+    console.error('Forward analysis error:', error);
+    // Fallback to simple store
+    await handleStoreMemory(ctx, text, source);
+  }
+}
+
+// Also handle pasted long messages (non-forwarded) that look like emails/messages
+export async function handleAnalyzeMessage(ctx: Context, text: string): Promise<void> {
+  // Reuse forwarded handler logic for pasted content
+  const thinking = await ctx.reply('🔍 מנתח את ההודעה לעומק...');
+
+  try {
+    const analysis = await ai.analyzeMessage(text);
+
+    const memory = await db.insertMemory({
+      content: text,
+      category: analysis.category,
+      topic: analysis.topic,
+      tags: analysis.tags,
+      source: 'direct',
+      importance: analysis.importance,
+    });
+
+    let response = `📨 *הודעה נותחה ונשמרה*\n\n`;
+    response += `👤 שולח: ${analysis.sender}\n`;
+    response += `📁 ${analysis.category} → ${analysis.topic}\n`;
+    response += `📊 חשיבות: ${formatImportance(analysis.importance)}\n`;
+    response += `🆔 #${memory.id}\n\n`;
+    response += `📝 *תקציר:*\n${analysis.summary}\n`;
+
+    if (analysis.key_info.length > 0) {
+      response += `\n💡 *נקודות מפתח:*\n`;
+      analysis.key_info.forEach(info => {
+        response += `• ${info}\n`;
+      });
+    }
+
+    if (analysis.actions.length > 0) {
+      response += `\n🎯 *פעולות שזוהו:*\n`;
+      const keyboard = new InlineKeyboard();
+
+      analysis.actions.forEach((action, i) => {
+        const typeEmoji = action.type === 'event' ? '📅' : action.type === 'reminder' ? '🔔' : action.type === 'link' ? '🔗' : '📋';
+        response += `\n${typeEmoji} *${action.title}*\n`;
+        if (action.description && action.description !== action.title) {
+          response += `   ${action.description}\n`;
+        }
+        if (action.date) response += `   📅 ${action.date}`;
+        if (action.time) response += ` ⏰ ${action.time}`;
+        if (action.date || action.time) response += '\n';
+        if (action.link) response += `   🔗 ${action.link}\n`;
+        response += `   ⚡ ${formatPriority(action.priority)}\n`;
+
+        const actionKey = `action_${memory.id}_${i}`;
+        pendingActions.set(actionKey, action);
+
+        const btnLabel = action.type === 'event' ? `📅 צור תזכורת: ${action.title.substring(0, 20)}` :
+                         action.type === 'link' ? `🔗 שמור: ${action.title.substring(0, 20)}` :
+                         `📋 צור משימה: ${action.title.substring(0, 20)}`;
+        keyboard.text(btnLabel, `create_action:${actionKey}`).row();
+      });
+
+      keyboard.text('✅ צור הכל', `create_all:${memory.id}_${analysis.actions.length}`).row();
+
+      await ctx.api.editMessageText(ctx.chat!.id, thinking.message_id, response, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard,
+      });
+    } else {
+      await ctx.api.editMessageText(ctx.chat!.id, thinking.message_id, response + '\n✅ לא זוהו פעולות נדרשות.', {
+        parse_mode: 'Markdown',
+      });
+    }
+  } catch (error) {
+    console.error('Analyze message error:', error);
+    await handleStoreMemory(ctx, text);
+  }
 }
 
 // === Help ===
@@ -399,6 +552,41 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
       } else {
         await ctx.answerCallbackQuery({ text: '❌ משימה לא נמצאה' });
       }
+    } else if (data.startsWith('create_action:')) {
+      const actionKey = data.replace('create_action:', '');
+      const action = pendingActions.get(actionKey);
+      if (action) {
+        const task = await createTaskFromAction(action);
+        pendingActions.delete(actionKey);
+        await ctx.answerCallbackQuery({ text: `✅ נוצר: ${task.title}` });
+        // Update the button to show it was created
+        try {
+          const text = (ctx.callbackQuery as any)?.message?.text || '';
+          const newText = text + `\n\n✅ *נוצרה משימה:* ${task.title} (🆔 #${task.id})`;
+          await ctx.editMessageText(newText, { parse_mode: 'Markdown' });
+        } catch { /* message might be too old */ }
+      } else {
+        await ctx.answerCallbackQuery({ text: '❌ פעולה כבר בוצעה או פגה' });
+      }
+    } else if (data.startsWith('create_all:')) {
+      const parts = data.replace('create_all:', '').split('_');
+      const memoryId = parseInt(parts[0]);
+      const count = parseInt(parts[1]);
+      let created = 0;
+      for (let i = 0; i < count; i++) {
+        const actionKey = `action_${memoryId}_${i}`;
+        const action = pendingActions.get(actionKey);
+        if (action) {
+          await createTaskFromAction(action);
+          pendingActions.delete(actionKey);
+          created++;
+        }
+      }
+      await ctx.answerCallbackQuery({ text: `✅ נוצרו ${created} משימות/תזכורות` });
+      try {
+        const text = (ctx.callbackQuery as any)?.message?.text || '';
+        await ctx.editMessageText(text + `\n\n✅ *נוצרו ${created} משימות/תזכורות!*`, { parse_mode: 'Markdown' });
+      } catch { /* message might be too old */ }
     } else if (data.startsWith('task_delete:')) {
       const taskId = parseInt(data.split(':')[1]);
       const deleted = await db.deleteTask(taskId);
@@ -413,6 +601,32 @@ export async function handleCallbackQuery(ctx: Context): Promise<void> {
     console.error('Callback query error:', error);
     await ctx.answerCallbackQuery({ text: '❌ שגיאה' });
   }
+}
+
+// === Action to Task ===
+
+async function createTaskFromAction(action: ai.AnalyzedAction): Promise<Task> {
+  let reminderAt = action.reminder_at;
+  if (!reminderAt && action.date) {
+    // Create reminder from date + time (30 min before if time specified)
+    const timeStr = action.time || '09:00';
+    const dateTime = new Date(`${action.date}T${timeStr}:00`);
+    if (action.time) {
+      dateTime.setMinutes(dateTime.getMinutes() - 30); // 30 min before
+    }
+    reminderAt = dateTime.toISOString();
+  }
+
+  const task = await db.insertTask({
+    title: action.title,
+    description: action.description + (action.link ? `\n🔗 ${action.link}` : ''),
+    priority: action.priority,
+    due_date: action.date || undefined,
+    reminder_at: reminderAt || undefined,
+    reminder_interval_hours: action.type === 'event' ? undefined : 24,
+  });
+
+  return task;
 }
 
 // === Helpers ===
