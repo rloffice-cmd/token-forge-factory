@@ -1,10 +1,5 @@
 // === Shared Utilities ===
 
-/** Escape text for Telegram Markdown to prevent parse errors */
-export function escapeMarkdown(text: string): string {
-  return text.replace(/([*_`\[\]()~>#+\-=|{}.!\\])/g, '\\$1');
-}
-
 /** Escape LIKE special characters in SQL queries */
 export function escapeLike(query: string): string {
   return query.replace(/[%_\\]/g, '\\$&');
@@ -51,10 +46,11 @@ export function formatInterval(hours: number): string {
 
 /** Sanitize user input for AI prompts to prevent injection */
 export function sanitizeForPrompt(text: string): string {
-  // Replace sequences that could be interpreted as prompt instructions
   return text
     .replace(/```/g, '\'\'\'')
-    .replace(/"""/g, '\'\'\'');
+    .replace(/"""/g, '\'\'\'')
+    // Escape XML-like closing tags that match our prompt delimiters
+    .replace(/<\/?(?:user_message|question|memories|forwarded_message)>/gi, (m) => m.replace('<', '&lt;'));
 }
 
 const VALID_IMPORTANCE = ['low', 'medium', 'high', 'critical'] as const;

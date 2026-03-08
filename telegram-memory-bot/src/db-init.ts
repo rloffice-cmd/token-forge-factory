@@ -1,14 +1,16 @@
 import 'dotenv/config';
 import { initDb, createTables } from './db';
 
-async function main() {
+function main() {
   console.log('🔧 Initializing database...');
   initDb();
-  await createTables();
+  createTables();
   console.log('✅ Database initialized successfully!');
 }
 
-main().catch(error => {
+try {
+  main();
+} catch (error) {
   console.error('❌ Database initialization failed:', error);
   process.exit(1);
-});
+}

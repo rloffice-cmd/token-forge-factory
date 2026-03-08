@@ -40,7 +40,13 @@ async function callAI(prompt: string, useFlash = false, retries = 3): Promise<st
 }
 
 function cleanJsonResponse(response: string): string {
-  return response.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+  // Try to extract JSON from markdown code blocks first
+  const codeBlockMatch = response.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/i);
+  if (codeBlockMatch) return codeBlockMatch[1].trim();
+  // Try to extract raw JSON object/array
+  const jsonMatch = response.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (jsonMatch) return jsonMatch[1].trim();
+  return response.trim();
 }
 
 // === Metadata Extraction ===
@@ -78,7 +84,8 @@ ${safeText}
   }
 }
 
-התאריך של היום: ${new Date().toISOString().split('T')[0]}
+התאריך של היום: ${new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' })}
+השעה הנוכחית (ישראל): ${new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })}
 אם המשתמש אומר "יום רביעי ב-12:00" חשב את התאריך הנכון הקרוב.
 אם אומר "מחר" - חשב תאריך מחר.
 אם אומר "עוד שעה" - חשב שעה מעכשיו.
@@ -271,8 +278,8 @@ export async function analyzeMessage(text: string): Promise<MessageAnalysis> {
 ${safeText}
 </forwarded_message>
 
-התאריך של היום: ${new Date().toISOString().split('T')[0]}
-השעה הנוכחית: ${new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+התאריך של היום: ${new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' })}
+השעה הנוכחית (ישראל): ${new Date().toLocaleTimeString('he-IL', { timeZone: 'Asia/Jerusalem', hour: '2-digit', minute: '2-digit' })}
 
 החזר JSON בלבד (בלי markdown, בלי backticks):
 {
@@ -361,14 +368,15 @@ export async function detectIntent(text: string): Promise<MessageIntent> {
   const lower = text.trim();
 
   if (/^[/]/.test(lower)) return 'help';
-  if (/^(משימות|רשימת משימות|מה יש לעשות|tasks)/i.test(lower)) return 'task_list';
-  if (/^(סיימתי|בוצע|done|✅)\s/i.test(lower)) return 'task_complete';
+  if (/^(משימות|רשימת משימות|מה יש לעשות|tasks|מה צריך לעשות)/i.test(lower)) return 'task_list';
+  if (/^(סיימתי|בוצע|done|✅|עשיתי|השלמתי|גמרתי)\s/i.test(lower)) return 'task_complete';
   if (/^(סטטיסטיק|סטטוס|סיכום|stats)/i.test(lower)) return 'stats';
 
   if (/^(מה|מי|איפה|מתי|למה|כמה|איך|האם|אילו|עבור מה|what|who|where|when|why|how|which)\s/i.test(lower)) return 'question';
   if (/\?$/.test(lower)) return 'question';
+  if (/\?؟$/.test(lower)) return 'question';
 
-  if (/^(תזכיר|צריך ל|חייב ל|לא לשכוח|משימה:|todo:|remind)/i.test(lower)) return 'task_add';
+  if (/^(תזכיר|צריך ל|חייב ל|לא לשכוח|משימה:|todo:|remind|אני רוצה ל|הערה:|יש ל)/i.test(lower)) return 'task_add';
 
   return 'store';
 }

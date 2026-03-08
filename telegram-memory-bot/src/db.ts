@@ -89,8 +89,13 @@ export function createTables(): void {
         INSERT INTO memories_fts(rowid, content, category, topic, tags) VALUES (new.id, new.content, new.category, new.topic, new.tags);
       END;
     `);
-    // Populate FTS with existing data (idempotent - uses INSERT OR IGNORE logic via rebuild)
-    getDb().exec(`INSERT INTO memories_fts(memories_fts) VALUES('rebuild');`);
+    // Only rebuild FTS if it's out of sync (empty FTS with existing memories)
+    const ftsCount = getDb().prepare('SELECT COUNT(*) as c FROM memories_fts').get() as any;
+    const memCount = getDb().prepare('SELECT COUNT(*) as c FROM memories').get() as any;
+    if (ftsCount.c === 0 && memCount.c > 0) {
+      console.log('🔄 Rebuilding FTS index...');
+      getDb().exec(`INSERT INTO memories_fts(memories_fts) VALUES('rebuild');`);
+    }
   } catch (err: any) {
     // FTS already exists or not supported - triggers already exist
     if (!err.message?.includes('already exists')) {

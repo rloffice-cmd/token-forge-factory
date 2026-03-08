@@ -69,8 +69,3 @@ export interface ExtractedMetadata {
   };
   summary: string;
 }
-
-export interface SearchResult {
-  memory: Memory;
-  relevance: number;
-}

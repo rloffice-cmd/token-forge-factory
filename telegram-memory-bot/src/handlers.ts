@@ -215,7 +215,7 @@ export async function handleTaskList(ctx: Context): Promise<void> {
     let response = `📋 משימות פתוחות (${tasks.length})\n\n`;
     const keyboard = new InlineKeyboard();
 
-    tasks.forEach((task) => {
+    tasks.forEach((task, idx) => {
       const status = task.status === 'in_progress' ? '🔄' : '⬜';
       const priority = formatPriority(task.priority);
       const due = task.due_date ? ` | 📅 ${new Date(task.due_date).toLocaleDateString('he-IL')}` : '';
@@ -224,6 +224,8 @@ export async function handleTaskList(ctx: Context): Promise<void> {
       response += `   🆔 #${task.id}\n\n`;
 
       keyboard.text(`✅ #${task.id}`, `task_done:${task.id}`);
+      // 3 buttons per row to avoid overflow
+      if ((idx + 1) % 3 === 0) keyboard.row();
     });
 
     await ctx.reply(response, { reply_markup: keyboard });
@@ -449,12 +451,17 @@ export async function handleHelp(ctx: Context): Promise<void> {
 סטטיסטיקות:
 שלח "סטטיסטיקה" או "סיכום" לסקירה.
 
+מחיקה:
+• "מחק 5" - מחיקת זיכרון #5
+• /delete 5 - מחיקת זיכרון מספר 5
+
 פקודות:
 /start - התחלה
 /help - מדריך
 /stats - סטטיסטיקות
 /tasks - משימות
-/recent - זכרונות אחרונים`;
+/recent - זכרונות אחרונים
+/delete - מחיקת זיכרון`;
 
   await ctx.reply(help);
 }
