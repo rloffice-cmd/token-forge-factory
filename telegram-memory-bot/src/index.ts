@@ -38,7 +38,7 @@ async function main(): Promise<void> {
   // Init services
   try {
     initDb();
-    await createTables();
+    createTables();
     console.log('✅ Database ready');
   } catch (err) {
     console.error('❌ Database init failed:', err);
@@ -54,20 +54,17 @@ async function main(): Promise<void> {
   }
 
   const bot = new Bot(process.env.BOT_TOKEN!);
-  const ownerChatId = parseInt(process.env.OWNER_CHAT_ID!);
+  const ownerChatId = parseInt(process.env.OWNER_CHAT_ID!, 10);
 
   if (isNaN(ownerChatId)) {
     throw new Error(`Invalid OWNER_CHAT_ID: ${process.env.OWNER_CHAT_ID}`);
   }
 
-  // === Security: Only respond to owner ===
+  // === Security: Only respond to owner (silent rejection) ===
   bot.use(async (ctx, next) => {
-    const chatId = ctx.chat?.id;
-    if (chatId !== ownerChatId) {
-      console.log(`⛔ Unauthorized: ${chatId}`);
-      if (ctx.message) {
-        await ctx.reply('⛔ הבוט הזה פרטי. גישה לא מורשית.');
-      }
+    const cid = ctx.chat?.id;
+    if (cid !== ownerChatId) {
+      if (cid) console.log(`⛔ Unauthorized: ${cid}`);
       return;
     }
     await next();
@@ -76,12 +73,11 @@ async function main(): Promise<void> {
   // === Commands ===
   bot.command('start', async (ctx) => {
     await ctx.reply(
-      '🧠 *המוח השני פעיל!*\n\n' +
+      '🧠 המוח השני פעיל!\n\n' +
       'שלח לי כל מידע שאתה רוצה לזכור.\n' +
       'שאל אותי שאלות על מה ששמרת.\n' +
       'העבר הודעות מ-WhatsApp, מייל, או כל מקום אחר.\n\n' +
-      'שלח /help למדריך מלא.',
-      { parse_mode: 'Markdown' }
+      'שלח /help למדריך מלא.'
     );
   });
 
@@ -208,18 +204,16 @@ async function main(): Promise<void> {
 // Detect if text looks like a forwarded email/message/letter
 function looksLikeMessage(text: string): boolean {
   const indicators = [
-    /שלום\s+(רב|לכולם|לכם)/i,        // Greeting
-    /בברכה[,.]?\s*$/m,                  // Sign-off
-    /^(מאת|from|sent|subject|נושא):/im, // Email headers
-    /היי|הי |שלום /i,                   // Casual greeting
-    /להורים|לתלמידים|לצוות/i,          // Group address
-    /בתודה[,.]|תודה רבה/i,             // Thanks sign-off
-    /\n{2,}.*חתימה|בברכה|בהוקרה/im,    // Signature
-    /https?:\/\/\S+/,                    // Contains link
-    /\d{1,2}[:/]\d{2}/,                 // Contains time
+    /שלום\s+(רב|לכולם|לכם)/i,
+    /בברכה[,.]?\s*$/m,
+    /^(מאת|from|sent|subject|נושא):/im,
+    /להורים|לתלמידים|לצוות/i,
+    /בתודה[,.]|תודה רבה/i,
+    /\n{2,}.*(?:חתימה|בברכה|בהוקרה)/im,
+    /https?:\/\/\S+/,
   ];
   const matches = indicators.filter(r => r.test(text)).length;
-  return matches >= 2; // At least 2 indicators
+  return matches >= 2;
 }
 
 main().catch((error) => {

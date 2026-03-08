@@ -1,15 +1,15 @@
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 import { Memory, MemoryInsert, Task, TaskInsert } from './types';
+import { escapeLike } from './utils';
 
 let db: Database.Database;
 
 export function initDb(): void {
   const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'brain.db');
 
-  // Ensure data directory exists
   const dir = path.dirname(dbPath);
-  const fs = require('fs');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
   db = new Database(dbPath);
@@ -25,7 +25,7 @@ function getDb(): Database.Database {
 
 // === Schema Creation ===
 
-export async function createTables(): Promise<void> {
+export function createTables(): void {
   getDb().exec(`
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,28 +66,68 @@ export async function createTables(): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_tasks_reminder_at ON tasks(reminder_at);
   `);
 
-  // Migration: add new columns to existing tables
+  // FTS5 virtual table for fast Hebrew full-text search
   try {
-    getDb().exec(`ALTER TABLE tasks ADD COLUMN reminder_interval_hours REAL`);
-  } catch { /* column already exists */ }
-  try {
-    getDb().exec(`ALTER TABLE tasks ADD COLUMN last_reminded_at TEXT`);
-  } catch { /* column already exists */ }
-  try {
-    getDb().exec(`ALTER TABLE tasks ADD COLUMN snooze_until TEXT`);
-  } catch { /* column already exists */ }
-  try {
-    getDb().exec(`CREATE INDEX IF NOT EXISTS idx_tasks_reminder_at ON tasks(reminder_at)`);
-  } catch { /* index already exists */ }
+    getDb().exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+        content, category, topic, tags,
+        content='memories',
+        content_rowid='id',
+        tokenize='unicode61'
+      );
+    `);
+    // Create triggers to keep FTS in sync
+    getDb().exec(`
+      CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+        INSERT INTO memories_fts(rowid, content, category, topic, tags) VALUES (new.id, new.content, new.category, new.topic, new.tags);
+      END;
+      CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, content, category, topic, tags) VALUES('delete', old.id, old.content, old.category, old.topic, old.tags);
+      END;
+      CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+        INSERT INTO memories_fts(memories_fts, rowid, content, category, topic, tags) VALUES('delete', old.id, old.content, old.category, old.topic, old.tags);
+        INSERT INTO memories_fts(rowid, content, category, topic, tags) VALUES (new.id, new.content, new.category, new.topic, new.tags);
+      END;
+    `);
+    // Populate FTS with existing data (idempotent - uses INSERT OR IGNORE logic via rebuild)
+    getDb().exec(`INSERT INTO memories_fts(memories_fts) VALUES('rebuild');`);
+  } catch (err: any) {
+    // FTS already exists or not supported - triggers already exist
+    if (!err.message?.includes('already exists')) {
+      console.warn('FTS5 setup warning:', err.message);
+    }
+  }
+
+  // Migration: add new columns to existing tables (safe to re-run)
+  const migrations = [
+    `ALTER TABLE tasks ADD COLUMN reminder_interval_hours REAL`,
+    `ALTER TABLE tasks ADD COLUMN last_reminded_at TEXT`,
+    `ALTER TABLE tasks ADD COLUMN snooze_until TEXT`,
+  ];
+  for (const sql of migrations) {
+    try { getDb().exec(sql); } catch { /* column already exists */ }
+  }
+
   console.log('✅ Database tables created successfully');
 }
 
-// === Row to Memory ===
+// === Row Mappers ===
 
 function rowToMemory(row: any): Memory {
+  let tags: string[] = [];
+  try {
+    tags = JSON.parse(row.tags || '[]');
+  } catch {
+    tags = [];
+  }
   return {
-    ...row,
-    tags: JSON.parse(row.tags || '[]'),
+    id: row.id,
+    content: row.content,
+    category: row.category,
+    topic: row.topic,
+    tags,
+    source: row.source,
+    importance: row.importance,
     created_at: new Date(row.created_at),
     updated_at: new Date(row.updated_at),
   };
@@ -95,12 +135,17 @@ function rowToMemory(row: any): Memory {
 
 function rowToTask(row: any): Task {
   return {
-    ...row,
+    id: row.id,
+    title: row.title,
+    description: row.description ?? null,
+    status: row.status,
+    priority: row.priority,
     due_date: row.due_date ? new Date(row.due_date) : null,
     reminder_at: row.reminder_at ? new Date(row.reminder_at) : null,
     reminder_interval_hours: row.reminder_interval_hours ?? null,
     last_reminded_at: row.last_reminded_at ? new Date(row.last_reminded_at) : null,
     snooze_until: row.snooze_until ? new Date(row.snooze_until) : null,
+    category: row.category ?? null,
     created_at: new Date(row.created_at),
     updated_at: new Date(row.updated_at),
   };
@@ -108,7 +153,7 @@ function rowToTask(row: any): Task {
 
 // === Memory Operations ===
 
-export async function insertMemory(data: MemoryInsert): Promise<Memory> {
+export function insertMemory(data: MemoryInsert): Memory {
   const stmt = getDb().prepare(
     `INSERT INTO memories (content, category, topic, tags, source, importance)
      VALUES (?, ?, ?, ?, ?, ?)`
@@ -120,43 +165,45 @@ export async function insertMemory(data: MemoryInsert): Promise<Memory> {
   return rowToMemory(row);
 }
 
-export async function searchMemories(query: string, limit = 20): Promise<Memory[]> {
-  const pattern = `%${query}%`;
+export function searchMemories(query: string, limit = 20): Memory[] {
+  // Try FTS5 first (fast, ranked)
+  try {
+    const rows = getDb().prepare(
+      `SELECT m.* FROM memories m
+       JOIN memories_fts fts ON m.id = fts.rowid
+       WHERE memories_fts MATCH ?
+       ORDER BY rank
+       LIMIT ?`
+    ).all(query, limit);
+    if (rows.length > 0) return rows.map(rowToMemory);
+  } catch {
+    // FTS query failed (invalid syntax) - fall through to LIKE
+  }
+
+  // Fallback: LIKE search with escaped special chars
+  const escaped = escapeLike(query);
+  const pattern = `%${escaped}%`;
   const rows = getDb().prepare(
     `SELECT * FROM memories
-     WHERE content LIKE ? OR category LIKE ? OR topic LIKE ? OR tags LIKE ?
+     WHERE content LIKE ? ESCAPE '\\' OR category LIKE ? ESCAPE '\\' OR topic LIKE ? ESCAPE '\\' OR tags LIKE ? ESCAPE '\\'
      ORDER BY created_at DESC
      LIMIT ?`
   ).all(pattern, pattern, pattern, pattern, limit);
   return rows.map(rowToMemory);
 }
 
-export async function getMemoriesByCategory(category: string, limit = 20): Promise<Memory[]> {
-  const rows = getDb().prepare(
-    `SELECT * FROM memories WHERE category LIKE ? ORDER BY created_at DESC LIMIT ?`
-  ).all(`%${category}%`, limit);
-  return rows.map(rowToMemory);
-}
-
-export async function getMemoriesByTag(tag: string, limit = 20): Promise<Memory[]> {
-  const rows = getDb().prepare(
-    `SELECT * FROM memories WHERE tags LIKE ? ORDER BY created_at DESC LIMIT ?`
-  ).all(`%${tag}%`, limit);
-  return rows.map(rowToMemory);
-}
-
-export async function getRecentMemories(limit = 10): Promise<Memory[]> {
+export function getRecentMemories(limit = 10): Memory[] {
   const rows = getDb().prepare(
     `SELECT * FROM memories ORDER BY created_at DESC LIMIT ?`
   ).all(limit);
   return rows.map(rowToMemory);
 }
 
-export async function getMemoryStats(): Promise<{
+export function getMemoryStats(): {
   total: number;
   categories: { category: string; count: number }[];
   recent_count: number;
-}> {
+} {
   const total = getDb().prepare('SELECT COUNT(*) as total FROM memories').get() as any;
   const categories = getDb().prepare(
     `SELECT category, COUNT(*) as count FROM memories GROUP BY category ORDER BY count DESC LIMIT 10`
@@ -172,14 +219,14 @@ export async function getMemoryStats(): Promise<{
   };
 }
 
-export async function deleteMemory(id: number): Promise<boolean> {
+export function deleteMemory(id: number): boolean {
   const result = getDb().prepare('DELETE FROM memories WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
 // === Task Operations ===
 
-export async function insertTask(data: TaskInsert): Promise<Task> {
+export function insertTask(data: TaskInsert): Task {
   const stmt = getDb().prepare(
     `INSERT INTO tasks (title, description, priority, due_date, reminder_at, reminder_interval_hours, category)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -197,7 +244,7 @@ export async function insertTask(data: TaskInsert): Promise<Task> {
   return rowToTask(row);
 }
 
-export async function getTasks(status?: string): Promise<Task[]> {
+export function getTasks(status?: string): Task[] {
   if (status) {
     const rows = getDb().prepare(
       `SELECT * FROM tasks WHERE status = ? ORDER BY
@@ -214,7 +261,7 @@ export async function getTasks(status?: string): Promise<Task[]> {
   return rows.map(rowToTask);
 }
 
-export async function updateTaskStatus(id: number, status: string): Promise<Task | null> {
+export function updateTaskStatus(id: number, status: string): Task | null {
   getDb().prepare(
     `UPDATE tasks SET status = ?, updated_at = datetime('now') WHERE id = ?`
   ).run(status, id);
@@ -222,12 +269,12 @@ export async function updateTaskStatus(id: number, status: string): Promise<Task
   return row ? rowToTask(row) : null;
 }
 
-export async function deleteTask(id: number): Promise<boolean> {
+export function deleteTask(id: number): boolean {
   const result = getDb().prepare('DELETE FROM tasks WHERE id = ?').run(id);
   return result.changes > 0;
 }
 
-export async function getDueTasks(): Promise<Task[]> {
+export function getDueTasks(): Task[] {
   const rows = getDb().prepare(
     `SELECT * FROM tasks
      WHERE status = 'pending' AND due_date IS NOT NULL AND due_date <= datetime('now', '+1 day')
@@ -238,7 +285,7 @@ export async function getDueTasks(): Promise<Task[]> {
 
 // === Reminder Operations ===
 
-export async function getTasksDueForReminder(): Promise<Task[]> {
+export function getTasksDueForReminder(): Task[] {
   const now = new Date().toISOString();
   const rows = getDb().prepare(
     `SELECT * FROM tasks
@@ -251,27 +298,24 @@ export async function getTasksDueForReminder(): Promise<Task[]> {
   return rows.map(rowToTask);
 }
 
-export async function markTaskReminded(id: number): Promise<void> {
+export function markTaskReminded(id: number): void {
   const now = new Date().toISOString();
-  // Get the task to check for recurring reminder
   const task = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
   if (!task) return;
 
   if (task.reminder_interval_hours) {
-    // Set next reminder based on interval
     const nextReminder = new Date(Date.now() + task.reminder_interval_hours * 3600000).toISOString();
     getDb().prepare(
       `UPDATE tasks SET last_reminded_at = ?, reminder_at = ?, updated_at = ? WHERE id = ?`
     ).run(now, nextReminder, now, id);
   } else {
-    // One-time reminder: clear reminder_at after sending
     getDb().prepare(
       `UPDATE tasks SET last_reminded_at = ?, reminder_at = NULL, updated_at = ? WHERE id = ?`
     ).run(now, now, id);
   }
 }
 
-export async function snoozeTask(id: number, hours: number): Promise<Task | null> {
+export function snoozeTask(id: number, hours: number): Task | null {
   const snoozeUntil = new Date(Date.now() + hours * 3600000).toISOString();
   const now = new Date().toISOString();
   getDb().prepare(
@@ -281,14 +325,14 @@ export async function snoozeTask(id: number, hours: number): Promise<Task | null
   return row ? rowToTask(row) : null;
 }
 
-export async function getTaskById(id: number): Promise<Task | null> {
+export function getTaskById(id: number): Task | null {
   const row = getDb().prepare('SELECT * FROM tasks WHERE id = ?').get(id) as any;
   return row ? rowToTask(row) : null;
 }
 
 // === Bulk Operations ===
 
-export async function getAllMemoriesForContext(limit = 50): Promise<Memory[]> {
+export function getAllMemoriesForContext(limit = 50): Memory[] {
   const rows = getDb().prepare(
     `SELECT * FROM memories ORDER BY created_at DESC LIMIT ?`
   ).all(limit);
