@@ -33,19 +33,35 @@ async function main(): Promise<void> {
   validateEnv();
 
   // Init services
-  initDb();
-  await createTables();
-  initAI();
+  try {
+    initDb();
+    await createTables();
+    console.log('✅ Database ready');
+  } catch (err) {
+    console.error('❌ Database init failed:', err);
+    throw err;
+  }
+
+  try {
+    initAI();
+    console.log('✅ AI ready');
+  } catch (err) {
+    console.error('❌ AI init failed:', err);
+    throw err;
+  }
 
   const bot = new Bot(process.env.BOT_TOKEN!);
   const ownerChatId = parseInt(process.env.OWNER_CHAT_ID!);
 
+  if (isNaN(ownerChatId)) {
+    throw new Error(`Invalid OWNER_CHAT_ID: ${process.env.OWNER_CHAT_ID}`);
+  }
+
   // === Security: Only respond to owner ===
   bot.use(async (ctx, next) => {
     const chatId = ctx.chat?.id;
-    console.log(`📩 Message from chat ID: ${chatId} (owner: ${ownerChatId})`);
     if (chatId !== ownerChatId) {
-      console.log(`⛔ Unauthorized access attempt from chat ID: ${chatId}`);
+      console.log(`⛔ Unauthorized: ${chatId}`);
       if (ctx.message) {
         await ctx.reply('⛔ הבוט הזה פרטי. גישה לא מורשית.');
       }
@@ -67,11 +83,8 @@ async function main(): Promise<void> {
   });
 
   bot.command('help', handleHelp);
-
   bot.command('stats', handleStats);
-
   bot.command('tasks', handleTaskList);
-
   bot.command('recent', handleRecent);
 
   bot.command('delete', async (ctx) => {
@@ -160,9 +173,21 @@ async function main(): Promise<void> {
     console.error('Bot error:', err);
   });
 
+  // === Graceful shutdown ===
+  const shutdown = () => {
+    console.log('🛑 Shutting down gracefully...');
+    bot.stop();
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
   // === Start bot ===
   console.log('🚀 המוח השני פועל!');
-  bot.start();
+  console.log(`👤 Owner chat ID: ${ownerChatId}`);
+  await bot.start({
+    onStart: () => console.log('✅ Bot polling started successfully'),
+  });
 }
 
 main().catch((error) => {

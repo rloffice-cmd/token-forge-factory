@@ -3,13 +3,18 @@ name: Telegram Memory Bot
 on:
   push:
     branches:
+      - main
+      - master
       - 'claude/telegram-memory-bot-*'
     paths:
       - 'telegram-memory-bot/**'
       - '.github/workflows/telegram-bot.yml'
   workflow_dispatch:
+  schedule:
+    # Every 5 hours - only works on default branch
+    - cron: '0 */5 * * *'
 
-# Cancel previous runs when new push comes
+# Only one bot instance at a time
 concurrency:
   group: telegram-bot
   cancel-in-progress: true
@@ -26,47 +31,65 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y python3 make g++
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: telegram-memory-bot/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('telegram-memory-bot/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-node-
+
       - name: Install dependencies
         working-directory: telegram-memory-bot
         run: npm install
 
-      - name: Create .env file
+      - name: Setup environment
         working-directory: telegram-memory-bot
         run: |
           echo "BOT_TOKEN=$(echo 'ODYzMTgzNjQ5NjpBQUY1QlItUUJ5aGtLdUpOcjlaVjA5Mmp6ZExRMEx5Y01VNA==' | base64 -d)" > .env
           echo "OWNER_CHAT_ID=$(echo 'NTM0NjE1OTkw' | base64 -d)" >> .env
           echo "GEMINI_API_KEY=$(echo 'QUl6YVN5QV9UU0pJWndzdEpnc082dFpXUnNCOExONE9RRWRNU0FF' | base64 -d)" >> .env
           echo "NODE_ENV=production" >> .env
+          mkdir -p data
 
-      - name: Send startup message
+      - name: Send startup notification
         run: |
           BOT_TOKEN=$(echo 'ODYzMTgzNjQ5NjpBQUY1QlItUUJ5aGtLdUpOcjlaVjA5Mmp6ZExRMEx5Y01VNA==' | base64 -d)
           CHAT_ID=$(echo 'NTM0NjE1OTkw' | base64 -d)
           ISRAEL_HOUR=$(TZ='Asia/Jerusalem' date +%H)
           if [ "$ISRAEL_HOUR" -ge 5 ] && [ "$ISRAEL_HOUR" -le 8 ]; then
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-              -d chat_id="${CHAT_ID}" \
-              -d text="בוקר טוב איתי! ☀️🧠 המוח השני שלך פעיל ומוכן ליום חדש."
+            MSG="בוקר טוב איתי! ☀️🧠 המוח השני פעיל ומוכן ליום חדש."
           else
-            curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-              -d chat_id="${CHAT_ID}" \
-              -d text="🧠 המוח השני עלה לאוויר! שלח לי הודעה."
+            MSG="🧠 המוח השני עלה לאוויר! שלח לי הודעה."
           fi
+          curl -sf -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d text="${MSG}" || echo "Warning: startup message failed"
 
       - name: Run bot
         working-directory: telegram-memory-bot
+        env:
+          NODE_ENV: production
         run: |
-          timeout 19200 npx tsx src/index.ts || true
+          echo "Starting bot at $(date)"
+          timeout 19200 npx tsx src/index.ts 2>&1 || EXIT_CODE=$?
+          echo "Bot exited with code: ${EXIT_CODE:-0} at $(date)"
 
       - name: Re-trigger workflow
         if: always()
         uses: actions/github-script@v7
         with:
           script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'telegram-bot.yml',
-              ref: context.ref,
-            });
-            console.log('Re-triggered workflow on', context.ref);
+            try {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'telegram-bot.yml',
+                ref: context.ref,
+              });
+              console.log('Re-triggered workflow on', context.ref);
+            } catch (err) {
+              console.log('Could not re-trigger (expected on non-default branch):', err.message);
+            }
