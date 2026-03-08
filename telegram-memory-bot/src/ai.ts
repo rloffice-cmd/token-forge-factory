@@ -2,13 +2,42 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ExtractedMetadata, Memory } from './types';
 
 let genAI: GoogleGenerativeAI;
-let model: ReturnType<GoogleGenerativeAI['getGenerativeModel']>;
+let proModel: ReturnType<GoogleGenerativeAI['getGenerativeModel']>;
+let flashModel: ReturnType<GoogleGenerativeAI['getGenerativeModel']>;
 
 export function initAI(): void {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is required');
   genAI = new GoogleGenerativeAI(apiKey);
-  model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  // Pro for smart answers, Flash for quick tasks
+  proModel = genAI.getGenerativeModel({ model: 'gemini-2.5-pro-preview-06-05' });
+  flashModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-preview-05-20' });
+}
+
+async function callAI(prompt: string, useFlash = false, retries = 3): Promise<string> {
+  const model = useFlash ? flashModel : proModel;
+  let lastError: unknown;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const result = await model.generateContent(prompt);
+      return result.response.text().trim();
+    } catch (err: any) {
+      lastError = err;
+      console.error(`AI call attempt ${i + 1}/${retries} failed:`, err?.message || err);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  // If pro fails, try flash as fallback
+  if (!useFlash) {
+    console.log('Pro model failed, falling back to flash...');
+    try {
+      const result = await flashModel.generateContent(prompt);
+      return result.response.text().trim();
+    } catch (err: any) {
+      console.error('Flash fallback also failed:', err?.message || err);
+    }
+  }
+  throw lastError;
 }
 
 // === Metadata Extraction ===
@@ -44,9 +73,7 @@ export async function extractMetadata(text: string): Promise<ExtractedMetadata> 
 חשוב: החזר רק JSON תקין, בלי שום טקסט נוסף.`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = result.response.text().trim();
-    // Clean potential markdown code block wrapping
+    const response = await callAI(prompt, true); // flash for quick extraction
     const cleaned = response.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
     const parsed = JSON.parse(cleaned) as ExtractedMetadata;
     return parsed;
@@ -70,7 +97,7 @@ export async function answerQuestion(
   memories: Memory[]
 ): Promise<string> {
   if (memories.length === 0) {
-    return 'לא מצאתי מידע רלוונטי בזיכרון. נסה לשאול בצורה אחרת או בדוק שהמידע נשמר.';
+    return answerGeneralQuestion(question);
   }
 
   const memoriesText = memories
@@ -80,26 +107,54 @@ export async function answerQuestion(
     })
     .join('\n\n');
 
-  const prompt = `אתה עוזר אישי חכם. המשתמש שואל שאלה על המידע ששמר בעבר.
+  const prompt = `אתה "המוח השני" - עוזר אישי חכם ומתוחכם שמנהל את הזיכרון האישי של המשתמש.
+אתה חושב לעומק, מחבר בין פרטים, ונותן תשובות חכמות ומדויקות.
 
 השאלה: "${question}"
 
 המידע שנמצא בזיכרון:
 ${memoriesText}
 
-ענה על השאלה בצורה ישירה, ברורה ומדויקת בעברית.
+הנחיות:
+- ענה בצורה ישירה, חכמה ומדויקת בעברית
 - אם יש תשובה חד-משמעית, תן אותה ישירות
-- אם יש כמה פריטים רלוונטיים, ציין את כולם
-- ציין את התאריך של המידע אם רלוונטי
-- אם המידע לא מספיק לתשובה מלאה, ציין מה חסר
-- היה תמציתי - אל תחזור על השאלה`;
+- חבר בין פרטים שונים אם רלוונטי - תן תובנות
+- ציין תאריכים אם רלוונטי
+- אם השאלה כללית (כמו "מי אתה?") - ענה על זה בנוסף למידע מהזיכרון
+- היה תמציתי אבל מלא - אל תחזור על השאלה
+- אם המידע לא רלוונטי לשאלה, התעלם ממנו וענה על השאלה ישירות`;
 
   try {
-    const result = await model.generateContent(prompt);
-    return result.response.text().trim();
+    return await callAI(prompt);
   } catch (error) {
     console.error('AI answer failed:', error);
-    return 'מצטער, נתקלתי בבעיה בעיבוד השאלה. נסה שוב.';
+    // Fallback: return memories as list
+    let fallback = '📋 הנה מה שמצאתי בזיכרון:\n\n';
+    memories.slice(0, 5).forEach((m, i) => {
+      const date = new Date(m.created_at).toLocaleDateString('he-IL');
+      fallback += `${i + 1}. [${date}] ${m.category}: ${m.content.substring(0, 100)}\n`;
+    });
+    return fallback;
+  }
+}
+
+async function answerGeneralQuestion(question: string): Promise<string> {
+  const prompt = `אתה "המוח השני" - בוט טלגרם חכם שמשמש כזיכרון אישי ועוזר חכם.
+המשתמש שואל אותך שאלה, אבל אין עדיין מידע שמור בזיכרון שרלוונטי.
+
+השאלה: "${question}"
+
+ענה בעברית בצורה חכמה וידידותית:
+- אם השאלה היא על מי אתה / מה אתה עושה - הסבר שאתה המוח השני, עוזר אישי שזוכר הכל
+- אם השאלה היא שאלת ידע כללי - ענה עליה ממה שאתה יודע
+- אם השאלה היא על מידע שאמור להיות שמור - ציין שלא נמצא מידע רלוונטי ותציע לשמור
+- היה חכם, תמציתי וידידותי`;
+
+  try {
+    return await callAI(prompt);
+  } catch (error) {
+    console.error('General question AI failed:', error);
+    return 'אני המוח השני 🧠 - העוזר האישי שלך!\nשלח לי מידע ואני אזכור הכל. שאל אותי שאלות ואני אחפש בזיכרון.\nנסה: /help למדריך מלא.';
   }
 }
 
@@ -120,8 +175,7 @@ export async function extractSearchKeywords(question: string): Promise<string[]>
 החזר רק JSON array, בלי שום טקסט נוסף.`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const response = result.response.text().trim();
+    const response = await callAI(prompt, true); // flash for speed
     const cleaned = response.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
     return JSON.parse(cleaned);
   } catch {
