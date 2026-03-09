@@ -381,6 +381,10 @@ export function detectIntent(text: string): MessageIntent {
 
   if (/^(תזכיר|צריך ל|חייב ל|לא לשכוח|משימה:|todo:|remind|אני רוצה ל|הערה:|יש ל)/i.test(lower)) return 'task_add';
 
+  // Hebrew infinitive verbs ("ל+פועל") - strong task indicator for short messages
+  // e.g. "לשלם לרינת", "לחזור ליובל", "לבצע העברות", "לקנות חלב"
+  if (/^ל[א-ת]{2,}/i.test(lower) && lower.length < 200) return 'task_add';
+
   // Detect numbered/bulleted lists as bulk tasks
   if (looksLikeTaskList(lower)) return 'task_bulk';
 
