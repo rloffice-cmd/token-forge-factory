@@ -41,7 +41,9 @@ const SOURCES = {
 
 // Date labels for display
 const DATE_LABELS = {
-  '2026-03-29': 'שבת 29.3 (Day 2)',
+  '2026-03-28': 'שבת 28.3 (Day 1)',
+  '2026-03-29': 'ראשון 29.3 (Day 2)',
+  '2026-04-04': 'שבת 4.4 (Day 3)',
   '2026-04-05': 'ראשון 5.4 (Day 4)',
 };
 
@@ -349,7 +351,7 @@ async function main() {
   console.log('╔════════════════════════════════════════════════╗');
   console.log('║  🎵 Stray Kids Ticket Scraper Bot             ║');
   console.log('║  🏠 STAY in Our Little House - Fan Meeting     ║');
-  console.log('║  📅 Target: 29.3.2026 / 5.4.2026              ║');
+  console.log('║  📅 Target: 28-29.3 / 4-5.4.2026              ║');
   console.log('║  🎫 Tickets needed: 1                         ║');
   console.log('╚════════════════════════════════════════════════╝');
   console.log('');
@@ -367,7 +369,7 @@ async function main() {
   await sendTelegramAlert(
     '🤖 Ticket bot started!\n\n' +
       'Monitoring for Stray Kids 6th Fan Meeting tickets\n' +
-      `Dates: 29.3.2026, 5.4.2026\n` +
+      `Dates: 28.3, 29.3, 4.4, 5.4.2026\n` +
       `Checking every ${CONFIG.checkIntervalSeconds} seconds`
   );
 
