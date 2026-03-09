@@ -1,0 +1,16 @@
+{
+  "name": "stray-kids-ticket-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Ticket scraper bot for Stray Kids 6th Fan Meeting",
+  "scripts": {
+    "start": "node bot.js",
+    "setup": "node setup-telegram.js"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.4.5",
+    "puppeteer": "^22.6.0",
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
