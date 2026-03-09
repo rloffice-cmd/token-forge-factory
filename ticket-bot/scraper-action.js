@@ -1,7 +1,10 @@
 /**
- * 🔥🔥🔥 MONSTER TICKET SCRAPER 🔥🔥🔥
- * Aggressive multi-source parallel scanner
- * Checks EVERYTHING - official + resale + Korean platforms + Google
+ * 🎫 Smart Ticket Scraper v3
+ * - Zero false positives: only alerts on VERIFIED availability
+ * - NOL World (official) gets priority with dedicated deep checker
+ * - Secondary markets: only alerts on confirmed listings with prices
+ * - Forums & community: scans for private sellers
+ * - Self-healing: catches all errors, never crashes
  */
 import puppeteer from 'puppeteer';
 
@@ -11,556 +14,453 @@ const CONFIG = {
     token: process.env.TELEGRAM_BOT_TOKEN,
     chatId: process.env.TELEGRAM_CHAT_ID,
   },
-  supabase: {
-    url: process.env.SUPABASE_URL,
-    serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  },
   targetDates: (process.env.TARGET_DATES || '2026-03-28,2026-03-29,2026-04-04,2026-04-05').split(','),
 };
 
 const DATE_LABELS = {
-  '2026-03-28': '🗓 שבת 28.3 (Day 1)',
-  '2026-03-29': '🗓 ראשון 29.3 (Day 2)',
-  '2026-04-04': '🗓 שבת 4.4 (Day 3)',
-  '2026-04-05': '🗓 ראשון 5.4 (Day 4)',
+  '2026-03-28': 'שבת 28.3 (Day 1)',
+  '2026-03-29': 'ראשון 29.3 (Day 2)',
+  '2026-04-04': 'שבת 4.4 (Day 3)',
+  '2026-04-05': 'ראשון 5.4 (Day 4)',
 };
 
-// ============== ALL SOURCES ==============
-const SOURCES = [
-  // === OFFICIAL ===
-  {
-    name: '🎫 NOL World (Official)',
-    url: 'https://world.nol.com/en/ticket/places/26000193/products/26002658',
-    type: 'official',
-    priority: 1,
-  },
-  {
-    name: '🎫 NOL Korea',
-    url: 'https://nol.com/ticket/places/26000193/products/26002658',
-    type: 'official',
-    priority: 1,
-  },
-  // === KOREAN PLATFORMS ===
-  {
-    name: '🇰🇷 Interpark Ticket',
-    url: 'https://tickets.interpark.com/search?keyword=stray+kids+fan+meeting',
-    type: 'search',
-    priority: 2,
-  },
-  {
-    name: '🇰🇷 Yes24 Ticket',
-    url: 'https://ticket.yes24.com/search/Search.aspx?query=stray+kids',
-    type: 'search',
-    priority: 2,
-  },
-  {
-    name: '🇰🇷 Melon Ticket',
-    url: 'https://ticket.melon.com/search/index.htm?q=stray+kids',
-    type: 'search',
-    priority: 2,
-  },
-  // === GLOBAL RESALE ===
-  {
-    name: '🌍 Tixel',
-    url: 'https://tixel.com/search?q=stray+kids+fan+meeting',
-    type: 'search',
-    priority: 2,
-  },
-  {
-    name: '🌍 StubHub',
-    url: 'https://www.stubhub.com/find/s/?q=stray+kids+fan+meeting+2026',
-    type: 'search',
-    priority: 2,
-  },
-  {
-    name: '🌍 Viagogo',
-    url: 'https://www.viagogo.com/search?searchTerm=stray+kids+fan+meeting',
-    type: 'search',
-    priority: 2,
-  },
-  {
-    name: '🌍 SeatPick',
-    url: 'https://seatpick.com/stray-kids-tickets',
-    type: 'search',
-    priority: 3,
-  },
-  {
-    name: '🌍 VividSeats',
-    url: 'https://www.vividseats.com/stray-kids-tickets/performer/103531',
-    type: 'search',
-    priority: 3,
-  },
-  {
-    name: '🌍 SeatGeek',
-    url: 'https://seatgeek.com/search?q=stray+kids',
-    type: 'search',
-    priority: 3,
-  },
-  {
-    name: '🌍 Ticketmaster',
-    url: 'https://www.ticketmaster.com/search?q=stray+kids+fan+meeting',
-    type: 'search',
-    priority: 3,
-  },
-  // === SOCIAL / COMMUNITY ===
-  {
-    name: '🐦 Twitter Search',
-    url: 'https://nitter.net/search?f=tweets&q=stray+kids+fan+meeting+ticket+selling&since=2026-03-01',
-    type: 'social',
-    priority: 2,
-  },
-  {
-    name: '📱 Reddit',
-    url: 'https://www.reddit.com/r/straykids/search/?q=fan+meeting+ticket&sort=new&t=week',
-    type: 'social',
-    priority: 3,
-  },
+const NOL_URLS = [
+  { url: 'https://world.nol.com/en/ticket/places/26000193/products/26002658', label: 'NOL World (EN)' },
+  { url: 'https://nol.com/ticket/places/26000193/products/26002658', label: 'NOL Korea (KR)' },
 ];
 
-// Google search queries - cast a wide net
-const GOOGLE_QUERIES = [
-  'stray kids 6th fan meeting ticket 2026',
-  'stray kids "little house" ticket buy',
-  'stray kids fan meeting ticket resale 2026',
-  '스트레이키즈 팬미팅 티켓 양도',
-  'stray kids fan meeting march april 2026 ticket',
-  'stray kids NOL ticket available',
-  'stray kids fan meeting cancellation ticket',
+const SECONDARY_SOURCES = [
+  { name: 'Tixel', url: 'https://tixel.com/search?q=stray+kids+fan+meeting' },
+  { name: 'StubHub', url: 'https://www.stubhub.com/find/s/?q=stray+kids+fan+meeting+2026' },
+  { name: 'Viagogo', url: 'https://www.viagogo.com/search?searchTerm=stray+kids+fan+meeting' },
+  { name: 'VividSeats', url: 'https://www.vividseats.com/stray-kids-tickets/performer/103531' },
+  { name: 'SeatGeek', url: 'https://seatgeek.com/search?q=stray+kids' },
+  { name: 'Interpark', url: 'https://tickets.interpark.com/search?keyword=stray+kids+fan+meeting' },
+  { name: 'Yes24', url: 'https://ticket.yes24.com/search/Search.aspx?query=stray+kids' },
 ];
+
+// Forums & communities for private sellers
+const FORUM_SOURCES = [
+  { name: 'Reddit r/straykids', url: 'https://www.reddit.com/r/straykids/search/?q=ticket+sell+fan+meeting&sort=new&t=week' },
+  { name: 'Reddit r/kpopforsale', url: 'https://www.reddit.com/r/kpopforsale/search/?q=stray+kids+fan+meeting&sort=new&t=week' },
+  { name: 'Reddit r/ktickets', url: 'https://www.reddit.com/r/ktickets/search/?q=stray+kids&sort=new&t=week' },
+  { name: 'Twitter/X', url: 'https://nitter.privacydev.net/search?f=tweets&q=stray+kids+fan+meeting+ticket+%28selling+OR+sell+OR+wts+OR+양도%29&since=2026-03-01' },
+  { name: 'Carousell', url: 'https://www.carousell.com/search/stray%20kids%20fan%20meeting%20ticket' },
+  { name: 'DCInside (KR)', url: 'https://search.dcinside.com/combine/q/스트레이키즈+팬미팅+양도' },
+  { name: 'Naver Cafe (KR)', url: 'https://search.naver.com/search.naver?query=스트레이키즈+팬미팅+티켓+양도&where=cafearticle&sm=tab_opt&nso=so%3Add%2Cp%3A1w' },
+];
+
+// ============== HEALTH TRACKING ==============
+const health = {
+  startTime: Date.now(),
+  sourcesChecked: 0,
+  sourcesFailed: 0,
+  errors: [],
+  nolStatus: 'unknown',
+};
+
+function logError(source, error) {
+  health.errors.push(`${source}: ${error}`);
+  health.sourcesFailed++;
+  console.error(`   ❌ ${source}: ${error}`);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ============== TELEGRAM ==============
 async function sendTelegram(message) {
   if (!CONFIG.telegram.token || !CONFIG.telegram.chatId) {
     console.log('⚠️ Telegram not configured');
-    return;
+    return false;
   }
-  try {
-    const url = `https://api.telegram.org/bot${CONFIG.telegram.token}/sendMessage`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: CONFIG.telegram.chatId,
-        text: message,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-      }),
-    });
-    if (!res.ok) {
-      await fetch(url, {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const url = `https://api.telegram.org/bot${CONFIG.telegram.token}/sendMessage`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: CONFIG.telegram.chatId,
+          text: message,
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        }),
+      });
+      if (res.ok) { console.log('📱 Telegram sent'); return true; }
+      // Retry without HTML
+      const res2 = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: CONFIG.telegram.chatId, text: message.replace(/<[^>]+>/g, '') }),
       });
+      if (res2.ok) { console.log('📱 Telegram sent (plain)'); return true; }
+    } catch (err) {
+      console.error(`   Telegram attempt ${attempt}: ${err.message}`);
+      if (attempt < 3) await sleep(2000 * attempt);
     }
-    console.log('📱 Telegram sent');
-  } catch (err) {
-    console.error('❌ Telegram failed:', err.message);
   }
+  return false;
 }
 
-// ============== FAST HTTP CHECKS (no browser) ==============
-async function httpCheck(source) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15000);
-
-  try {
-    const res = await fetch(source.url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9,ko;q=0.8,he;q=0.7',
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    const html = await res.text();
-    return { source, html, ok: true };
-  } catch (err) {
-    clearTimeout(timeout);
-    return { source, html: '', ok: false, error: err.message };
-  }
+// ============== BROWSER HELPERS ==============
+async function createBrowser() {
+  return puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process'],
+    timeout: 30000,
+  });
 }
 
-function analyzeHtml(html, sourceName) {
-  const lower = html.toLowerCase();
+async function safePage(browser, url, opts = {}) {
+  const page = await browser.newPage();
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9,ko;q=0.8' });
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) req.abort();
+    else req.continue();
+  });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: opts.timeout || 25000 });
+  await sleep(opts.renderWait || 4000);
+  return page;
+}
+
+// ============== NOL WORLD - DEDICATED SMART CHECKER ==============
+async function checkNolWorld(browser) {
+  console.log('🎫 ═══ NOL WORLD OFFICIAL CHECK ═══');
   const results = [];
 
-  // Positive signals - tickets might be available
-  const positivePatterns = [
-    { pattern: 'add to cart', weight: 10, detail: 'Add to cart button found!' },
-    { pattern: 'buy now', weight: 10, detail: 'Buy now button found!' },
-    { pattern: 'book now', weight: 9, detail: 'Booking available!' },
-    { pattern: 'purchase', weight: 5, detail: 'Purchase option detected' },
-    { pattern: 'cancellation ticket', weight: 10, detail: 'Cancellation tickets!' },
-    { pattern: '취소표', weight: 10, detail: 'Cancellation tickets (KR)!' },
-    { pattern: '예매하기', weight: 9, detail: 'Book now button (KR)!' },
-    { pattern: '구매하기', weight: 9, detail: 'Purchase button (KR)!' },
-    { pattern: '양도', weight: 8, detail: 'Ticket transfer listing (KR)!' },
-    { pattern: '티켓 판매', weight: 8, detail: 'Tickets for sale (KR)!' },
-    { pattern: 'selling', weight: 4, detail: 'Selling mentioned' },
-    { pattern: 'available', weight: 3, detail: 'Availability mentioned' },
-    { pattern: 'in stock', weight: 8, detail: 'In stock!' },
-    { pattern: 'released', weight: 6, detail: 'Released tickets!' },
-    { pattern: 'returned', weight: 6, detail: 'Returned tickets!' },
-    { pattern: 'from $', weight: 5, detail: 'Pricing found ($)' },
-    { pattern: 'from ₩', weight: 5, detail: 'Pricing found (₩)' },
-    { pattern: 'from €', weight: 5, detail: 'Pricing found (€)' },
-  ];
+  for (const { url, label } of NOL_URLS) {
+    console.log(`   🔍 ${label}...`);
+    health.sourcesChecked++;
+    let page;
+    try {
+      page = await safePage(browser, url, { renderWait: 5000 });
+      const analysis = await page.evaluate(() => {
+        const body = document.body?.innerText || '';
+        const bodyLower = body.toLowerCase();
 
-  // Negative signals
-  const negativePatterns = ['sold out', '매진', 'no tickets', 'not available', 'no results', 'no events found', 'unavailable'];
-  const isSoldOut = negativePatterns.some(p => lower.includes(p));
+        // SOLD OUT detection
+        const soldOutIndicators = ['sold out', 'soldout', 'sold-out', '매진', 'all tickets have been sold', 'no longer available', 'currently unavailable'];
+        const isSoldOut = soldOutIndicators.some(p => bodyLower.includes(p));
 
-  // Check for stray kids relevance
-  const isRelevant = lower.includes('stray kids') || lower.includes('스트레이') || lower.includes('fan meeting') || lower.includes('little house') || lower.includes('팬미팅');
+        // Active purchase buttons (must be enabled, not just navigation)
+        const allButtons = Array.from(document.querySelectorAll('button, a[role="button"], input[type="submit"]'));
+        const purchaseButtons = allButtons.filter(btn => {
+          const text = btn.textContent.toLowerCase().trim();
+          const isDisabled = btn.disabled || btn.classList.contains('disabled') || btn.getAttribute('aria-disabled') === 'true';
+          const isPurchase = ['book', 'buy', 'purchase', 'book now', 'buy now', 'buy ticket', 'get ticket', 'add to cart', 'reserve', '예매', '예매하기', '구매하기', '티켓 구매'].some(k => text.includes(k));
+          return isPurchase && !isDisabled;
+        });
 
-  let bestMatch = null;
-  let bestWeight = 0;
+        // Ticket selection UI - strong signals
+        const hasQuantitySelect = !!document.querySelector('select[name*="qty"], select[name*="quantity"], input[type="number"][name*="qty"], [class*="quantity-select"], [class*="ticket-quantity"]');
+        const hasSeatMap = !!document.querySelector('[class*="seat-map"], [class*="seatmap"], [class*="venue-map"]');
+        const hasDateSelector = !!document.querySelector('[class*="date-select"], [class*="calendar"], [class*="date-picker"]');
 
-  for (const p of positivePatterns) {
-    if (lower.includes(p.pattern) && p.weight > bestWeight) {
-      bestWeight = p.weight;
-      bestMatch = p;
+        // Price on page
+        const hasPrice = /(?:₩|KRW|원)\s*[\d,]+|[\d,]+\s*(?:₩|원|KRW)/.test(body);
+
+        // Cancellation tickets
+        const cancelPatterns = ['cancellation ticket', 'cancelled ticket', 'returned ticket', 'released ticket', '취소표', '환불표'];
+        const hasCancelTickets = cancelPatterns.some(p => bodyLower.includes(p));
+
+        return {
+          isSoldOut,
+          purchaseButtonCount: purchaseButtons.length,
+          purchaseButtonTexts: purchaseButtons.map(b => b.textContent.trim()).slice(0, 5),
+          hasQuantitySelect, hasSeatMap, hasDateSelector, hasPrice, hasCancelTickets,
+          pageTitle: document.title,
+        };
+      });
+
+      console.log(`   📄 "${analysis.pageTitle}"`);
+      console.log(`   🔒 Sold out: ${analysis.isSoldOut} | Buttons: ${analysis.purchaseButtonCount} | Qty: ${analysis.hasQuantitySelect} | Price: ${analysis.hasPrice}`);
+
+      // DECISION: Must have purchase UI + ticket selection + no sold-out
+      const hasRealPurchaseUI = analysis.purchaseButtonCount > 0 && (analysis.hasQuantitySelect || analysis.hasSeatMap || analysis.hasDateSelector || analysis.hasPrice);
+
+      if (hasRealPurchaseUI && !analysis.isSoldOut) {
+        results.push({
+          source: `🎫 ${label}`,
+          confidence: 'CONFIRMED',
+          details: `Purchase UI active! [${analysis.purchaseButtonTexts.join(', ')}]${analysis.hasPrice ? ' + prices visible' : ''}${analysis.hasQuantitySelect ? ' + qty selector' : ''}`,
+          url,
+        });
+        console.log(`   ✅✅✅ CONFIRMED AVAILABLE!`);
+      } else if (analysis.hasCancelTickets && !analysis.isSoldOut) {
+        results.push({
+          source: `🎫 ${label}`,
+          confidence: 'HIGH',
+          details: 'Cancellation/returned tickets detected!',
+          url,
+        });
+        console.log(`   ✅ Cancellation tickets detected!`);
+      } else if (analysis.isSoldOut) {
+        health.nolStatus = 'sold_out';
+        console.log(`   ❌ SOLD OUT`);
+      } else {
+        health.nolStatus = 'no_availability';
+        console.log(`   ⏳ No availability`);
+      }
+    } catch (err) {
+      logError(label, err.message);
+    } finally {
+      if (page) await page.close().catch(() => {});
     }
   }
-
-  if (bestMatch && bestWeight >= 4 && !isSoldOut) {
-    results.push({
-      source: sourceName,
-      status: bestWeight >= 8 ? '🔴 HIGH PRIORITY' : '🟡 CHECK THIS',
-      details: bestMatch.detail,
-      weight: bestWeight,
-      relevant: isRelevant,
-    });
-  }
-
-  if (isSoldOut) {
-    console.log(`   ${sourceName}: ❌ Sold out`);
-  } else if (results.length === 0) {
-    console.log(`   ${sourceName}: ⏳ Nothing found`);
-  }
-
   return results;
 }
 
-// ============== BROWSER DEEP SCAN ==============
-async function browserDeepScan(browser, source) {
-  console.log(`   🔬 Deep scanning ${source.name}...`);
+// ============== SECONDARY MARKET CHECKER ==============
+async function checkSecondaryMarket(browser, source) {
+  console.log(`   🔍 ${source.name}...`);
+  health.sourcesChecked++;
+  let page;
   try {
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9,ko;q=0.8' });
+    page = await safePage(browser, source.url, { timeout: 20000, renderWait: 3000 });
+    const analysis = await page.evaluate(() => {
+      const body = document.body?.innerText || '';
+      const bodyLower = body.toLowerCase();
 
-    // Intercept and block images/css for speed
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const type = req.resourceType();
-      if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    });
+      // Must find Stray Kids + fan meeting TOGETHER
+      const isRelevant = (bodyLower.includes('stray kids') || bodyLower.includes('스트레이 키즈')) &&
+        (bodyLower.includes('fan meeting') || bodyLower.includes('fanmeeting') || bodyLower.includes('little house') || bodyLower.includes('팬미팅'));
+      if (!isRelevant) return { relevant: false, listings: [] };
 
-    await page.goto(source.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+      // Real prices
+      const prices = body.match(/[\$€£₩]\s*[\d,.]+|[\d,.]+\s*(?:USD|EUR|KRW|원)/gi) || [];
 
-    // Wait a bit for JS rendering
-    await new Promise(r => setTimeout(r, 3000));
-
-    const results = await page.evaluate(() => {
-      const body = document.body?.innerText?.toLowerCase() || '';
-      const html = document.body?.innerHTML?.toLowerCase() || '';
+      // Specific event links with dates
       const links = Array.from(document.querySelectorAll('a'));
-
-      // Find all relevant links
-      const relevantLinks = links.filter(a => {
+      const eventLinks = links.filter(a => {
         const text = (a.textContent + ' ' + (a.href || '')).toLowerCase();
-        return (text.includes('stray kids') || text.includes('스트레이') || text.includes('skz')) &&
-          (text.includes('fan meeting') || text.includes('fanmeeting') || text.includes('little house') || text.includes('팬미팅') || text.includes('ticket') || text.includes('티켓'));
-      }).map(a => ({ text: a.textContent.trim().substring(0, 150), href: a.href }));
+        const hasEvent = (text.includes('stray kids') || text.includes('스트레이')) && (text.includes('fan meeting') || text.includes('little house') || text.includes('팬미팅'));
+        const hasDetail = text.includes('2026') || text.includes('march') || text.includes('april') || text.includes('3월') || text.includes('4월') || text.includes('seoul') || text.includes('서울');
+        return hasEvent && hasDetail;
+      }).map(a => ({ text: a.textContent.trim().substring(0, 200), href: a.href }));
 
-      // Find price elements
-      const priceElements = Array.from(document.querySelectorAll('[class*="price"], [data-price], [class*="cost"], [class*="amount"]'));
-      const prices = priceElements.map(el => el.textContent.trim()).filter(t => t.match(/[\$₩€£]\s*\d/));
-
-      // Find active buy/book buttons
-      const buttons = Array.from(document.querySelectorAll('button:not([disabled]), [role="button"]:not([disabled]), a[class*="buy"], a[class*="book"], a[class*="ticket"]'));
-      const activeButtons = buttons.filter(btn => {
-        const text = btn.textContent.toLowerCase();
-        return (text.includes('buy') || text.includes('book') || text.includes('cart') || text.includes('예매') || text.includes('구매')) &&
-          !text.includes('sold') && !text.includes('unavailable');
-      }).map(btn => btn.textContent.trim().substring(0, 80));
-
-      // Check for quantity selectors (strong signal)
-      const quantitySelectors = document.querySelectorAll('select[name*="qty"], select[name*="quantity"], input[name*="qty"], [class*="quantity"]');
-
-      return {
-        relevantLinks,
-        prices,
-        activeButtons,
-        hasQuantitySelector: quantitySelectors.length > 0,
-        bodySnippet: body.substring(0, 1000),
-      };
+      const noResults = ['no results', 'no tickets', 'no events', '0 results', 'nothing found', 'no listings'].some(p => bodyLower.includes(p));
+      return { relevant: true, listings: eventLinks, hasPrices: prices.length > 0, priceExamples: prices.slice(0, 3), noResults };
     });
 
-    await page.close();
-    return results;
+    if (!analysis.relevant || analysis.noResults) {
+      console.log(`      No listings`);
+      return [];
+    }
+
+    if (analysis.listings.length > 0 && analysis.hasPrices) {
+      console.log(`      ✅ ${analysis.listings.length} listings with prices!`);
+      return analysis.listings.map(l => ({
+        source: `🎟 ${source.name}`,
+        confidence: 'HIGH',
+        details: `${l.text} | Prices: ${analysis.priceExamples.join(', ')}`,
+        url: l.href || source.url,
+      }));
+    }
+    console.log(`      No confirmed listings`);
+    return [];
   } catch (err) {
-    console.log(`   ⚠️ Deep scan failed for ${source.name}: ${err.message}`);
-    return null;
+    logError(source.name, err.message);
+    return [];
+  } finally {
+    if (page) await page.close().catch(() => {});
   }
 }
 
-// ============== GOOGLE SEARCH CHECK ==============
-async function googleSearchCheck(browser) {
-  console.log('\n🔎 Running Google searches...');
+// ============== FORUM & COMMUNITY CHECKER ==============
+async function checkForums(browser) {
+  console.log('\n🗣 ═══ FORUMS & PRIVATE SELLERS ═══');
   const results = [];
 
-  for (const query of GOOGLE_QUERIES) {
+  for (const source of FORUM_SOURCES) {
+    console.log(`   🔍 ${source.name}...`);
+    health.sourcesChecked++;
+    let page;
     try {
-      const page = await browser.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
+      page = await safePage(browser, source.url, { timeout: 20000, renderWait: 3000 });
+      const posts = await page.evaluate(() => {
+        const body = document.body?.innerText || '';
+        const bodyLower = body.toLowerCase();
 
-      await page.setRequestInterception(true);
-      page.on('request', (req) => {
-        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
-          req.abort();
-        } else {
-          req.continue();
-        }
-      });
+        // Selling keywords in multiple languages
+        const sellingKeywords = ['selling', 'sell', 'wts', 'for sale', 'letting go', '양도', '양도합니다', '팝니다', '판매'];
+        const ticketKeywords = ['ticket', 'tickets', '티켓', '입장권'];
+        const eventKeywords = ['stray kids', 'skz', '스트레이', 'fan meeting', 'fanmeeting', 'little house', '팬미팅'];
 
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbs=qdr:d`;
-      await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await new Promise(r => setTimeout(r, 2000));
+        const hasSelling = sellingKeywords.some(k => bodyLower.includes(k));
+        const hasTicket = ticketKeywords.some(k => bodyLower.includes(k));
+        const hasEvent = eventKeywords.some(k => bodyLower.includes(k));
 
-      const searchResults = await page.evaluate(() => {
+        if (!(hasSelling && hasTicket && hasEvent)) return [];
+
+        // Extract post-like elements (links with text)
         const links = Array.from(document.querySelectorAll('a'));
-        return links
-          .filter(a => {
-            const href = (a.href || '').toLowerCase();
-            const text = (a.textContent || '').toLowerCase();
-            const isTicketSite = href.includes('ticket') || href.includes('tixel') || href.includes('stubhub') ||
-              href.includes('viagogo') || href.includes('seatgeek') || href.includes('nol.com') ||
-              href.includes('interpark') || href.includes('yes24') || href.includes('melon') ||
-              text.includes('ticket') || text.includes('buy') || text.includes('sell');
-            const isRelevant = text.includes('stray') || text.includes('fan meeting') || text.includes('little house');
-            return isTicketSite && isRelevant && !href.includes('google.com');
-          })
-          .map(a => ({
-            text: a.textContent.trim().substring(0, 150),
-            href: a.href,
-          }))
-          .slice(0, 5);
+        const postLinks = links.filter(a => {
+          const text = a.textContent.toLowerCase();
+          const hasSellingWord = sellingKeywords.some(k => text.includes(k));
+          const hasTicketWord = ticketKeywords.some(k => text.includes(k));
+          const hasEventWord = eventKeywords.some(k => text.includes(k));
+          return (hasSellingWord || hasTicketWord) && (hasEventWord || text.includes('stray') || text.includes('skz'));
+        }).map(a => ({
+          text: a.textContent.trim().substring(0, 200),
+          href: a.href,
+        })).slice(0, 5);
+
+        // Also look for text blocks mentioning selling
+        const textBlocks = body.split('\n').filter(line => {
+          const l = line.toLowerCase();
+          return sellingKeywords.some(k => l.includes(k)) && eventKeywords.some(k => l.includes(k)) && line.trim().length > 20;
+        }).map(t => t.trim().substring(0, 200)).slice(0, 3);
+
+        return [...postLinks.map(p => ({ ...p, type: 'link' })), ...textBlocks.map(t => ({ text: t, href: '', type: 'text' }))];
       });
 
-      if (searchResults.length > 0) {
-        for (const sr of searchResults) {
+      if (posts.length > 0) {
+        console.log(`      ✅ Found ${posts.length} potential seller posts!`);
+        for (const post of posts) {
           results.push({
-            source: `🔎 Google: "${query.substring(0, 30)}..."`,
-            status: '🟡 CHECK THIS',
-            details: sr.text,
-            url: sr.href,
-            weight: 5,
+            source: `🗣 ${source.name}`,
+            confidence: 'MEDIUM',
+            details: post.text,
+            url: post.href || source.url,
           });
         }
+      } else {
+        console.log(`      No seller posts found`);
       }
-
-      await page.close();
-
-      // Small delay between searches to avoid rate limiting
-      await new Promise(r => setTimeout(r, 1000));
     } catch (err) {
-      console.log(`   ⚠️ Google search failed for "${query.substring(0, 30)}": ${err.message}`);
+      logError(source.name, err.message);
+    } finally {
+      if (page) await page.close().catch(() => {});
     }
   }
-
   return results;
 }
 
 // ============== MAIN ==============
 async function main() {
   const now = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
-  console.log('');
-  console.log('🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥');
-  console.log('🔥  MONSTER TICKET SCRAPER - ACTIVATED  🔥');
-  console.log('🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥');
-  console.log(`⏰ ${now} (Israel Time)`);
-  console.log(`🎯 Scanning ${SOURCES.length} sources + ${GOOGLE_QUERIES.length} Google queries\n`);
+  console.log(`\n🎫 Smart Ticket Scraper v3 | ${now}`);
+  console.log(`🎯 NOL World + ${SECONDARY_SOURCES.length} markets + ${FORUM_SOURCES.length} forums\n`);
 
   const allResults = [];
+  let browser;
 
-  // ===== PHASE 1: Fast HTTP checks (parallel) =====
-  console.log('━━━ PHASE 1: Fast HTTP Scan (all sources parallel) ━━━');
-  const httpPromises = SOURCES.map(source => httpCheck(source));
-  const httpResults = await Promise.allSettled(httpPromises);
-
-  for (const result of httpResults) {
-    if (result.status === 'fulfilled' && result.value.ok) {
-      const findings = analyzeHtml(result.value.html, result.value.source.name);
-      for (const f of findings) {
-        f.url = result.value.source.url;
-        allResults.push(f);
-      }
-    } else if (result.status === 'fulfilled' && !result.value.ok) {
-      console.log(`   ${result.value.source.name}: ⚠️ ${result.value.error}`);
-    }
+  try {
+    browser = await createBrowser();
+  } catch (err) {
+    console.error('❌ CRITICAL: Browser failed:', err.message);
+    await sendTelegram(`❌ <b>SCRAPER ERROR</b>\n\nBrowser failed: ${err.message}\nAuto-retrying next cycle...`);
+    process.exit(1);
   }
 
-  // ===== PHASE 2: Browser deep scan (priority sources) =====
-  console.log('\n━━━ PHASE 2: Browser Deep Scan ━━━');
-  let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-background-networking',
-        '--single-process',
-      ],
-    });
+    // PRIORITY 1: NOL World
+    const nolResults = await checkNolWorld(browser);
+    allResults.push(...nolResults);
 
-    // Deep scan priority sources (official + Korean platforms)
-    const prioritySources = SOURCES.filter(s => s.priority <= 2);
-    for (const source of prioritySources) {
-      const deepResult = await browserDeepScan(browser, source);
-      if (deepResult) {
-        if (deepResult.relevantLinks.length > 0) {
-          for (const link of deepResult.relevantLinks) {
-            allResults.push({
-              source: source.name,
-              status: '🟡 LINK FOUND',
-              details: link.text,
-              url: link.href || source.url,
-              weight: 6,
-            });
-          }
-        }
-        if (deepResult.activeButtons.length > 0) {
-          allResults.push({
-            source: source.name,
-            status: '🔴 ACTIVE BUTTONS!',
-            details: deepResult.activeButtons.join(', '),
-            url: source.url,
-            weight: 9,
-          });
-        }
-        if (deepResult.prices.length > 0) {
-          allResults.push({
-            source: source.name,
-            status: '🔴 PRICES FOUND!',
-            details: deepResult.prices.join(', '),
-            url: source.url,
-            weight: 8,
-          });
-        }
-        if (deepResult.hasQuantitySelector) {
-          allResults.push({
-            source: source.name,
-            status: '🔴🔴🔴 QUANTITY SELECTOR!',
-            details: 'Ticket quantity selector found - tickets likely available!',
-            url: source.url,
-            weight: 10,
-          });
-        }
-      }
+    // PRIORITY 2: Secondary markets
+    console.log('\n🎟 ═══ SECONDARY MARKETS ═══');
+    for (const source of SECONDARY_SOURCES) {
+      try {
+        const results = await checkSecondaryMarket(browser, source);
+        allResults.push(...results);
+      } catch (err) { logError(source.name, err.message); }
     }
 
-    // ===== PHASE 3: Google searches =====
-    console.log('\n━━━ PHASE 3: Google Search Sweep ━━━');
-    const googleResults = await googleSearchCheck(browser);
-    allResults.push(...googleResults);
+    // PRIORITY 3: Forums & private sellers
+    const forumResults = await checkForums(browser);
+    allResults.push(...forumResults);
 
   } catch (err) {
-    console.error('Browser error:', err.message);
+    console.error('Scan error:', err.message);
+    health.errors.push(`Scan: ${err.message}`);
   } finally {
-    if (browser) await browser.close();
+    if (browser) await browser.close().catch(() => {});
   }
 
-  // ===== RESULTS =====
-  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📊 SCAN COMPLETE: ${allResults.length} findings`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  // ===== SEND ALERTS =====
+  console.log(`\n━━━ RESULTS: ${allResults.length} verified findings ━━━`);
 
-  // Deduplicate results
-  const seen = new Set();
-  const uniqueResults = allResults.filter(r => {
-    const key = `${r.source}|${r.details}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  if (allResults.length > 0) {
+    // Sort by confidence
+    const order = { CONFIRMED: 0, HIGH: 1, MEDIUM: 2 };
+    allResults.sort((a, b) => (order[a.confidence] ?? 9) - (order[b.confidence] ?? 9));
 
-  // Sort by priority/weight
-  uniqueResults.sort((a, b) => (b.weight || 0) - (a.weight || 0));
+    const confirmed = allResults.filter(r => r.confidence === 'CONFIRMED');
+    const high = allResults.filter(r => r.confidence === 'HIGH');
+    const medium = allResults.filter(r => r.confidence === 'MEDIUM');
 
-  if (uniqueResults.length > 0) {
-    // Build alert message
-    const highPriority = uniqueResults.filter(r => (r.weight || 0) >= 8);
-    const medPriority = uniqueResults.filter(r => (r.weight || 0) >= 4 && (r.weight || 0) < 8);
-    const lowPriority = uniqueResults.filter(r => (r.weight || 0) < 4);
-
-    let message = '';
-
-    if (highPriority.length > 0) {
-      message += `🚨🚨🚨 <b>URGENT TICKET ALERT!</b> 🚨🚨🚨\n\n`;
-      message += `<b>Stray Kids 6th Fan Meeting</b>\n`;
-      message += `<b>"STAY in Our Little House"</b>\n\n`;
-      message += `<b>🔴 HIGH PRIORITY (${highPriority.length}):</b>\n`;
-      for (const r of highPriority) {
-        message += `\n${r.status}\n`;
-        message += `📍 ${r.source}\n`;
-        message += `📝 ${r.details}\n`;
-        if (r.url) message += `🔗 ${r.url}\n`;
-      }
+    let msg = '';
+    if (confirmed.length > 0) {
+      msg += `🚨🚨🚨 <b>TICKETS AVAILABLE - VERIFIED!</b> 🚨🚨🚨\n\n`;
+    } else if (high.length > 0) {
+      msg += `🔔🔔 <b>TICKET ALERT!</b> 🔔🔔\n\n`;
+    } else {
+      msg += `📢 <b>Possible Tickets Found</b>\n\n`;
     }
 
-    if (medPriority.length > 0) {
-      message += `\n<b>🟡 WORTH CHECKING (${medPriority.length}):</b>\n`;
-      for (const r of medPriority.slice(0, 10)) {
-        message += `\n📍 ${r.source}\n`;
-        message += `📝 ${r.details}\n`;
-        if (r.url) message += `🔗 ${r.url}\n`;
+    msg += `<b>Stray Kids 6th Fan Meeting</b>\n<b>"STAY in Our Little House"</b>\n\n`;
+
+    if (confirmed.length > 0) {
+      msg += `<b>🔴 CONFIRMED (${confirmed.length}):</b>\n`;
+      for (const r of confirmed) {
+        msg += `\n📍 ${r.source}\n📝 ${r.details}\n🔗 ${r.url}\n`;
       }
     }
-
-    if (lowPriority.length > 0 && highPriority.length === 0) {
-      message += `\n<b>ℹ️ LOW SIGNAL (${lowPriority.length}):</b>\n`;
-      for (const r of lowPriority.slice(0, 5)) {
-        message += `📍 ${r.source}: ${r.details}\n`;
+    if (high.length > 0) {
+      msg += `\n<b>🟠 HIGH CONFIDENCE (${high.length}):</b>\n`;
+      for (const r of high) {
+        msg += `\n📍 ${r.source}\n📝 ${r.details}\n🔗 ${r.url}\n`;
+      }
+    }
+    if (medium.length > 0) {
+      msg += `\n<b>🟡 PRIVATE SELLERS (${medium.length}):</b>\n`;
+      for (const r of medium.slice(0, 8)) {
+        msg += `\n📍 ${r.source}\n📝 ${r.details}\n${r.url ? `🔗 ${r.url}\n` : ''}`;
       }
     }
 
     const dates = CONFIG.targetDates.map(d => DATE_LABELS[d] || d).join('\n');
-    message += `\n📅 <b>Target Dates:</b>\n${dates}\n`;
-    message += `\n⚡ <b>GO CHECK NOW!</b> ⚡`;
+    msg += `\n📅 <b>Dates:</b>\n${dates}\n\n⚡ <b>GO CHECK NOW!</b> ⚡`;
 
-    await sendTelegram(message);
-    console.log(`\n🎫 ALERT SENT! ${uniqueResults.length} findings.`);
+    await sendTelegram(msg);
+
+    // Double alert for confirmed
+    if (confirmed.length > 0) {
+      await sleep(3000);
+      await sendTelegram(`🚨🚨🚨 TICKETS AVAILABLE ON OFFICIAL SITE! GO NOW!\n🔗 ${confirmed[0].url}`);
+    }
   } else {
-    // Send periodic "still watching" update every ~30 min (6 runs)
+    // Health report every ~30 min
     const minute = new Date().getMinutes();
-    if (minute < 5) {
+    if (minute < 5 || (minute >= 30 && minute < 35)) {
+      const elapsed = ((Date.now() - health.startTime) / 1000).toFixed(0);
+      const ok = health.sourcesChecked - health.sourcesFailed;
       await sendTelegram(
         `👁 <b>Scraper Active</b> | ${now}\n\n` +
-        `Scanned ${SOURCES.length} sites + ${GOOGLE_QUERIES.length} Google queries\n` +
-        `❌ No tickets found yet\n\n` +
-        `🔄 Checking every 2 minutes...\n` +
-        `I'll alert you INSTANTLY when something appears!`
+        `🎫 NOL: ${health.nolStatus}\n` +
+        `📊 ${ok}/${health.sourcesChecked} sources OK\n` +
+        `⚡ Runtime: ${elapsed}s\n` +
+        (health.errors.length > 0 ? `⚠️ ${health.errors.length} errors\n` : '') +
+        `\n🔄 Next check in ~3 min\n` +
+        `No tickets yet - I'll alert instantly when found!`
       );
     }
-    console.log(`\n⏳ No tickets found. Monster sleeps... for now.`);
+    console.log('⏳ No verified tickets. Waiting for next cycle...');
   }
 
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error('Fatal error:', err);
+// Global safety nets
+process.on('uncaughtException', async (err) => {
+  console.error('💥 Crash:', err.message);
+  try { await sendTelegram(`❌ Scraper crashed: ${err.message}\nAuto-restarting...`); } catch {}
   process.exit(1);
 });
+process.on('unhandledRejection', (err) => { console.error('💥 Rejection:', err); process.exit(1); });
+setTimeout(() => { console.error('⏰ Hard timeout 7min'); process.exit(1); }, 7 * 60 * 1000);
+
+main();

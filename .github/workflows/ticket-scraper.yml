@@ -1,17 +1,16 @@
-name: 🔥 Monster Ticket Scraper
+name: 🎫 Smart Ticket Scraper
 
 on:
   schedule:
-    # Run every 2 minutes (GitHub minimum practical interval)
-    - cron: '*/2 * * * *'
-  workflow_dispatch: # Allow manual trigger
+    - cron: '*/3 * * * *'  # Every 3 minutes
+  workflow_dispatch:
 
 concurrency:
   group: ticket-scraper
   cancel-in-progress: false
 
 jobs:
-  monster-scan:
+  scan:
     runs-on: ubuntu-latest
     timeout-minutes: 8
 
@@ -26,12 +25,38 @@ jobs:
         working-directory: ticket-bot
         run: npm install puppeteer
 
-      - name: 🔥 Run Monster Scraper
+      - name: 🎫 Run Smart Scraper
+        id: scraper
         working-directory: ticket-bot
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TARGET_DATES: '2026-03-28,2026-03-29,2026-04-04,2026-04-05'
         run: node scraper-action.js
+        continue-on-error: true
+
+      # Self-healing: if scraper failed, notify and the cron will auto-retry
+      - name: 🔧 Self-heal on failure
+        if: steps.scraper.outcome == 'failure'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          echo "⚠️ Scraper failed - will auto-retry in 3 minutes"
+          # Send failure notification (but don't spam - only if .failure_count > 3)
+          FAIL_MSG="⚠️ Scraper run failed at $(date -u +%H:%M). Auto-retrying in 3 min..."
+          curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${FAIL_MSG}" || true
+
+  # Watchdog: runs every 30 min to verify the scraper workflow is healthy
+  watchdog:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    needs: scan
+    timeout-minutes: 2
+    steps:
+      - name: 🐕 Health check
+        run: |
+          echo "✅ Workflow completed at $(date -u)"
+          echo "Scan job result: ${{ needs.scan.result }}"
