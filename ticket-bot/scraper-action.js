@@ -117,6 +117,27 @@ async function saveState(results) {
   }
 }
 
+function parseStoredResults(rawResults) {
+  if (!rawResults) return [];
+
+  try {
+    const parsed = typeof rawResults === 'string' ? JSON.parse(rawResults) : rawResults;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((result) => {
+        if (!result || typeof result !== 'object') return null;
+
+        const source = typeof result.source === 'string' ? result.source : '';
+        const url = typeof result.url === 'string' ? result.url : '';
+        return source && url ? { source, url } : null;
+      })
+      .filter((result) => result !== null);
+  } catch {
+    return [];
+  }
+}
+
 // ============== NOL API CHECK (fast, no browser) ==============
 async function checkNolWorldAPI() {
   console.log('🔍 Quick API check on NOL World...');
@@ -280,8 +301,10 @@ async function main() {
 
   // Check if this is a new finding (compare with last state)
   const lastState = await getLastState();
-  const lastCount = lastState?.found_count || 0;
-  const isNewFinding = allResults.length > 0 && (lastCount === 0 || allResults.length > lastCount);
+  const lastResults = parseStoredResults(lastState?.results);
+  const lastSignatures = new Set(lastResults.map((result) => `${result.source}::${result.url}`));
+  const isNewFinding = allResults.length > 0 &&
+    allResults.some((result) => !lastSignatures.has(`${result.source}::${result.url}`));
 
   // Save current state
   await saveState(allResults);

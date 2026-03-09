@@ -7,6 +7,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { verifyCronSecret } from "../_shared/auth-guards.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,23 +36,39 @@ const TARGET_DATES = ['2026-03-28', '2026-03-29', '2026-04-04', '2026-04-05'];
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
+function parseStoredResults(rawResults: unknown): Array<{ source: string; url: string }> {
+  if (!rawResults) return [];
+
+  try {
+    const parsed = typeof rawResults === 'string' ? JSON.parse(rawResults) : rawResults;
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((result) => {
+        if (!result || typeof result !== 'object') return null;
+        const entry = result as Record<string, unknown>;
+
+        const source = typeof entry.source === 'string' ? entry.source : '';
+        const url = typeof entry.url === 'string' ? entry.url : '';
+        return source && url ? { source, url } : null;
+      })
+      .filter((result): result is { source: string; url: string } => result !== null);
+  } catch {
+    return [];
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Verify cron secret (optional, for security)
-  const cronSecret = req.headers.get('x-cron-secret');
-  const expectedSecret = Deno.env.get('CRON_SECRET');
-  if (expectedSecret && cronSecret !== expectedSecret) {
-    // Also allow manual trigger without cron secret
-    const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  const authResult = verifyCronSecret(req);
+  if (!authResult.authorized) {
+    return new Response(JSON.stringify({ error: authResult.error || 'Unauthorized' }), {
+      status: 401,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -129,8 +146,10 @@ serve(async (req) => {
       .limit(1)
       .single();
 
-    const lastCount = lastState?.found_count || 0;
-    const isNewFinding = results.length > 0 && (lastCount === 0 || results.length > lastCount);
+    const lastResults = parseStoredResults(lastState?.results);
+    const lastSignatures = new Set(lastResults.map((result) => `${result.source}::${result.url}`));
+    const isNewFinding = results.length > 0 &&
+      results.some((result) => !lastSignatures.has(`${result.source}::${result.url}`));
 
     // Save state
     await supabase.from('ticket_scraper_state').insert({
