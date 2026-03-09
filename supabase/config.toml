@@ -192,6 +192,9 @@ verify_jwt = false
 [functions.telegram-notify]
 verify_jwt = false
 
+[functions.ticket-checker]
+verify_jwt = false
+
 [functions.autonomous-hunter]
 verify_jwt = false
 
