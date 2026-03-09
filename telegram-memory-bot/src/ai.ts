@@ -368,7 +368,10 @@ export function detectIntent(text: string): MessageIntent {
   const lower = text.trim();
 
   if (/^[/]/.test(lower)) return 'help';
-  if (/^(משימות|רשימת משימות|מה יש לעשות|tasks|מה צריך לעשות)/i.test(lower)) return 'task_list';
+  if (/^(משימות|רשימת משימות|tasks)/i.test(lower)) return 'task_list';
+  // "מה צריך/אני צריך/יש/נשאר לעשות" variants
+  if (/מה.{0,15}(צריך|יש|נשאר|עלי).{0,10}(לעשות|לסיים|משימות)/i.test(lower)) return 'task_list';
+  if (/^(מה יש לי היום|מה יש להיום|מה ביומן|מה בלוח)/i.test(lower)) return 'task_list';
   if (/^(סיימתי|בוצע|done|✅|עשיתי|השלמתי|גמרתי)\s/i.test(lower)) return 'task_complete';
   if (/^(סטטיסטיק|סטטוס|סיכום|stats)/i.test(lower)) return 'stats';
 
