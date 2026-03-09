@@ -57,6 +57,7 @@ const health = {
   sourcesFailed: 0,
   errors: [],
   nolStatus: 'unknown',
+  nolDebug: '',
   confirmedFindings: [],
 };
 
@@ -176,53 +177,69 @@ async function checkNolWorld(browser) {
         const body = document.body?.innerText || '';
         const bodyLower = body.toLowerCase();
         const html = document.body?.innerHTML || '';
-        const htmlLower = html.toLowerCase();
 
-        // ===== SOLD OUT detection =====
+        // ===== SOLD OUT / UNAVAILABLE detection =====
+        // Be VERY broad here - catch every possible "not available" signal
         const soldOutIndicators = [
           'sold out', 'soldout', 'sold-out', '매진',
           'all tickets have been sold', 'no longer available',
           'tickets are not available', 'currently unavailable',
+          'not available', 'unavailable', 'ended', 'closed',
+          'booking has ended', 'sale has ended', 'sales ended',
+          '판매종료', '예매종료', '예매 종료', '판매 종료', '마감',
+          'booking closed', 'ticket sales closed', 'expired',
+          'coming soon', 'not yet', 'before sale', '판매전',
+          'sold_out', // CSS/attribute patterns
         ];
         const soldOutCount = soldOutIndicators.filter(p => bodyLower.includes(p)).length;
 
+        // Also check for sold-out in HTML attributes/classes (often more reliable)
+        const soldOutInHTML = ['sold-out', 'soldout', 'sold_out', 'unavailable', 'disabled', 'closed', 'ended']
+          .filter(p => html.toLowerCase().includes(`class="${p}`) || html.toLowerCase().includes(`class*="${p}`))
+          .length;
+
         // ===== ACTIVE PURCHASE detection =====
-        // Look for real, clickable, enabled purchase/booking buttons
+        // STRICT: Only match very specific purchase action buttons, not navigation
         const allButtons = Array.from(document.querySelectorAll('button, a[role="button"], input[type="submit"]'));
         const purchaseButtons = allButtons.filter(btn => {
           const text = btn.textContent.toLowerCase().trim();
           const isDisabled = btn.disabled || btn.classList.contains('disabled') ||
             btn.getAttribute('aria-disabled') === 'true' ||
-            btn.closest('[disabled]') !== null;
-          const isPurchase = (
-            text === 'book' || text === 'buy' || text === 'purchase' ||
-            text.includes('book now') || text.includes('buy now') ||
-            text.includes('buy ticket') || text.includes('get ticket') ||
-            text.includes('add to cart') || text.includes('reserve') ||
-            text === '예매' || text === '예매하기' || text === '구매하기' ||
-            text.includes('예매하기') || text.includes('티켓 구매')
+            btn.closest('[disabled]') !== null ||
+            getComputedStyle(btn).pointerEvents === 'none' ||
+            getComputedStyle(btn).opacity === '0' ||
+            btn.offsetParent === null; // hidden element
+
+          // STRICT: only exact purchase-action text, not navigation links
+          const isPurchaseAction = (
+            text === 'book now' || text === 'buy now' || text === 'purchase' ||
+            text === 'buy tickets' || text === 'get tickets' ||
+            text === 'add to cart' || text === 'select seats' ||
+            text === '예매하기' || text === '구매하기' || text === '좌석선택' ||
+            text === '티켓 구매' || text === '예매' ||
+            text === 'proceed to checkout' || text === 'select ticket'
           );
-          return isPurchase && !isDisabled;
+          return isPurchaseAction && !isDisabled;
         });
 
-        // ===== TICKET SELECTION UI =====
-        // Quantity selectors, date pickers, seat maps = tickets are buyable
+        // ===== TICKET SELECTION UI (interactive elements) =====
+        // These must be INTERACTIVE, not just informational
         const hasQuantitySelect = document.querySelector(
           'select[name*="qty"], select[name*="quantity"], input[type="number"][name*="qty"], ' +
-          '[class*="quantity-select"], [class*="ticket-quantity"], [data-qty]'
+          '[class*="quantity-select"], [class*="ticket-quantity"], [data-qty], ' +
+          'input[type="number"][min], select[class*="count"]'
         ) !== null;
 
-        const hasSeatMap = document.querySelector(
-          '[class*="seat-map"], [class*="seatmap"], [class*="venue-map"], ' +
-          'svg[class*="seat"], canvas[class*="seat"]'
-        ) !== null;
+        // Seat map must be interactive (SVG with clickable seats, not just an image)
+        const seatMapEl = document.querySelector(
+          '[class*="seat-map"] [class*="seat"][role="button"], ' +
+          '[class*="seatmap"] [class*="available"], ' +
+          'svg [class*="seat"][data-status="available"], ' +
+          '[class*="venue-map"] [class*="clickable"]'
+        );
+        const hasSeatMap = seatMapEl !== null;
 
-        const hasDateSelector = document.querySelector(
-          '[class*="date-select"], [class*="calendar"], [class*="date-picker"], ' +
-          '[class*="schedule"] button:not([disabled]), [class*="performance"] button:not([disabled])'
-        ) !== null;
-
-        // ===== PRICE on page =====
+        // ===== PRICE on page (informational only, NOT a buy signal) =====
         const priceRegex = /(?:₩|KRW|원)\s*[\d,]+|[\d,]+\s*(?:₩|원|KRW)/;
         const hasPrice = priceRegex.test(body);
 
@@ -238,49 +255,68 @@ async function checkNolWorld(browser) {
         const hasWaitlist = bodyLower.includes('waitlist') || bodyLower.includes('waiting list') ||
           bodyLower.includes('대기') || bodyLower.includes('lottery');
 
+        // ===== ALL buttons on page (for debug) =====
+        const allButtonTexts = allButtons
+          .map(b => `"${b.textContent.trim()}" [${b.disabled ? 'disabled' : 'enabled'}]`)
+          .filter(t => t.length > 3)
+          .slice(0, 15);
+
         // ===== Page state summary =====
         return {
           soldOutCount,
-          isSoldOut: soldOutCount >= 1,
+          soldOutInHTML,
+          isSoldOut: soldOutCount >= 1 || soldOutInHTML >= 1,
           purchaseButtonCount: purchaseButtons.length,
           purchaseButtonTexts: purchaseButtons.map(b => b.textContent.trim()).slice(0, 5),
           hasQuantitySelect,
           hasSeatMap,
-          hasDateSelector,
           hasPrice,
           hasCancelTickets,
           hasWaitlist,
           pageTitle: document.title,
-          // Get the first 200 chars to understand context
-          pageSnippet: body.substring(0, 300).replace(/\s+/g, ' '),
+          pageSnippet: body.substring(0, 500).replace(/\s+/g, ' '),
+          allButtonTexts, // debug: see what buttons are on the page
         };
       });
 
+      // === DEBUG LOG: see exactly what page contains ===
       console.log(`   📄 Page: "${analysis.pageTitle}"`);
-      console.log(`   🔒 Sold out signals: ${analysis.soldOutCount}`);
-      console.log(`   🛒 Purchase buttons: ${analysis.purchaseButtonCount}`);
-      console.log(`   📊 Qty selector: ${analysis.hasQuantitySelect} | Seat map: ${analysis.hasSeatMap} | Date picker: ${analysis.hasDateSelector}`);
+      console.log(`   📝 Snippet: ${analysis.pageSnippet.substring(0, 200)}`);
+      console.log(`   🔒 Sold out signals: ${analysis.soldOutCount} (text) + ${analysis.soldOutInHTML} (HTML attrs)`);
+      console.log(`   🛒 Purchase buttons: ${analysis.purchaseButtonCount} → [${analysis.purchaseButtonTexts.join(', ')}]`);
+      console.log(`   🔘 All buttons on page: ${analysis.allButtonTexts.join(' | ')}`);
+      console.log(`   📊 Qty selector: ${analysis.hasQuantitySelect} | Seat map (interactive): ${analysis.hasSeatMap}`);
       console.log(`   💰 Price shown: ${analysis.hasPrice} | Cancel tickets: ${analysis.hasCancelTickets}`);
 
-      // === DECISION LOGIC ===
-      // CONFIRMED AVAILABLE: Must have BOTH purchase UI AND no sold-out signals
-      const hasActivePurchaseUI = (
+      // Save debug info for health report
+      health.nolDebug = `btns=${analysis.purchaseButtonCount}, qty=${analysis.hasQuantitySelect}, seats=${analysis.hasSeatMap}, sold_out=${analysis.soldOutCount}+${analysis.soldOutInHTML}, price=${analysis.hasPrice}`;
+
+      // === DECISION LOGIC (STRICT - minimize false positives) ===
+      //
+      // CONFIRMED: requires BOTH of these:
+      //   1. Active purchase button (exact match, not disabled, not hidden)
+      //   2. Interactive ticket selection (quantity selector OR interactive seat map)
+      //   AND NOT sold out
+      //
+      // Having just buttons + price is NOT enough (price is informational)
+      // Having just buttons is NOT enough (could be navigation)
+      // Having just price is NOT enough (always shown on event pages)
+
+      const hasRealPurchaseFlow = (
         analysis.purchaseButtonCount > 0 &&
-        (analysis.hasQuantitySelect || analysis.hasSeatMap || analysis.hasDateSelector || analysis.hasPrice)
+        (analysis.hasQuantitySelect || analysis.hasSeatMap)
       );
 
-      if (hasActivePurchaseUI && !analysis.isSoldOut) {
-        const confidence = 'CONFIRMED';
+      if (hasRealPurchaseFlow && !analysis.isSoldOut) {
         results.push({
           source: `🎫 ${label}`,
-          confidence,
-          details: `Active purchase UI found! Buttons: [${analysis.purchaseButtonTexts.join(', ')}]` +
-            (analysis.hasPrice ? ' + pricing visible' : '') +
+          confidence: 'CONFIRMED',
+          details: `Active purchase flow! Buttons: [${analysis.purchaseButtonTexts.join(', ')}]` +
             (analysis.hasQuantitySelect ? ' + quantity selector' : '') +
-            (analysis.hasSeatMap ? ' + seat map active' : ''),
+            (analysis.hasSeatMap ? ' + interactive seat map' : ''),
           url,
         });
-        console.log(`   ✅✅✅ CONFIRMED: Tickets appear available!`);
+        console.log(`   ✅✅✅ CONFIRMED: Real purchase flow detected!`);
       } else if (analysis.hasCancelTickets && !analysis.isSoldOut) {
         results.push({
           source: `🎫 ${label}`,
@@ -289,13 +325,13 @@ async function checkNolWorld(browser) {
           url,
         });
         console.log(`   ✅ HIGH: Cancellation tickets detected!`);
-      } else if (analysis.purchaseButtonCount > 0 && !analysis.isSoldOut && !analysis.hasQuantitySelect) {
-        // Buttons exist but no quantity selector - might be just navigation buttons
-        // DON'T alert - this was causing false positives
-        console.log(`   ⚠️ Buttons found but no ticket selection UI - likely navigation, skipping`);
-        health.nolStatus = 'buttons_no_ui';
+      } else if (analysis.purchaseButtonCount > 0 && !analysis.isSoldOut) {
+        // Buttons exist but no interactive ticket selection UI
+        // This is almost certainly a page with info buttons, NOT real availability
+        console.log(`   ⚠️ Buttons found but NO quantity selector or seat map - NOT alerting (likely navigation/info)`);
+        health.nolStatus = 'buttons_no_purchase_flow';
       } else if (analysis.isSoldOut) {
-        console.log(`   ❌ SOLD OUT`);
+        console.log(`   ❌ SOLD OUT (${analysis.soldOutCount} text + ${analysis.soldOutInHTML} HTML signals)`);
         health.nolStatus = 'sold_out';
       } else if (analysis.hasWaitlist) {
         console.log(`   ⏳ Waitlist/lottery mode`);
@@ -499,6 +535,7 @@ function buildHealthReport(now) {
     `🎫 NOL World: ${health.nolStatus}\n` +
     `📊 Sources: ${health.sourcesChecked - health.sourcesFailed}/${health.sourcesChecked} OK\n` +
     `⚡ Runtime: ${elapsed}s\n` +
+    (health.nolDebug ? `\n🔍 NOL debug: ${health.nolDebug}\n` : '') +
     (health.errors.length > 0 ? `\n⚠️ Errors:\n${health.errors.slice(0, 5).map(e => `• ${e}`).join('\n')}\n` : '') +
     `\n🔄 Next check in ~3 minutes`
   );
@@ -594,8 +631,7 @@ async function main() {
       }
     }
 
-    const dates = CONFIG.targetDates.map(d => DATE_LABELS[d] || d).join('\n');
-    message += `\n📅 <b>Dates:</b>\n${dates}\n\n⚡ <b>GO CHECK NOW!</b> ⚡`;
+    message += `\n📅 <b>Target dates:</b> 28.3, 29.3, 4.4, 5.4\n⚠️ Check each date on the site - not all may be available\n\n⚡ <b>GO CHECK NOW!</b> ⚡`;
 
     await sendTelegram(message);
 
