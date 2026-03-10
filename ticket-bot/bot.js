@@ -27,7 +27,7 @@ const SOURCES = {
   },
   tixel: {
     name: 'Tixel (Resale)',
-    searchUrl: 'https://tixel.com/search?q=stray+kids+fan+meeting',
+    searchUrl: 'https://tixel.com/us/music-tickets/stray-kids',
   },
   seatpick: {
     name: 'SeatPick (Resale)',
@@ -75,6 +75,9 @@ async function sendTelegramAlert(message) {
   }
 }
 
+// ============== STATE TRACKING (prevent duplicate alerts) ==============
+let lastAlertSignature = '';
+
 // ============== NOL WORLD SCRAPER ==============
 async function checkNolWorld(browser) {
   const source = SOURCES.nolWorld;
@@ -87,70 +90,64 @@ async function checkNolWorld(browser) {
     );
 
     await page.goto(source.eventUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-
-    // Wait for the page to load
     await page.waitForSelector('body', { timeout: 10000 });
 
-    const pageContent = await page.content();
-
-    // Look for ticket availability indicators
     const results = [];
 
     for (const targetDate of CONFIG.targetDates) {
       const dateLabel = DATE_LABELS[targetDate] || targetDate;
 
-      // Check if there are any "book" or "buy" buttons that aren't disabled
-      const availability = await page.evaluate((date) => {
+      // === STRICT availability detection ===
+      const availability = await page.evaluate(() => {
         const body = document.body.innerText.toLowerCase();
-        const html = document.body.innerHTML;
 
-        // Check for sold out indicators
-        const soldOutPatterns = ['sold out', 'soldout', 'sold-out', '매진', 'unavailable'];
+        // 1. Sold out confirmation
+        const soldOutPatterns = ['sold out', 'soldout', 'sold-out', '매진', 'tickets unavailable'];
         const isSoldOut = soldOutPatterns.some((p) => body.includes(p));
 
-        // Check for available booking buttons
-        const bookButtons = document.querySelectorAll(
-          'button:not([disabled]), a[href*="book"], a[href*="ticket"], [class*="buy"], [class*="book"]'
-        );
-        const hasActiveButtons = Array.from(bookButtons).some((btn) => {
-          const text = btn.textContent.toLowerCase();
-          return (
-            (text.includes('book') ||
-              text.includes('buy') ||
-              text.includes('ticket') ||
-              text.includes('reserve') ||
-              text.includes('예매')) &&
-            !text.includes('sold') &&
-            !text.includes('unavailable')
-          );
-        });
-
-        // Look for date-specific availability
-        const hasDate = body.includes(date) || html.includes(date);
-
-        // Check for cancellation ticket indicators
-        const cancelPatterns = ['cancellation', 'returned', 'released', '취소표', '환불'];
+        // 2. Cancellation tickets (very specific phrases only)
+        const cancelPatterns = ['cancellation ticket', '취소표 예매', 'returned ticket', 'released ticket'];
         const hasCancelTickets = cancelPatterns.some((p) => body.includes(p));
 
-        return {
-          isSoldOut,
-          hasActiveButtons,
-          hasDate,
-          hasCancelTickets,
-          bodySnippet: body.substring(0, 500),
-        };
-      }, targetDate);
+        // 3. Active purchase flow elements (NOT generic nav buttons)
+        const hasQuantitySelector = !!document.querySelector(
+          'select[name*="quantity"], select[name*="qty"], input[name*="quantity"], [class*="quantity-select"], [class*="qty"]'
+        );
+        const hasAddToCart = !!document.querySelector(
+          'button[class*="cart"], button[class*="purchase"], [class*="add-to-cart"], [data-action*="cart"]'
+        );
+        const hasSeatSelection = !!document.querySelector(
+          '[class*="seat-map"], [class*="seatmap"], [class*="seat-select"], [class*="zone-select"]'
+        );
 
-      if (availability.hasCancelTickets || (availability.hasActiveButtons && !availability.isSoldOut)) {
+        // 4. Check for actual price amounts
+        const priceRegex = /[₩$€]\s*[\d,]{3,}/;
+        const hasPriceOnPage = priceRegex.test(document.body.innerText);
+
+        // A real purchase flow needs MULTIPLE signals together
+        const hasRealPurchaseFlow = hasPriceOnPage && (hasQuantitySelector || hasAddToCart || hasSeatSelection);
+
+        return { isSoldOut, hasCancelTickets, hasRealPurchaseFlow };
+      });
+
+      if (availability.hasCancelTickets) {
+        results.push({
+          source: source.name,
+          date: dateLabel,
+          status: 'CANCELLATION_DETECTED',
+          url: source.eventUrl,
+          details: 'Cancellation tickets detected!',
+        });
+      } else if (availability.hasRealPurchaseFlow && !availability.isSoldOut) {
         results.push({
           source: source.name,
           date: dateLabel,
           status: 'POSSIBLY_AVAILABLE',
           url: source.eventUrl,
-          details: availability.hasCancelTickets ? 'Cancellation tickets detected!' : 'Active booking buttons found!',
+          details: 'Active purchase flow detected (price + cart/quantity)!',
         });
       } else {
-        console.log(`   ${dateLabel}: ${availability.isSoldOut ? '❌ Sold Out' : '⏳ No availability detected'}`);
+        console.log(`   ${dateLabel}: ${availability.isSoldOut ? '❌ Sold Out' : '⏳ No real availability signals'}`);
       }
     }
 
@@ -181,10 +178,11 @@ async function checkSecondaryMarket(browser, sourceKey) {
     const results = [];
 
     const availability = await page.evaluate(() => {
-      const body = document.body.innerText.toLowerCase();
+      const body = document.body.innerText;
+      const bodyLower = body.toLowerCase();
       const links = Array.from(document.querySelectorAll('a'));
 
-      // Look for Stray Kids fan meeting links with pricing
+      // Look for Stray Kids fan meeting links
       const relevantLinks = links.filter((a) => {
         const text = (a.textContent + ' ' + a.href).toLowerCase();
         return (
@@ -193,40 +191,55 @@ async function checkSecondaryMarket(browser, sourceKey) {
         );
       });
 
-      // Check for price indicators (means tickets are available)
-      const pricePatterns = ['$', '₩', '€', 'from', 'starting at', 'price'];
-      const hasPricing = pricePatterns.some((p) => body.includes(p));
+      // === STRICT: Check for actual ticket pricing ===
+      const priceRegex = /(?:from\s+)?[$€£₩]\s*\d[\d,]*(?:\.\d{2})?/gi;
+      const priceMatches = body.match(priceRegex) || [];
 
-      // Check for "no tickets" indicators
-      const noTicketPatterns = ['no tickets', 'not available', 'no events', 'no results', 'sold out'];
-      const noTickets = noTicketPatterns.some((p) => body.includes(p));
+      // Check for explicit "no tickets" messages
+      const noTicketPatterns = ['no tickets available', 'currently unavailable', 'no events found',
+        'no results found', 'all sold out', '0 tickets', 'check back later'];
+      const noTickets = noTicketPatterns.some((p) => bodyLower.includes(p));
+
+      // Check for actual "buy" buttons near listings (not in nav)
+      const buyButtons = Array.from(document.querySelectorAll(
+        '[class*="listing"] button, [class*="event"] button, [class*="ticket"] a[href*="checkout"], [class*="buy-btn"], [data-testid*="buy"]'
+      ));
+      const hasActualBuyButtons = buyButtons.length > 0;
 
       return {
         foundLinks: relevantLinks.map((a) => ({
           text: a.textContent.trim().substring(0, 100),
           href: a.href,
         })),
-        hasPricing,
+        priceCount: priceMatches.length,
+        firstPrices: priceMatches.slice(0, 3),
         noTickets,
-        bodySnippet: body.substring(0, 500),
+        hasActualBuyButtons,
       };
     });
 
-    if (availability.foundLinks.length > 0 && !availability.noTickets) {
-      for (const link of availability.foundLinks) {
-        for (const targetDate of CONFIG.targetDates) {
-          const dateLabel = DATE_LABELS[targetDate] || targetDate;
-          results.push({
-            source: source.name,
-            date: dateLabel,
-            status: 'TICKETS_FOUND',
-            url: link.href || source.searchUrl,
-            details: `Found listing: ${link.text}`,
-          });
-        }
+    // STRICT: Only report if relevant links AND (real prices OR buy buttons) AND no "no tickets"
+    if (
+      availability.foundLinks.length > 0 &&
+      !availability.noTickets &&
+      (availability.priceCount > 0 || availability.hasActualBuyButtons)
+    ) {
+      for (const link of availability.foundLinks.slice(0, 2)) {
+        results.push({
+          source: source.name,
+          date: 'Check listing',
+          status: 'TICKETS_FOUND',
+          url: link.href || source.searchUrl,
+          details: `${link.text}${availability.firstPrices.length > 0 ? ` | Prices: ${availability.firstPrices.join(', ')}` : ''}`,
+        });
       }
     } else {
-      console.log(`   ${availability.noTickets ? '❌ No tickets listed' : '⏳ No relevant listings found'}`);
+      const reason = availability.noTickets
+        ? '❌ No tickets available'
+        : availability.foundLinks.length === 0
+          ? '⏳ No relevant listings'
+          : '⏳ Listings found but no actual prices/buy options';
+      console.log(`   ${reason}`);
     }
 
     await page.close();
@@ -242,7 +255,6 @@ async function checkNolWorldAPI() {
   console.log(`🔍 Quick API check on NOL World...`);
 
   try {
-    // Try to hit the NOL World event page API directly
     const response = await fetch(SOURCES.nolWorld.eventUrl, {
       headers: {
         'User-Agent':
@@ -255,24 +267,40 @@ async function checkNolWorldAPI() {
     const html = await response.text();
     const bodyLower = html.toLowerCase();
 
-    // Quick checks
+    // === STRICT checks ===
     const soldOut = bodyLower.includes('sold out') || bodyLower.includes('매진') || bodyLower.includes('soldout');
-    const hasBooking = bodyLower.includes('booking') || bodyLower.includes('예매') || bodyLower.includes('purchase');
-    const hasCancellation = bodyLower.includes('cancellation') || bodyLower.includes('취소표');
 
-    if (hasCancellation || (hasBooking && !soldOut)) {
-      return [
-        {
-          source: 'NOL World API',
-          date: 'Check manually',
-          status: 'POSSIBLY_AVAILABLE',
-          url: SOURCES.nolWorld.eventUrl,
-          details: hasCancellation ? 'Cancellation tickets may be available!' : 'Booking may be open!',
-        },
-      ];
+    // Only very specific cancellation phrases
+    const cancelPatterns = ['cancellation ticket', '취소표 예매', 'returned ticket', 'released ticket'];
+    const hasCancellation = cancelPatterns.some((p) => bodyLower.includes(p));
+
+    // Look for actual price + quantity indicators
+    const priceRegex = /[₩$€]\s*[\d,]{3,}/;
+    const hasPrice = priceRegex.test(html);
+    const hasQuantitySelect = bodyLower.includes('select quantity') || bodyLower.includes('수량 선택') ||
+      bodyLower.includes('add to cart') || bodyLower.includes('장바구니');
+
+    if (hasCancellation) {
+      return [{
+        source: 'NOL World API',
+        date: 'Check manually',
+        status: 'CANCELLATION_DETECTED',
+        url: SOURCES.nolWorld.eventUrl,
+        details: 'Cancellation tickets detected on the page!',
+      }];
     }
 
-    console.log(`   ${soldOut ? '❌ Still Sold Out' : '⏳ No change detected'}`);
+    if (hasPrice && hasQuantitySelect && !soldOut) {
+      return [{
+        source: 'NOL World API',
+        date: 'Check manually',
+        status: 'POSSIBLY_AVAILABLE',
+        url: SOURCES.nolWorld.eventUrl,
+        details: 'Price and quantity selector found!',
+      }];
+    }
+
+    console.log(`   ${soldOut ? '❌ Still Sold Out' : '⏳ No availability signals'}`);
     return [];
   } catch (err) {
     console.error(`   ❌ API check failed: ${err.message}`);
@@ -282,7 +310,6 @@ async function checkNolWorldAPI() {
 
 // ============== MAIN LOOP ==============
 let checkCount = 0;
-let foundTickets = false;
 
 async function runCheck() {
   checkCount++;
@@ -305,11 +332,9 @@ async function runCheck() {
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     });
 
-    // Check NOL World with browser
     const nolResults = await checkNolWorld(browser);
     allResults.push(...nolResults);
 
-    // Check secondary markets
     for (const sourceKey of ['tixel', 'seatpick', 'vividseats']) {
       const results = await checkSecondaryMarket(browser, sourceKey);
       allResults.push(...results);
@@ -320,9 +345,12 @@ async function runCheck() {
     if (browser) await browser.close();
   }
 
-  // Process results
-  if (allResults.length > 0) {
-    foundTickets = true;
+  // Check for genuinely new findings (signature-based dedup)
+  const currentSignature = allResults.map(r => `${r.source}:${r.status}`).sort().join('|');
+  const isNewFinding = allResults.length > 0 && currentSignature !== lastAlertSignature;
+
+  if (allResults.length > 0 && isNewFinding) {
+    lastAlertSignature = currentSignature;
 
     const message =
       `🎫🎫🎫 TICKET ALERT! 🎫🎫🎫\n\n` +
@@ -333,14 +361,14 @@ async function runCheck() {
           (r) => `🔥 <b>${r.source}</b>\n` + `   📅 ${r.date}\n` + `   📝 ${r.details}\n` + `   🔗 ${r.url}\n`
         )
         .join('\n') +
-      `\n⚡ GO NOW! Check the links above!`;
+      `\n⚡ Check the links above!`;
 
     await sendTelegramAlert(message);
-
-    // Also play a sound alert on the system
     console.log('\n🔔🔔🔔 TICKETS FOUND! CHECK ABOVE! 🔔🔔🔔');
+  } else if (allResults.length > 0) {
+    console.log(`\n🎫 ${allResults.length} results (already alerted, same finding)`);
   } else {
-    console.log(`\n⏳ No tickets found yet. Next check in ${CONFIG.checkIntervalSeconds} seconds...`);
+    console.log(`\n⏳ No tickets found. Next check in ${CONFIG.checkIntervalSeconds} seconds...`);
   }
 
   return allResults;
@@ -353,30 +381,29 @@ async function main() {
   console.log('║  🏠 STAY in Our Little House - Fan Meeting     ║');
   console.log('║  📅 Target: 28-29.3 / 4-5.4.2026              ║');
   console.log('║  🎫 Tickets needed: 1                         ║');
+  console.log('║  🔒 STRICT mode: only real availability alerts ║');
   console.log('╚════════════════════════════════════════════════╝');
   console.log('');
 
-  // Initialize Telegram
   initTelegram();
 
   console.log('\nMonitoring sources:');
   Object.values(SOURCES).forEach((s) => console.log(`  📡 ${s.name}`));
   console.log(`\n⏱️  Check interval: every ${CONFIG.checkIntervalSeconds} seconds`);
   console.log('🎯 Target dates:', CONFIG.targetDates.map((d) => DATE_LABELS[d] || d).join(', '));
+  console.log('🔒 Strict mode: only alerting on confirmed availability signals');
   console.log('\nStarting monitoring...\n');
 
-  // Send startup notification
   await sendTelegramAlert(
-    '🤖 Ticket bot started!\n\n' +
+    '🤖 Ticket bot started! (STRICT mode)\n\n' +
       'Monitoring for Stray Kids 6th Fan Meeting tickets\n' +
       `Dates: 28.3, 29.3, 4.4, 5.4.2026\n` +
-      `Checking every ${CONFIG.checkIntervalSeconds} seconds`
+      `Checking every ${CONFIG.checkIntervalSeconds} seconds\n` +
+      '🔒 Only real availability alerts (no false positives)'
   );
 
-  // Initial check
   await runCheck();
 
-  // Schedule recurring checks
   setInterval(async () => {
     try {
       await runCheck();

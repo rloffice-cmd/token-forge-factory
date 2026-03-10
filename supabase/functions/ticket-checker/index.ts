@@ -3,6 +3,10 @@
  * Fast fetch-based check for NOL World ticket availability
  * Runs via Supabase cron (pg_cron) every 1-2 minutes
  * No browser needed - lightweight and fast
+ *
+ * STRICT MODE: Default assumption is SOLD OUT.
+ * Only alerts on strong positive signals (cancellation tickets, price+cart).
+ * Generic words like "booking" or "purchase" in site navigation are IGNORED.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -20,7 +24,7 @@ const SOURCES = {
   },
   tixel: {
     name: 'Tixel',
-    searchUrl: 'https://tixel.com/search?q=stray+kids+fan+meeting',
+    searchUrl: 'https://tixel.com/us/music-tickets/stray-kids',
   },
 };
 
@@ -44,7 +48,6 @@ serve(async (req) => {
   const cronSecret = req.headers.get('x-cron-secret');
   const expectedSecret = Deno.env.get('CRON_SECRET');
   if (expectedSecret && cronSecret !== expectedSecret) {
-    // Also allow manual trigger without cron secret
     const authHeader = req.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -66,7 +69,7 @@ serve(async (req) => {
       url: string;
     }> = [];
 
-    // === Check NOL World ===
+    // === Check NOL World (STRICT mode) ===
     try {
       const response = await fetch(SOURCES.nolWorld.eventUrl, {
         headers: {
@@ -79,25 +82,41 @@ serve(async (req) => {
       const html = await response.text();
       const bodyLower = html.toLowerCase();
 
+      // Confirm sold out (normal state)
       const soldOut = bodyLower.includes('sold out') || bodyLower.includes('매진') || bodyLower.includes('soldout');
-      const hasBooking = bodyLower.includes('booking') || bodyLower.includes('예매') || bodyLower.includes('purchase');
-      const hasCancellation = bodyLower.includes('cancellation') || bodyLower.includes('취소표') || bodyLower.includes('returned');
 
-      if (hasCancellation || (hasBooking && !soldOut)) {
+      // Only very specific cancellation phrases (NOT generic "cancellation" which could be in policies)
+      const cancelPatterns = ['cancellation ticket', '취소표 예매', 'returned ticket', 'released ticket'];
+      const hasCancellation = cancelPatterns.some((p) => bodyLower.includes(p));
+
+      // Check for actual price + quantity indicators (real purchase flow)
+      const priceRegex = /[₩$€]\s*[\d,]{3,}/;
+      const hasPrice = priceRegex.test(html);
+      const hasQuantitySelect = bodyLower.includes('select quantity') || bodyLower.includes('수량 선택') ||
+        bodyLower.includes('add to cart') || bodyLower.includes('장바구니');
+
+      if (hasCancellation) {
         results.push({
           source: SOURCES.nolWorld.name,
-          status: hasCancellation ? 'CANCELLATION_DETECTED' : 'POSSIBLY_AVAILABLE',
-          details: hasCancellation ? 'Cancellation tickets may be available!' : 'Booking appears to be open!',
+          status: 'CANCELLATION_DETECTED',
+          details: 'Cancellation tickets detected on the page!',
+          url: SOURCES.nolWorld.eventUrl,
+        });
+      } else if (hasPrice && hasQuantitySelect && !soldOut) {
+        results.push({
+          source: SOURCES.nolWorld.name,
+          status: 'POSSIBLY_AVAILABLE',
+          details: 'Price and quantity selector found - tickets may be available!',
           url: SOURCES.nolWorld.eventUrl,
         });
       }
 
-      console.log(`NOL World: ${soldOut ? 'Sold Out' : hasCancellation ? 'CANCELLATION!' : hasBooking ? 'BOOKING OPEN!' : 'No change'}`);
+      console.log(`NOL World: ${soldOut ? 'Sold Out (confirmed)' : hasCancellation ? 'CANCELLATION!' : 'No availability signals'}`);
     } catch (err) {
       console.error('NOL check failed:', err);
     }
 
-    // === Check Tixel (fetch-based) ===
+    // === Check Tixel (STRICT mode) ===
     try {
       const response = await fetch(SOURCES.tixel.searchUrl, {
         headers: { 'User-Agent': USER_AGENT, 'Accept': 'text/html' },
@@ -107,21 +126,33 @@ serve(async (req) => {
 
       const hasStrayKids = bodyLower.includes('stray kids') &&
         (bodyLower.includes('fan meeting') || bodyLower.includes('little house'));
-      const noResults = bodyLower.includes('no results') || bodyLower.includes('no tickets');
 
-      if (hasStrayKids && !noResults) {
+      // Check for EXPLICIT no-ticket indicators
+      const noResults = bodyLower.includes('no results') || bodyLower.includes('no tickets') ||
+        bodyLower.includes('currently unavailable') || bodyLower.includes('check back later');
+
+      // STRICT: Also require price indicators to confirm real listings
+      const priceRegex = /(?:from\s+)?[$€£₩]\s*\d[\d,]*(?:\.\d{2})?/gi;
+      const priceMatches = html.match(priceRegex) || [];
+      const hasRealPrices = priceMatches.length > 0;
+
+      if (hasStrayKids && !noResults && hasRealPrices) {
         results.push({
           source: SOURCES.tixel.name,
           status: 'TICKETS_FOUND',
-          details: 'Stray Kids listings found on Tixel!',
+          details: `Stray Kids listings with prices found on Tixel! (${priceMatches.slice(0, 2).join(', ')})`,
           url: SOURCES.tixel.searchUrl,
         });
       }
+
+      console.log(`Tixel: ${noResults ? 'No results' : !hasStrayKids ? 'No relevant listings' : !hasRealPrices ? 'Listings but no prices' : 'TICKETS FOUND!'}`);
     } catch (err) {
       console.error('Tixel check failed:', err);
     }
 
-    // === Check if new finding vs previous state ===
+    // === Check if new finding vs previous state (signature-based) ===
+    const currentSignature = results.map(r => `${r.source}:${r.status}`).sort().join('|');
+
     const { data: lastState } = await supabase
       .from('ticket_scraper_state')
       .select('*')
@@ -129,18 +160,19 @@ serve(async (req) => {
       .limit(1)
       .single();
 
-    const lastCount = lastState?.found_count || 0;
-    const isNewFinding = results.length > 0 && (lastCount === 0 || results.length > lastCount);
+    const lastSignature = lastState?.result_signature || '';
+    const isNewFinding = results.length > 0 && currentSignature !== lastSignature;
 
-    // Save state
+    // Save state with signature for dedup
     await supabase.from('ticket_scraper_state').insert({
       results: JSON.stringify(results),
       found_count: results.length,
+      result_signature: currentSignature,
       source: 'edge_function',
       checked_at: new Date().toISOString(),
     });
 
-    // Send Telegram alert for new findings
+    // Send Telegram alert only for genuinely new findings
     if (results.length > 0 && isNewFinding) {
       const TELEGRAM_BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN');
       const TELEGRAM_CHAT_ID = Deno.env.get('TELEGRAM_CHAT_ID');
@@ -153,7 +185,7 @@ serve(async (req) => {
           results.map((r) =>
             `🔥 <b>${r.source}</b>\n   📝 ${r.details}\n   🔗 ${r.url}`
           ).join('\n\n') +
-          `\n\n⚡ GO NOW! Check the links above!\n` +
+          `\n\n⚡ Check the links above!\n` +
           `📅 Dates: ${TARGET_DATES.map(d => DATE_LABELS[d]).join(', ')}`;
 
         const telegramUrl = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
