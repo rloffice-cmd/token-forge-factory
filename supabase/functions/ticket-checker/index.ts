@@ -24,7 +24,7 @@ const SOURCES = {
   },
   tixel: {
     name: 'Tixel',
-    searchUrl: 'https://tixel.com/search?q=stray+kids+fan+meeting',
+    searchUrl: 'https://tixel.com/us/music-tickets/stray-kids',
   },
 };
 
